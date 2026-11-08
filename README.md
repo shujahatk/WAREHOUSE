@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# StockFlow
 
-## Getting Started
+StockFlow is a warehouse operations workspace. Phase 1 is the interface: a shared shell and working routes filled with compiled demo data.
 
-First, run the development server:
+The sample figures are not stored. Reloading the app shows the same records because they are part of the source, not because a database saved them.
+
+## Setup
+
+Install dependencies and start the dev server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open the local URL printed in the terminal. `/` redirects to `/dashboard`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the Next.js dev server |
+| `npm run lint` | Run ESLint |
+| `npm run build` | Create a production build |
+| `npm start` | Serve the production build |
 
-## Learn More
+The app uses Next.js 16, React 19, TypeScript, and Tailwind CSS v4. Styling is configured in `src/app/globals.css`. There is no `tailwind.config` file.
 
-To learn more about Next.js, take a look at the following resources:
+## Routes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `/dashboard`
+- `/inventory`
+- `/warehouses`
+- `/purchases`
+- `/containers`
+- `/stock-movements`
+- `/customers`
+- `/suppliers`
+- `/sales`
+- `/reports`
+- `/settings`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Current limitations
 
-## Deploy on Vercel
+- No database, authentication, or API
+- No way to create, edit, or delete records
+- Search filters demo rows in the browser only
+- Stock movements are sample lines and are not posted against on-hand lots
+- Reports are a catalog and a calculated preview. Files are not generated or saved
+- Settings values are read-only samples
+- The interface stays on the light black-and-white palette and does not follow a system dark theme
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Docs
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Product requirements](docs/PRD.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Phase tracker](docs/PHASE_TRACKER.md)
+- [Data model](docs/DATA_MODEL.md)
+- [QA checklist](docs/QA_CHECKLIST.md)
