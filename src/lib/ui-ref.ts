@@ -142,17 +142,18 @@ export type InboundContainer = {
 };
 
 export const inboundContainers: InboundContainer[] = [
-  { number: "CNTR-4587", po: "PO213344", supplier: "NITTO", origin: "Japan", warehouse: "Bremen", status: "Unloading", eta: "21 Oct" },
+  { number: "CNTR-4587", po: "PO213344", supplier: "NITTO", origin: "Japan", warehouse: "Bornem", status: "Unloading", eta: "21 Oct" },
   { number: "CNTR-4721", po: "PO213456", supplier: "MRBACH", origin: "Germany", warehouse: "Turnhout", status: "In transit", eta: "21 Oct" },
-  { number: "CNTR-4410", po: "PO213400", supplier: "AGFA", origin: "Belgium", warehouse: "Bremen", status: "Arrived", eta: "20 Oct" },
-  { number: "CNTR-4332", po: "PO213445", supplier: "AGFA", origin: "Belgium", warehouse: "Bremen", status: "Loaded", eta: "20 Oct" },
+  { number: "CNTR-4410", po: "PO213400", supplier: "AGFA", origin: "Belgium", warehouse: "Bornem", status: "Arrived", eta: "20 Oct" },
+  { number: "CNTR-4332", po: "PO213445", supplier: "AGFA", origin: "Belgium", warehouse: "Bornem", status: "Loaded", eta: "20 Oct" },
   { number: "CNTR-4407", po: "PO213400", supplier: "AGFA", origin: "Italy", warehouse: "Turnhout", status: "Completed", eta: "19 Oct" },
 ];
 
 export const warehouses = [
-  { name: "Bremen", weight: "12,450 kg" },
+  { name: "Bornem", weight: "12,450 kg" },
   { name: "Turnhout", weight: "8,230 kg" },
   { name: "Spain", weight: "6,710 kg" },
+  { name: "Pakistan", weight: "4,500 kg" },
 ];
 
 export const inventoryRows = [
@@ -164,8 +165,8 @@ export const inventoryRows = [
 
 export const activity = [
   { text: "PO213456 approved by Ahmed Khan", status: "Approved", href: "/purchases/PO213456" },
-  { text: "Container CNTR-4587 arrived at Bremen", status: "In transit", href: "/containers/CNTR-4587" },
-  { text: "Stock transfer completed (Turnhout → Bremen)", status: "Transfer", href: "/transfers" },
+  { text: "Container CNTR-4587 arrived at Bornem", status: "In transit", href: "/containers/CNTR-4587" },
+  { text: "Stock transfer completed (Turnhout → Bornem)", status: "Transfer", href: "/transfers" },
   { text: "Demurrage warning: CNTR-4721 in 5h", status: "Warning", href: "/containers" },
   { text: "New message in PO213582", status: "Chat", href: "/chat" },
 ];
@@ -186,20 +187,20 @@ export const chatMessages = [
 
 export const tasks = [
   { title: "Pending Approvals", count: "3", href: "/purchases" },
-  { title: "Unloading in progress", detail: "CNTR-4587 · Bremen", count: "2", href: "/containers/CNTR-4587" },
+  { title: "Unloading in progress", detail: "CNTR-4587 · Bornem", count: "2", href: "/containers/CNTR-4587" },
   { title: "Customs clearance", count: "1", href: "/documents" },
   { title: "Demurrage warning", detail: "CNTR-4721 · 5h", count: "1", href: "/containers" },
 ];
 
 export const outboundShipments = [
-  { number: "OUT-1184", customer: "Meridian Packaging", material: "LDPE ROLLEN", weight: "12,600 kg", warehouse: "Bremen", status: "On schedule", date: "22 Oct 2026" },
+  { number: "OUT-1184", customer: "Meridian Packaging", material: "LDPE ROLLEN", weight: "12,600 kg", warehouse: "Bornem", status: "On schedule", date: "22 Oct 2026" },
   { number: "OUT-1179", customer: "Vale Print", material: "PAPER ROLLS", weight: "8,400 kg", warehouse: "Turnhout", status: "Loading", date: "22 Oct 2026" },
-  { number: "OUT-1166", customer: "Keel & Co.", material: "PP PELLETS", weight: "6,400 kg", warehouse: "Bremen", status: "Planned", date: "24 Oct 2026" },
+  { number: "OUT-1166", customer: "Keel & Co.", material: "PP PELLETS", weight: "6,400 kg", warehouse: "Bornem", status: "Planned", date: "24 Oct 2026" },
 ];
 
 export const users = [
   { name: "Ahmed Khan", role: "Owner", site: "All warehouses" },
-  { name: "Nabil Ali", role: "Forwarder", site: "Bremen" },
+  { name: "Nabil Ali", role: "Forwarder", site: "Bornem" },
   { name: "Aurelia Chen", role: "Supplier contact", site: "NITTO" },
-  { name: "Warehouse worker", role: "Floor", site: "Bremen" },
+  { name: "Warehouse worker", role: "Floor", site: "Bornem" },
 ];

@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/permissions.test.ts src/lib/packaging.test.ts src/domain/local-adapter.test.ts src/lib/data/permissions.test.ts src/lib/data/workflow.test.ts src/lib/data/logistics.test.ts src/lib/data/upload-capture.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/permissions.test.ts src/lib/packaging.test.ts src/domain/local-adapter.test.ts src/domain/general-requests.test.ts src/lib/data/permissions.test.ts src/lib/data/workflow.test.ts src/lib/data/logistics.test.ts src/lib/data/upload-capture.test.ts src/lib/data/supabase-adapter.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -21,7 +21,7 @@ export default function SettingsPage() {
           <DefinitionList
             items={[
               { term: "Name", detail: "StockFlow" },
-              { term: "Warehouses", detail: "Bremen, Turnhout, Spain" },
+              { term: "Warehouses", detail: "Bornem, Turnhout, Spain, Pakistan" },
               { term: "Storage", detail: "Typed Service Interfaces (LocalAdapter / Postgres ready)" },
               { term: "Audit Log", detail: "Append-only active" },
             ]}

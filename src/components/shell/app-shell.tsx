@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { useIsMounted } from "@/lib/use-mounted";
 import { Icon } from "@/components/icons";
 import { useSession } from "@/components/shell/auth-gate";
 import { Sidebar } from "@/components/shell/sidebar";
@@ -14,18 +15,21 @@ import { WorkspaceSearch } from "@/components/shell/search-context";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { identity, logout } = useSession();
+  const { identity, ready, logout } = useSession();
   const [query, setQuery] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
-  const allowed = canAccess(identity.role, pathname);
-  const tabs = mobileTabs.filter((item) => item.roles.includes(identity.role));
-  const moreItems = moreNav.filter((item) => item.roles.includes(identity.role));
+  const mounted = useIsMounted();
+
+  const activeRole = mounted && ready ? identity.role : "worker";
+  const allowed = !mounted || !ready || canAccess(identity.role, pathname);
+  const tabs = mobileTabs.filter((item) => item.roles.includes(activeRole));
+  const moreItems = moreNav.filter((item) => item.roles.includes(activeRole));
 
   return (
     <WorkspaceSearch.Provider value={query}>
       <div className="min-h-screen bg-[#f4f4f5] text-neutral-950">
         <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-[232px] lg:flex-col">
-          <Sidebar pathname={pathname} role={identity.role} />
+          <Sidebar pathname={pathname} role={activeRole} />
         </div>
         <div className="lg:pl-[232px]">
           <TopNav query={query} onQuery={setQuery} identity={identity} onLogout={logout} />

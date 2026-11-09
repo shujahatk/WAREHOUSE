@@ -63,6 +63,22 @@ export type WorkspaceApi = {
   completeRequest: (requestId: string) => Text;
   deleteRequest: (requestId: string) => Text;
   createRequest: (direction: "inbound" | "outbound", shipment: string) => Text;
+  createGeneralRequest: (draft: {
+    category: string;
+    priority?: string;
+    description: string;
+    shipmentId?: string | null;
+    attachments?: { name: string; bytesBase64: string }[];
+    documentIds?: string[];
+  }) => Text;
+  decideGeneralRequest: (draft: {
+    requestId: string;
+    decision: "under_review" | "approved" | "declined" | "sent_back" | "completed";
+    responseNote?: string;
+    reason?: string;
+    note?: string;
+  }) => Text;
+  deleteGeneralRequest: (requestId: string) => Text;
   refresh: () => Promise<void>;
   reset: () => Text;
   notice: string | null;
@@ -151,6 +167,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       completeRequest: (requestId) => run("completeRequest", { requestId }),
       deleteRequest: (requestId) => run("deleteRequest", { requestId }),
       createRequest: (direction, shipment) => run("createRequest", { direction, shipment }),
+      createGeneralRequest: (draft) => run("createGeneralRequest", draft),
+      decideGeneralRequest: (draft) => run("decideGeneralRequest", draft),
+      deleteGeneralRequest: (requestId) => run("deleteGeneralRequest", { requestId }),
       refresh: async () => {
         const result = await loadWorkspace();
         setState(result.state);

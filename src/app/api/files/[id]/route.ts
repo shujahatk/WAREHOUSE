@@ -23,13 +23,22 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     return new Response("Forbidden: Inactive or unauthorized account.", { status: 403 });
   }
 
-  const file = await adapter.openFile(id, exp, sig, Date.now());
+  const file = await adapter.openFile(id, exp, sig, Date.now(), sessionId);
   if (!file) return new Response("Not found or link expired", { status: 404 });
 
-  const store = await adapter.snapshot();
+  const store = await adapter.snapshot(sessionId);
   const doc = store.documents.find((d) => d.storageKey === id || d.id === id);
 
   if (doc && user.role === "worker") {
+    // If this document is attached to a worker general request, only the creator worker (or staff/admin) can access it
+    const genReqAttachment = store.workerGeneralRequestAttachments?.find((a) => a.documentId === doc.id);
+    if (genReqAttachment) {
+      const genReq = store.workerGeneralRequests?.find((gr) => gr.id === genReqAttachment.generalRequestId);
+      if (genReq && genReq.createdBy !== user.id) {
+        return new Response("Forbidden: You can only access attachments from your own requests.", { status: 403 });
+      }
+    }
+
     const workerWh = user.warehouseId ? store.warehouses.find((w) => w.id === user.warehouseId)?.name : null;
     const shipmentWhId = doc.shipmentId ? store.shipments.find((s) => s.id === doc.shipmentId)?.warehouseId : null;
     const requestWhId = doc.requestId ? store.requests.find((r) => r.id === doc.requestId)?.warehouseId : null;

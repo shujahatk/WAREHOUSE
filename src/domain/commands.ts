@@ -14,8 +14,11 @@ import {
   requestSchema,
   roundKg,
   userRecordSchema,
+  generalRequestCategorySchema,
+  generalRequestPrioritySchema,
   type DocumentKind,
   type DocumentRecord,
+  type GeneralRequestStatus,
   type PurchaseOrder,
   type RequestRecord,
   type Shipment,
@@ -23,6 +26,7 @@ import {
   type StoreData,
   type UserProfile,
   type UserRecord,
+  type WorkerGeneralRequest,
 } from "./schemas.ts";
 
 export type CommandResult = { error?: string; notice?: string };
@@ -291,6 +295,262 @@ export function softDeleteRequest(store: StoreData, requestId: string, actor: Us
   request.deletedBy = actor.id;
   request.deletedAt = now;
   audit(store, actor.id, "request-deleted", "request", request.id, `${request.number} was marked deleted. The record was kept.`, now);
+  return ok(request);
+}
+
+export function createGeneralRequest(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<WorkerGeneralRequest> {
+  if (actor.role !== "worker") {
+    return fail("Only a Worker can submit a warehouse request.");
+  }
+  if (!actor.warehouseId) {
+    return fail("A worker must be assigned to one warehouse.");
+  }
+
+  const categoryResult = generalRequestCategorySchema.safeParse(payload.category);
+  if (!categoryResult.success) {
+    return fail("Choose a valid request category.");
+  }
+
+  const priorityResult = generalRequestPrioritySchema.safeParse(payload.priority || "normal");
+  const priority = priorityResult.success ? priorityResult.data : "normal";
+
+  const description = text(payload.description);
+  if (!description) {
+    return fail("A request description is required.");
+  }
+
+  let shipmentId: string | null = null;
+  let purchaseOrderId: string | null = null;
+  const shipmentInput = text(payload.shipment || payload.shipmentId || payload.shipmentReference);
+  if (shipmentInput) {
+    const shipment = store.shipments.find(
+      (s) => s.id === shipmentInput || s.reference.toLowerCase() === shipmentInput.toLowerCase()
+    );
+    if (!shipment || shipment.warehouseId !== actor.warehouseId) {
+      return fail("Shipment does not belong to your assigned warehouse.");
+    }
+    shipmentId = shipment.id;
+    purchaseOrderId = shipment.purchaseOrderId ?? null;
+  }
+
+  const year = new Date(now).getUTCFullYear();
+  let seq = store.requestSequence.find((entry) => entry.year === year);
+  if (!seq) {
+    seq = { year, next: 1 };
+    store.requestSequence.push(seq);
+  }
+  const number = `REQ-${year}-${String(seq.next).padStart(4, "0")}`;
+  seq.next += 1;
+
+  const reqId = randomUUID();
+  const generalReq: WorkerGeneralRequest = {
+    id: reqId,
+    number,
+    category: categoryResult.data,
+    priority,
+    description,
+    warehouseId: actor.warehouseId,
+    shipmentId,
+    purchaseOrderId,
+    createdBy: actor.id,
+    status: "submitted",
+    responseNote: null,
+    decidedBy: null,
+    decidedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (!store.workerGeneralRequests) {
+    store.workerGeneralRequests = [];
+  }
+  if (!store.workerGeneralRequestAttachments) {
+    store.workerGeneralRequestAttachments = [];
+  }
+
+  const docIds = Array.isArray(payload.documentIds) ? (payload.documentIds as string[]) : [];
+  for (const docId of docIds) {
+    const doc = store.documents.find((d) => d.id === docId && d.createdBy === actor.id && d.status !== "deleted");
+    if (doc) {
+      doc.status = "active";
+      doc.requestNumber = number;
+      store.workerGeneralRequestAttachments.push({
+        id: randomUUID(),
+        generalRequestId: reqId,
+        documentId: doc.id,
+      });
+    }
+  }
+
+  const attachments = Array.isArray(payload.attachments) ? (payload.attachments as Record<string, unknown>[]) : [];
+  for (const item of attachments) {
+    const name = text(item.name);
+    const bytesBase64 = text(item.bytesBase64);
+    if (name && bytesBase64) {
+      const buffer = Buffer.from(bytesBase64, "base64");
+      const detected = detectFileType(buffer);
+      if (detected.valid) {
+        const documentId = randomUUID();
+        const ext = detected.ext;
+        const kind: DocumentKind = detected.mime.startsWith("image/") ? "photo" : "other";
+        const storageKey = computeStorageKey(kind, number, Date.parse(now) || Date.now(), documentId, ext);
+        const existingCount = store.documents.filter((d) => d.kind === kind).length;
+        const readableName = computeReadableName(number, kind, existingCount + 1, ext);
+        putBlob(store, readableName, detected.mime, bytesBase64, storageKey);
+
+        store.documents.push({
+          id: documentId,
+          kind,
+          category: "Container",
+          shipmentId: shipmentId ?? null,
+          purchaseOrderId: purchaseOrderId ?? null,
+          requestId: null,
+          requestNumber: number,
+          poNumber: null,
+          containerNumber: null,
+          warehouse: warehouseOf(store, actor),
+          notes: null,
+          originalFilename: name,
+          readableName,
+          status: "active",
+          name: readableName,
+          mime: detected.mime,
+          byteSize: buffer.length,
+          storageKey,
+          cmrReference: null,
+          cmrCarrier: null,
+          cmrGoodsDescription: null,
+          cmrRemarks: null,
+          cmrEnteredBy: null,
+          cmrEnteredAt: null,
+          createdBy: actor.id,
+          createdAt: now,
+        });
+
+        store.workerGeneralRequestAttachments.push({
+          id: randomUUID(),
+          generalRequestId: reqId,
+          documentId,
+        });
+      }
+    }
+  }
+
+  store.workerGeneralRequests.push(generalReq);
+  audit(
+    store,
+    actor.id,
+    "general-request-submitted",
+    "general-request",
+    reqId,
+    `${number} (${categoryResult.data}) was submitted.`,
+    now
+  );
+  return ok(generalReq);
+}
+
+export function decideGeneralRequest(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<WorkerGeneralRequest> {
+  const reqId = text(payload.requestId || payload.id);
+  const request = (store.workerGeneralRequests || []).find((r) => r.id === reqId);
+  if (!request) return fail("General request not found.");
+
+  let decision = text(payload.decision);
+  if (decision === "rejected") decision = "declined";
+
+  const oldStatus = request.status;
+  const cleanNote = text(payload.reason || payload.note || payload.responseNote);
+
+  if (decision === "approved" || decision === "declined") {
+    if (actor.role !== "owner") {
+      return fail("Only Admin can approve or decline a worker request.");
+    }
+    if (oldStatus !== "submitted" && oldStatus !== "under_review" && oldStatus !== "sent_back") {
+      return fail(`Transition from ${oldStatus} to ${decision} is not permitted.`);
+    }
+    if (decision === "declined" && !cleanNote) {
+      return fail("A decline reason is required.");
+    }
+  } else if (decision === "under_review" || decision === "sent_back") {
+    if (actor.role !== "manager") {
+      return fail("Only Staff can review or request additional information for requests.");
+    }
+    if (oldStatus !== "submitted" && oldStatus !== "under_review" && oldStatus !== "sent_back") {
+      return fail(`Transition from ${oldStatus} to ${decision} is not permitted.`);
+    }
+    if (decision === "sent_back" && !cleanNote) {
+      return fail("A note is required when sending a request back.");
+    }
+  } else if (decision === "completed") {
+    if (actor.role !== "manager" && actor.role !== "worker") {
+      return fail("Only Staff or Worker can process and complete approved work.");
+    }
+    if (oldStatus !== "approved") {
+      return fail("Only approved requests can be completed.");
+    }
+  } else {
+    return fail(`Invalid decision: ${decision}.`);
+  }
+
+  request.status = decision as GeneralRequestStatus;
+  if (cleanNote) {
+    request.responseNote = cleanNote;
+  }
+  request.decidedBy = actor.id;
+  request.decidedAt = now;
+  request.updatedAt = now;
+
+  audit(
+    store,
+    actor.id,
+    `general-request-${decision}`,
+    "general-request",
+    request.id,
+    `${request.number} is now ${decision}.`,
+    now,
+    oldStatus
+  );
+
+  return ok(request);
+}
+
+export function softDeleteGeneralRequest(
+  store: StoreData,
+  actor: UserRecord,
+  requestId: string,
+  now: string
+): Result<WorkerGeneralRequest> {
+  const request = (store.workerGeneralRequests || []).find((r) => r.id === requestId);
+  if (!request) return fail("General request not found.");
+
+  if (actor.role === "owner") return fail("Admin cannot delete operational records.");
+  if (actor.role === "manager") return fail("Staff cannot delete or cancel requests.");
+  if (request.createdBy !== actor.id) return fail("Only the worker who created a request can delete it.");
+  if (!["submitted", "declined", "sent_back"].includes(request.status)) {
+    return fail("A worker can delete own requests only while submitted, declined or sent back.");
+  }
+
+  if (request.status === "deleted") return ok(request);
+  request.status = "deleted";
+  request.updatedAt = now;
+  audit(
+    store,
+    actor.id,
+    "general-request-deleted",
+    "general-request",
+    request.id,
+    `${request.number} was marked deleted.`,
+    now
+  );
   return ok(request);
 }
 
@@ -941,6 +1201,12 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
       return asCommand(sendBackRequest(store, text(body.requestId), actor, text(body.note), now), "Request was sent back to the worker.");
     case "deleteRequest":
       return asCommand(softDeleteRequest(store, text(body.requestId), actor, now), "Request was deleted.");
+    case "createGeneralRequest":
+      return asCommand(createGeneralRequest(store, actor, record(body), now), "Your request was submitted.");
+    case "decideGeneralRequest":
+      return asCommand(decideGeneralRequest(store, actor, record(body), now), "Request updated.");
+    case "deleteGeneralRequest":
+      return asCommand(softDeleteGeneralRequest(store, actor, text(body.requestId || body.id), now), "Request was deleted.");
     case "createRequest": {
       if (actor.role !== "worker") {
         return { error: "Only a Worker can submit a loading or unloading request." };

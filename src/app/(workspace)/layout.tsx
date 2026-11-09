@@ -3,8 +3,6 @@ import { DemoProvider } from "@/components/providers/workspace-provider";
 import { AppShell } from "@/components/shell/app-shell";
 import { AuthGate } from "@/components/shell/auth-gate";
 
-export const instant = false;
-
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   return (
     <DemoProvider>

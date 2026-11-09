@@ -12,9 +12,10 @@ export function seedStore(store: StoreData, env: NodeJS.ProcessEnv, now: string,
   }
   if (!store.fileSecret) store.fileSecret = randomBytes(32).toString("hex");
   if (store.warehouses.length === 0) {
-    upsertWarehouse(store, "Bremen", "Germany", id);
+    upsertWarehouse(store, "Bornem", "Belgium", id);
     upsertWarehouse(store, "Turnhout", "Belgium", id);
     upsertWarehouse(store, "Spain", "Spain", id);
+    upsertWarehouse(store, "Pakistan", "Pakistan", id);
   }
   if (store.packagingTypes.length === 0) {
     const defaults = [

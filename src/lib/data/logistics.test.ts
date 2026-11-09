@@ -7,9 +7,10 @@ import { createLocalAdapter } from "../../domain/local-adapter.ts";
 
 const reference = JSON.stringify({
   warehouses: [
-    { name: "Bremen", country: "Germany" },
+    { name: "Bornem", country: "Belgium" },
     { name: "Turnhout", country: "Belgium" },
     { name: "Spain", country: "Spain" },
+    { name: "Pakistan", country: "Pakistan" },
   ],
   companies: [
     { name: "North Mill", kind: "supplier" },
@@ -62,7 +63,7 @@ test("outbound dispatch requires carrier name without obsolete Swiss customs or 
     name: "Will Worker",
     email: "worker@example.com",
     role: "worker",
-    warehouse: "Bremen",
+    warehouse: "Bornem",
     password: "worker-pass-1",
   });
   assert.equal(workerAdd.error, undefined);
@@ -76,7 +77,7 @@ test("outbound dispatch requires carrier name without obsolete Swiss customs or 
     number: "OUT-001",
     po: "SO-900",
     customer: "Meridian Packaging",
-    warehouse: "Bremen",
+    warehouse: "Bornem",
     container: "CONT-777",
   });
   assert.equal(createOutbound.error, undefined);
@@ -130,7 +131,7 @@ test("demurrage uses unloading timestamps and annex 7 stays on the linked shipme
     name: "Will Worker",
     email: "worker@example.com",
     role: "worker",
-    warehouse: "Bremen",
+    warehouse: "Bornem",
     password: "worker-pass-1",
   });
   const workerAuth = await store.signIn("worker@example.com", "worker-pass-1");
@@ -142,7 +143,7 @@ test("demurrage uses unloading timestamps and annex 7 stays on the linked shipme
     number: "IN-DEM-001",
     po: "PO-DEM-1",
     supplier: "North Mill",
-    warehouse: "Bremen",
+    warehouse: "Bornem",
   });
   assert.equal(createInbound.error, undefined);
 
@@ -182,7 +183,7 @@ test("demurrage uses unloading timestamps and annex 7 stays on the linked shipme
     number: "IN-DEM-002",
     po: "PO-DEM-2",
     supplier: "North Mill",
-    warehouse: "Bremen",
+    warehouse: "Bornem",
   });
   assert.equal(createInbound2.error, undefined);
 
@@ -251,7 +252,7 @@ test("demurrage boundary conditions at 119, 120, and 121 minutes (120-minute fre
     name: "Will Worker",
     email: "worker@example.com",
     role: "worker",
-    warehouse: "Bremen",
+    warehouse: "Bornem",
     password: "worker-pass-1",
   });
   const workerAuth = await store.signIn("worker@example.com", "worker-pass-1");
@@ -272,7 +273,7 @@ test("demurrage boundary conditions at 119, 120, and 121 minutes (120-minute fre
       number: item.ref,
       po: item.po,
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(added.error, undefined);
 

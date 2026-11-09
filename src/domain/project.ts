@@ -13,6 +13,11 @@ import {
   type OrderStatus,
   type ShipmentSection,
   type WorkspaceState,
+  GENERAL_REQUEST_CATEGORY_LABELS,
+  GENERAL_REQUEST_PRIORITY_LABELS,
+  GENERAL_REQUEST_STATUS_LABELS,
+  type GeneralRequestView,
+  type GeneralRequestAttachmentView,
 } from "./view.ts";
 
 const orderStatus: Record<string, OrderStatus> = {
@@ -339,6 +344,61 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     };
   });
 
+  const docById = new Map(store.documents.map((d) => [d.id, d]));
+  const shipmentById = new Map(store.shipments.map((s) => [s.id, s]));
+  const poById = new Map(store.purchaseOrders.map((p) => [p.id, p]));
+
+  const generalRequests: GeneralRequestView[] = (store.workerGeneralRequests || [])
+    .filter((req) => req.status !== "deleted")
+    .map((req) => {
+      const attachments: GeneralRequestAttachmentView[] = (store.workerGeneralRequestAttachments || [])
+        .filter((att) => att.generalRequestId === req.id)
+        .map((att) => {
+          const doc = docById.get(att.documentId);
+          return {
+            id: att.id,
+            documentId: att.documentId,
+            name: doc?.readableName || doc?.name || "Document",
+            mime: doc?.mime || "application/octet-stream",
+            byteSize: doc?.byteSize || 0,
+            url: doc?.storageKey ? sign(doc.storageKey) : null,
+            storageKey: doc?.storageKey || "",
+          };
+        });
+
+      const shipment = req.shipmentId ? shipmentById.get(req.shipmentId) : null;
+      const order = req.purchaseOrderId ? poById.get(req.purchaseOrderId) : null;
+      const creator = userById.get(req.createdBy);
+      const decider = req.decidedBy ? userById.get(req.decidedBy) : null;
+
+      return {
+        id: req.id,
+        number: req.number,
+        category: req.category,
+        categoryLabel: GENERAL_REQUEST_CATEGORY_LABELS[req.category] ?? req.category,
+        priority: req.priority,
+        priorityLabel: GENERAL_REQUEST_PRIORITY_LABELS[req.priority] ?? req.priority,
+        description: req.description,
+        warehouseId: req.warehouseId,
+        warehouse: warehouseName.get(req.warehouseId) ?? "",
+        shipmentId: req.shipmentId,
+        shipmentReference: shipment?.reference ?? null,
+        purchaseOrderId: req.purchaseOrderId,
+        purchaseOrderNumber: order?.number ?? null,
+        createdBy: req.createdBy,
+        createdByName: creator?.name ?? "Worker",
+        status: req.status,
+        statusLabel: GENERAL_REQUEST_STATUS_LABELS[req.status] ?? req.status,
+        responseNote: req.responseNote,
+        decidedBy: req.decidedBy,
+        decidedByName: decider?.name ?? null,
+        decidedAt: req.decidedAt,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+        attachments,
+      };
+    });
+
   return {
     orders,
     containers,
@@ -374,6 +434,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     attachments,
     postedMovements,
     requests,
+    generalRequests,
     directory: {
       warehouses: store.warehouses.map((item) => ({ id: item.id, name: item.name, country: item.country })),
       companies: store.companies.map((item) => ({ id: item.id, name: item.name, kind: item.kind })),

@@ -94,7 +94,7 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
     await page.locator('label:has-text("Name") input').fill("Will Worker");
     await page.locator('label:has-text("Email") input').fill("worker-e2e@example.com");
     await page.locator('label:has-text("Role") select').first().selectOption("worker");
-    await page.locator('label:has-text("Warehouse") select').selectOption("Bremen");
+    await page.locator('label:has-text("Warehouse") select').selectOption("Bornem");
     await page.click('button:has-text("Add user")');
     await expect(page.locator("body")).toContainText(/Will Worker was added\. Temporary password:/);
     const workerNotice = await page.locator("p", { hasText: "Temporary password:" }).textContent();
@@ -104,7 +104,7 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
     // Verify Admin can access Directories, Materials & Packaging, Reports, Audit Log, and Settings
     await page.goto("/warehouses");
     await expect(page.locator("h1")).toContainText("Warehouses");
-    await expect(page.locator("body")).toContainText("Bremen");
+    await expect(page.locator("body")).toContainText("Bornem");
 
     await page.goto("/suppliers");
     await expect(page.locator("h1")).toContainText("Suppliers");
@@ -212,7 +212,7 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
     await page.locator('label:has-text("Container number") input').fill("IN-E2E-1");
     await page.locator('label:has-text("PO number") input').fill("PO-E2E-1");
     await page.locator('label:has-text("Supplier") input').fill("North Mill");
-    await page.locator('label:has-text("Warehouse") select').selectOption("Bremen");
+    await page.locator('label:has-text("Warehouse") select').selectOption("Bornem");
     await page.click('button:has-text("Add planned shipment")');
     await expect(page.locator("body")).toContainText("IN-E2E-1");
 
@@ -222,7 +222,7 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
     await page.locator('label:has-text("SO / PO number") input').fill("SO-E2E-1");
     await page.locator('label:has-text("Container number") input').fill("CONT-OUT-1");
     await page.locator('label:has-text("Customer") input').fill("Meridian Packaging");
-    await page.locator('label:has-text("Warehouse") select').selectOption("Bremen");
+    await page.locator('label:has-text("Warehouse") select').selectOption("Bornem");
     await page.click('button:has-text("Add planned shipment")');
     await expect(page.locator("body")).toContainText("OUT-E2E-1");
   });

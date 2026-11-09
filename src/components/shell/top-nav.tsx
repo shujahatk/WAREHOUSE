@@ -94,18 +94,17 @@ export function TopNav({
           </div>
           <details className="relative">
             <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded-full border border-neutral-200 pr-3 pl-1">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-[11px] font-medium text-white">
-                {identity.name.slice(0, 1)}
+              <span suppressHydrationWarning className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-[11px] font-medium text-white">
+                {identity.name ? identity.name.slice(0, 1) : "U"}
               </span>
-              <span className="hidden text-sm font-medium text-neutral-950 sm:inline">
-                {identity.name} · {roleLabel(identity.role)}
+              <span suppressHydrationWarning className="hidden text-sm font-medium text-neutral-950 sm:inline">
+                {`${identity.name || "User"} · ${roleLabel(identity.role)}`}
               </span>
             </summary>
             <div className="absolute right-0 z-40 mt-2 w-56 rounded-xl border border-neutral-200 bg-white p-3 text-sm shadow-sm">
-              <p className="font-medium text-neutral-950">{identity.name}</p>
-              <p className="mt-1 text-xs text-neutral-500">
-                {roleLabel(identity.role)}
-                {identity.warehouse ? ` · ${identity.warehouse}` : ""}
+              <p suppressHydrationWarning className="font-medium text-neutral-950">{identity.name || "User"}</p>
+              <p suppressHydrationWarning className="mt-1 text-xs text-neutral-500">
+                {`${roleLabel(identity.role)}${identity.warehouse ? ` · ${identity.warehouse}` : ""}`}
               </p>
               <button type="button" onClick={onLogout} className="mt-3 text-sm font-medium text-neutral-950 underline underline-offset-4">
                 Log out

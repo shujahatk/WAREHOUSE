@@ -20,6 +20,9 @@ import {
   signInUser,
   signOutUser,
   softDeleteRequest,
+  createGeneralRequest,
+  decideGeneralRequest,
+  softDeleteGeneralRequest,
   deactivateByEmail,
   transferStock,
   postCorrection,
@@ -38,6 +41,10 @@ import { emptyWorkspace, type Actor, type WorkspaceState } from "../../domain/vi
 import { isActiveRole } from "../permissions.ts";
 import type { Services } from "./interfaces.ts";
 import { can, type Action, type Resource } from "./permissions.ts";
+import { getDataAdapterMode } from "../supabase/config.ts";
+import { createSupabaseAdapter, type SupabaseAdapter } from "./supabase-adapter.ts";
+
+export type DataAdapter = LocalAdapter | SupabaseAdapter;
 
 export type WorkspaceResponse = {
   state: WorkspaceState;
@@ -66,22 +73,33 @@ export class LocalAdapter {
     });
   }
 
-  async snapshot(): Promise<StoreData> {
+  async snapshot(sessionId?: string | null): Promise<StoreData> {
+    void sessionId;
     return this.edit((store) => structuredClone(store));
   }
 
   async view(sessionId: string | null): Promise<{ state: WorkspaceState; actor: Actor | null }> {
     const now = this.now();
     let actor: Actor | null = null;
+    let currentUserId: string | null = null;
     const store = await this.edit((current) => {
       const user = sessionId ? userFromSession(current, sessionId, now) : null;
-      if (user && isActiveRole(user.role)) actor = toActor(current, user);
+      if (user && isActiveRole(user.role)) {
+        actor = toActor(current, user);
+        currentUserId = user.id;
+      }
       return structuredClone(current);
     });
     if (!actor) {
       return { state: emptyWorkspace(), actor: null };
     }
-    return { state: projectStore(store, now), actor };
+    const state = projectStore(store, now);
+    if ((actor as Actor).role === "worker") {
+      state.generalRequests = state.generalRequests.filter(
+        (r) => (currentUserId ? r.createdBy === currentUserId : r.createdByName === (actor as Actor).name),
+      );
+    }
+    return { state, actor };
   }
 
   async run(sessionId: string | null, name: string, payload: unknown): Promise<WorkspaceResponse> {
@@ -132,7 +150,8 @@ export class LocalAdapter {
     return this.edit((store) => sessionProfile(store, sessionId, now));
   }
 
-  async openFile(key: string, exp: string, sig: string, nowMs: number) {
+  async openFile(key: string, exp: string, sig: string, nowMs: number, sessionId?: string | null) {
+    void sessionId;
     const store = await this.snapshot();
     if (!fileSignatureMatches(store.fileSecret, key, exp, sig, nowMs)) return null;
     const blob = store.blobs.find((item) => item.key === key);
@@ -320,6 +339,34 @@ export class LocalAdapter {
           this.withActor(input.actorId, (store, actor) => {
             authorize(actor, "worker:assign");
             return assignRequestWorker(store, input.requestId, input.workerId, actor, now());
+          }),
+      },
+      generalRequests: {
+        list: async (actorId?: string) => {
+          const snapshot = await this.snapshot();
+          if (actorId) {
+            const user = snapshot.users.find((u) => u.id === actorId);
+            if (user?.role === "worker") {
+              return (snapshot.workerGeneralRequests || []).filter((r) => r.createdBy === actorId && r.status !== "deleted");
+            }
+          }
+          return (snapshot.workerGeneralRequests || []).filter((r) => r.status !== "deleted");
+        },
+        attachments: async (requestId: string) => {
+          const snapshot = await this.snapshot();
+          return (snapshot.workerGeneralRequestAttachments || []).filter((att) => att.generalRequestId === requestId);
+        },
+        create: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            return createGeneralRequest(store, actor, input, now());
+          }),
+        decide: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            return decideGeneralRequest(store, actor, input, now());
+          }),
+        softDelete: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            return softDeleteGeneralRequest(store, actor, input.requestId, now());
           }),
       },
       inventory: {
@@ -579,6 +626,7 @@ function toActor(store: StoreData, user: UserRecord): Actor {
 }
 
 let singleton: LocalAdapter | undefined;
+let supabaseSingleton: SupabaseAdapter | undefined;
 
 export function createLocalAdapter(
   file: string,
@@ -588,11 +636,18 @@ export function createLocalAdapter(
   return new LocalAdapter(file, env, now);
 }
 
-export function getDataAdapter(): LocalAdapter {
+export function getDataAdapter(env: NodeJS.ProcessEnv = process.env): DataAdapter {
+  if (getDataAdapterMode(env) === "supabase") {
+    if (env === process.env) {
+      supabaseSingleton ??= createSupabaseAdapter(env);
+      return supabaseSingleton;
+    }
+    return createSupabaseAdapter(env);
+  }
   singleton ??= createLocalAdapter(storePath());
   return singleton;
 }
 
-export function getServices(): Services {
-  return getDataAdapter().services();
+export function getServices(env: NodeJS.ProcessEnv = process.env): Services {
+  return getDataAdapter(env).services();
 }

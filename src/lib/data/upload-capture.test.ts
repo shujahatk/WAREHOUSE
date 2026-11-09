@@ -12,9 +12,10 @@ import { signedFileUrl, fileSignatureMatches } from "../../domain/files.ts";
 const now = "2026-10-22T08:00:00.000Z";
 const reference = JSON.stringify({
   warehouses: [
-    { name: "Bremen", country: "Germany" },
+    { name: "Bornem", country: "Belgium" },
     { name: "Turnhout", country: "Belgium" },
     { name: "Spain", country: "Spain" },
+    { name: "Pakistan", country: "Pakistan" },
   ],
   companies: [
     { name: "North Mill", kind: "supplier" },
@@ -115,7 +116,7 @@ test("3. Upload interface enforces 10 MB limit on server", async () => {
       name: "Upload Worker",
       email: "uploader@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "uploader-pass-1",
     });
     const worker = (await store.snapshot()).users.find((u) => u.email === "uploader@example.com")!;
@@ -129,7 +130,7 @@ test("3. Upload interface enforces 10 MB limit on server", async () => {
       filename: "huge-photo.jpg",
       mime: "image/jpeg",
       byteSize: tooLargeBytes,
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
 
     assert.equal(targetResult.ok, false);
@@ -150,7 +151,7 @@ test("4. Pending upload creation and atomic claiming on request submission", asy
       name: "Bruno Worker",
       email: "bruno@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "bruno-pass-1",
     });
     assert.equal(addWorker.error, undefined);
@@ -170,7 +171,7 @@ test("4. Pending upload creation and atomic claiming on request submission", asy
       filename: "cargo-seal.jpg",
       mime: "image/jpeg",
       byteSize: validJpeg.length,
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(target.ok, true);
     if (!target.ok) return;
@@ -193,7 +194,7 @@ test("4. Pending upload creation and atomic claiming on request submission", asy
       number: "IN-2026-001",
       po: "PO-777",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(inbound.error, undefined);
 
@@ -231,7 +232,7 @@ test("5. A request cannot be submitted without at least one photo", async () => 
       name: "Claire Worker",
       email: "claire@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "claire-pass-1",
     });
     assert.equal(addWorker.error, undefined);
@@ -248,7 +249,7 @@ test("5. A request cannot be submitted without at least one photo", async () => 
       number: "IN-2026-002",
       po: "PO-778",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(inbound.error, undefined);
 
@@ -276,7 +277,7 @@ test("6. 24-hour expiry of unclaimed pending uploads", async () => {
       name: "Dave Worker",
       email: "dave@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "dave-pass-1",
     });
     assert.equal(addWorker.error, undefined);
@@ -292,7 +293,7 @@ test("6. 24-hour expiry of unclaimed pending uploads", async () => {
       filename: "old-upload.jpg",
       mime: "image/jpeg",
       byteSize: validJpeg.length,
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(target.ok, true);
     if (!target.ok) return;
@@ -328,7 +329,7 @@ test("7. Permission matrix for files (Worker, Manager, Owner, Customer)", () => 
     email: "wb@example.com",
     role: "worker",
     warehouseId: "wh-bremen",
-    warehouse: "Bremen",
+    warehouse: "Bornem",
     companyId: null,
     company: null,
     active: true,
@@ -371,12 +372,12 @@ test("7. Permission matrix for files (Worker, Manager, Owner, Customer)", () => 
   };
 
   // 1. Worker upload permissions
-  assert.equal(can(workerBremen, "file:upload", { warehouse: "Bremen" }), true);
+  assert.equal(can(workerBremen, "file:upload", { warehouse: "Bornem" }), true);
   assert.equal(can(workerBremen, "file:upload", { warehouse: "Spain" }), false);
 
   // 2. Worker delete permissions (own uploads in own warehouse only)
-  assert.equal(can(workerBremen, "file:delete", { warehouse: "Bremen", createdBy: "worker-1" }), true);
-  assert.equal(can(workerBremen, "file:delete", { warehouse: "Bremen", createdBy: "other-worker" }), false);
+  assert.equal(can(workerBremen, "file:delete", { warehouse: "Bornem", createdBy: "worker-1" }), true);
+  assert.equal(can(workerBremen, "file:delete", { warehouse: "Bornem", createdBy: "other-worker" }), false);
   assert.equal(can(workerBremen, "file:delete", { warehouse: "Spain", createdBy: "worker-1" }), false);
 
   // 3. Staff (manager) file view permissions: can view operational files across all warehouses
@@ -430,7 +431,7 @@ test("9. File audit log entries are generated for every upload and delete", asyn
       name: "Eva Worker",
       email: "eva@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "eva-pass-1",
     });
     assert.equal(addWorker.error, undefined);
@@ -446,7 +447,7 @@ test("9. File audit log entries are generated for every upload and delete", asyn
       filename: "test-audit.jpg",
       mime: "image/jpeg",
       byteSize: validJpeg.length,
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(target.ok, true);
     if (!target.ok) return;

@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
 import type { DemoIdentity } from "@/domain/view";
 
 type SessionValue = {
   identity: DemoIdentity;
+  ready: boolean;
   logout: () => void;
 };
 
@@ -18,6 +19,15 @@ export function useSession(): SessionValue {
   return value;
 }
 
+const fallbackIdentity: DemoIdentity = {
+  email: "",
+  name: "User",
+  role: "worker",
+  warehouse: null,
+  company: null,
+  status: "Active",
+};
+
 export function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { actor, ready, signOut } = useDemo();
@@ -26,26 +36,28 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (ready && !actor) router.replace("/login");
   }, [actor, ready, router]);
 
-  if (!ready || !actor) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f4f4f5] text-sm text-neutral-500">
-        Loading workspace…
-      </div>
-    );
-  }
+  const identity: DemoIdentity = useMemo(() => {
+    if (!actor) return fallbackIdentity;
+    return {
+      email: actor.email,
+      name: actor.name,
+      role: actor.role,
+      warehouse: actor.warehouse,
+      company: actor.company ?? null,
+      status: "Active",
+    };
+  }, [actor]);
 
-  const identity: DemoIdentity = {
-    email: actor.email,
-    name: actor.name,
-    role: actor.role,
-    warehouse: actor.warehouse,
-    company: actor.company ?? null,
-    status: "Active",
-  };
+  const value = useMemo<SessionValue>(
+    () => ({
+      identity,
+      ready,
+      logout: () => {
+        void signOut().then(() => router.replace("/login"));
+      },
+    }),
+    [identity, ready, router, signOut],
+  );
 
-  function logout() {
-    void signOut().then(() => router.replace("/login"));
-  }
-
-  return <SessionContext.Provider value={{ identity, logout }}>{children}</SessionContext.Provider>;
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

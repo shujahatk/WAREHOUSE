@@ -8,9 +8,10 @@ import { createLocalAdapter } from "../../domain/local-adapter.ts";
 const now = "2026-10-22T08:00:00.000Z";
 const reference = JSON.stringify({
   warehouses: [
-    { name: "Bremen", country: "Germany" },
+    { name: "Bornem", country: "Belgium" },
     { name: "Turnhout", country: "Belgium" },
     { name: "Spain", country: "Spain" },
+    { name: "Pakistan", country: "Pakistan" },
   ],
   companies: [
     { name: "North Mill", kind: "supplier" },
@@ -53,7 +54,7 @@ test("core rule: worker creates request, Admin approves, worker completes approv
       name: "Bob Worker",
       email: "worker@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "worker-pass-1",
     });
     assert.equal(addWorker.error, undefined);
@@ -96,7 +97,7 @@ test("core rule: worker creates request, Admin approves, worker completes approv
       number: "IN-2026-001",
       po: "PO-777",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.match(adminInboundBlocked.error ?? "", /Only Staff or an assigned Worker can create a shipment/);
 
@@ -104,7 +105,7 @@ test("core rule: worker creates request, Admin approves, worker completes approv
       number: "IN-2026-001",
       po: "PO-777",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(inbound.error, undefined);
 
@@ -374,7 +375,7 @@ test("core rule: worker creates request, Admin approves, worker completes approv
       number: "IN-2026-002",
       po: "PO-778",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(inbound2.error, undefined);
 
@@ -407,7 +408,7 @@ test("core rule: worker creates request, Admin approves, worker completes approv
 
     // 13. Direct stock transfers and stock adjustments are denied for Admin, Staff, and Worker
     const mat = snap7.materials[0];
-    const bremen = snap7.warehouses.find((w) => w.name === "Bremen")!;
+    const bremen = snap7.warehouses.find((w) => w.name === "Bornem")!;
     const turnhout = snap7.warehouses.find((w) => w.name === "Turnhout")!;
     assert.ok(mat && bremen && turnhout);
 
@@ -449,7 +450,7 @@ test("phase 4 concurrency: simultaneous completions with Promise.all never doubl
       name: "Bremen Worker",
       email: "worker@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "worker-pass-1",
     });
     const workerAuth = await store.signIn("worker@example.com", "worker-pass-1");
@@ -462,7 +463,7 @@ test("phase 4 concurrency: simultaneous completions with Promise.all never doubl
       number: "IN-CONCURRENCY-1",
       po: "PO-CONC",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
 
     await store.run(workerAuth.value.sessionId, "saveMaterial", {
@@ -538,7 +539,7 @@ test("Stage 1 & 2 security: unauthenticated view isolation, session logout/deact
       name: "Bremen Worker",
       email: "bremen@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "bremen-pass-1",
     });
 
@@ -666,7 +667,7 @@ test("Stage 1 & 2 security: unauthenticated view isolation, session logout/deact
       number: "IN-BREMEN-9",
       po: "PO-9",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.match(afterDeactivateRun.error ?? "", /Sign in again/);
   } finally {
@@ -685,7 +686,7 @@ test("Stage 3 & 4 data integrity: multi-line outbound partial failure rollback a
       name: "Bremen Worker",
       email: "bremen@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "bremen-pass-1",
     });
     const workerAuth = await store.signIn("bremen@example.com", "bremen-pass-1");
@@ -700,7 +701,7 @@ test("Stage 3 & 4 data integrity: multi-line outbound partial failure rollback a
       number: "IN-SEED-100",
       po: "PO-SEED-100",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     await store.run(workerAuth.value.sessionId, "saveMaterial", {
       shipment: "IN-SEED-100",
@@ -727,7 +728,7 @@ test("Stage 3 & 4 data integrity: multi-line outbound partial failure rollback a
       number: "OUT-MULTI-FAIL",
       po: "SO-MULTI-1",
       customer: "Meridian Packaging",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       container: "CONT-MULTI-1",
     });
     await store.run(workerAuth.value.sessionId, "saveMaterial", {
@@ -779,7 +780,7 @@ test("Stage 3 & 4 data integrity: multi-line outbound partial failure rollback a
       number: "OUT-VALID-40",
       po: "SO-VALID-40",
       customer: "Meridian Packaging",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       container: "CONT-VALID-40",
     });
     await store.run(workerAuth.value.sessionId, "saveMaterial", {
@@ -800,13 +801,13 @@ test("Stage 3 & 4 data integrity: multi-line outbound partial failure rollback a
     assert.equal(completedOut.error, undefined);
 
     const snapAfterOut = await store.snapshot();
-    const bremenWh = snapAfterOut.warehouses.find((w) => w.name === "Bremen")!;
+    const bremenWh = snapAfterOut.warehouses.find((w) => w.name === "Bornem")!;
     assert.equal(snapAfterOut.stockBalances.find((b) => b.warehouseId === bremenWh.id)?.weightKg, 60);
 
     // 5. Verify UI `transfer` command is blocked for Admin and Worker
     const adminTransferBlocked = await store.run(ownerAuth.value.sessionId, "transfer", {
       clientKey: "tx-unique-key-1",
-      from: "Bremen",
+      from: "Bornem",
       to: "Spain",
       material: "LDPE film",
       quantity: 25,

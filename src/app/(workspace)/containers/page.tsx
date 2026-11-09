@@ -92,7 +92,7 @@ function InboundCreate({ onCreate }: { onCreate: (draft: { number: string; po: s
   const [number, setNumber] = useState("");
   const [po, setPo] = useState("");
   const [supplier, setSupplier] = useState("");
-  const [warehouse, setWarehouse] = useState("Bremen");
+  const [warehouse, setWarehouse] = useState("Bornem");
   const [error, setError] = useState<string | null>(null);
   return (
     <Surface className="mb-4 p-4">
@@ -129,7 +129,7 @@ function InboundCreate({ onCreate }: { onCreate: (draft: { number: string; po: s
         <label className="text-xs text-neutral-500">
           Warehouse
           <select value={warehouse} onChange={(event) => setWarehouse(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-neutral-300 px-3 text-sm">
-            {["Bremen", "Turnhout", "Spain"].map((site) => (
+            {["Bornem", "Turnhout", "Spain", "Pakistan"].map((site) => (
               <option key={site}>{site}</option>
             ))}
           </select>

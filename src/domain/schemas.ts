@@ -192,6 +192,56 @@ export const requestPhotoSchema = z.object({
   documentId: id,
 });
 
+export const generalRequestCategorySchema = z.enum([
+  "materials_packaging",
+  "stock_issue",
+  "loading_unloading",
+  "equipment_maintenance",
+  "missing_documents",
+  "other",
+]);
+export type GeneralRequestCategory = z.infer<typeof generalRequestCategorySchema>;
+
+export const generalRequestPrioritySchema = z.enum(["low", "normal", "high", "urgent"]);
+export type GeneralRequestPriority = z.infer<typeof generalRequestPrioritySchema>;
+
+export const generalRequestStatusSchema = z.enum([
+  "submitted",
+  "under_review",
+  "approved",
+  "declined",
+  "sent_back",
+  "completed",
+  "deleted",
+]);
+export type GeneralRequestStatus = z.infer<typeof generalRequestStatusSchema>;
+
+export const workerGeneralRequestSchema = z.object({
+  id,
+  number: z.string().regex(/^REQ-\d{4}-\d{4}$/, "Request number must look like REQ-2026-0001."),
+  category: generalRequestCategorySchema,
+  priority: generalRequestPrioritySchema.default("normal"),
+  description: label,
+  warehouseId: id,
+  shipmentId: id.nullable().default(null),
+  purchaseOrderId: id.nullable().default(null),
+  createdBy: id,
+  status: generalRequestStatusSchema.default("submitted"),
+  responseNote: z.string().nullable().default(null),
+  decidedBy: id.nullable().default(null),
+  decidedAt: stamp.nullable().default(null),
+  createdAt: stamp,
+  updatedAt: stamp,
+});
+export type WorkerGeneralRequest = z.infer<typeof workerGeneralRequestSchema>;
+
+export const workerGeneralRequestAttachmentSchema = z.object({
+  id,
+  generalRequestId: id,
+  documentId: id,
+});
+export type WorkerGeneralRequestAttachment = z.infer<typeof workerGeneralRequestAttachmentSchema>;
+
 export const documentStatusSchema = z.enum(["pending", "active", "deleted"]);
 export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 
@@ -324,6 +374,8 @@ export const storeSchema = z.object({
   requests: z.array(requestSchema),
   requestLines: z.array(requestLineSchema),
   requestPhotos: z.array(requestPhotoSchema),
+  workerGeneralRequests: z.array(workerGeneralRequestSchema).default([]),
+  workerGeneralRequestAttachments: z.array(workerGeneralRequestAttachmentSchema).default([]),
   documents: z.array(documentSchema),
   blobs: z.array(blobSchema),
   stockBalances: z.array(stockBalanceSchema),
@@ -390,6 +442,8 @@ export function emptyStore(): StoreData {
     requests: [],
     requestLines: [],
     requestPhotos: [],
+    workerGeneralRequests: [],
+    workerGeneralRequestAttachments: [],
     documents: [],
     blobs: [],
     stockBalances: [],

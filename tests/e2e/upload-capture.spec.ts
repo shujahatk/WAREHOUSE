@@ -46,7 +46,7 @@ test.describe("Phase 9.5: Easy Capture & Immediate Upload Suite", () => {
     await page.locator('label:has-text("Name") input').fill("Bob Worker");
     await page.locator('label:has-text("Email") input').fill("worker@example.com");
     await page.locator('label:has-text("Role") select').first().selectOption("worker");
-    await page.locator('label:has-text("Warehouse") select').selectOption("Bremen");
+    await page.locator('label:has-text("Warehouse") select').selectOption("Bornem");
     await page.click('button:has-text("Add user")');
     await expect(page.locator("body")).toContainText(/Bob Worker was added\. Temporary password:/);
     const notice1 = await page.locator("p", { hasText: "Temporary password:" }).textContent();
@@ -80,7 +80,7 @@ test.describe("Phase 9.5: Easy Capture & Immediate Upload Suite", () => {
     await expect(page.locator('label:has-text("Container number") input')).toHaveValue(containerNumber);
     await page.locator('label:has-text("PO number") input').fill("PO-1");
     await page.locator('label:has-text("Supplier") input').fill("North Mill");
-    await page.locator('label:has-text("Warehouse") select').selectOption("Bremen");
+    await page.locator('label:has-text("Warehouse") select').selectOption("Bornem");
     await page.click('button:has-text("Add planned shipment")');
 
     // Verify container exists on page

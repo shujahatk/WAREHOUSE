@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const warehouseFilter = searchParams.get("warehouse");
     const materialFilter = searchParams.get("material");
 
-    const store = await adapter.snapshot();
+    const store = await adapter.snapshot(sessionId);
     const now = new Date().toISOString().slice(0, 10);
 
     let csv = "";

@@ -8,6 +8,10 @@ const pillTones: Record<string, string> = {
   Unloading: "bg-neutral-950 text-white",
   Loading: "bg-neutral-950 text-white",
   Completed: "bg-neutral-200 text-neutral-800",
+  Submitted: "border border-amber-400 bg-amber-50 text-amber-900 font-medium",
+  "Under Review": "border border-blue-400 bg-blue-50 text-blue-900 font-medium",
+  "Info Requested": "border border-purple-400 bg-purple-50 text-purple-900 font-medium",
+  Declined: "border border-rose-300 bg-rose-50 text-rose-800 font-medium",
   Pending: "border border-neutral-300 bg-white text-neutral-800",
   Planned: "border border-neutral-300 bg-white text-neutral-800",
   Rejected: "border border-neutral-300 bg-white text-neutral-500",
@@ -61,8 +65,8 @@ export function PageTitle({
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-neutral-950">{title}</h1>
-        {subtitle ? <p className="mt-1 text-sm text-neutral-500">{subtitle}</p> : null}
+        <h1 suppressHydrationWarning className="text-xl font-semibold tracking-tight text-neutral-950">{title}</h1>
+        {subtitle ? <p suppressHydrationWarning className="mt-1 text-sm text-neutral-500">{subtitle}</p> : null}
       </div>
       {action}
     </div>

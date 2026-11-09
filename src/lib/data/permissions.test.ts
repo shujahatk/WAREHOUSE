@@ -28,7 +28,7 @@ const workerBremen: AuthUser = {
   name: "Bob Worker",
   role: "worker",
   warehouseId: "wh-bremen",
-  warehouse: "Bremen",
+  warehouse: "Bornem",
   companyId: null,
   active: true,
 };

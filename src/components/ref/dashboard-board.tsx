@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useDemo } from "@/components/providers/workspace-provider";
+import { useIsMounted } from "@/lib/use-mounted";
 import { KpiCard, PageTitle, PrimaryLink, StatusPill, Surface } from "@/components/ref/chrome";
 import { useLiveNow } from "@/components/ref/live-clock";
 import { useSession } from "@/components/shell/auth-gate";
@@ -11,13 +12,18 @@ import { canAccess, canPerform, roleLabel } from "@/lib/permissions";
 export function DashboardBoard() {
   const { state } = useDemo();
   const { identity } = useSession();
-  const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
-  const stock = visibleStock(state, identity.role, identity.warehouse);
+  const mounted = useIsMounted();
+  const currentRole = mounted ? identity.role : "worker";
+  const actor = { name: identity.name, role: currentRole, warehouse: identity.warehouse, email: identity.email, company: identity.company };
+  const stock = visibleStock(state, currentRole, identity.warehouse);
   const orders = visibleOrders(state, actor);
   const containers = visibleContainers(state, actor);
   const outbound = visibleOutbound(state, actor);
+  const myGeneralRequests = (state.generalRequests || []).filter((r) => r.createdByName === identity.name);
+  const pendingMyRequests = myGeneralRequests.filter((r) => r.status === "submitted" || r.status === "under_review").length;
+  const pendingGeneralRequests = (state.generalRequests || []).filter((r) => r.status === "submitted" || r.status === "under_review").length;
   const pendingOrders = orders.filter((order) => order.status === "Pending").length;
-  const pendingRequests = state.requests.filter((req) => req.status === "submitted").length;
+  const pendingRequests = state.requests.filter((req) => req.status === "submitted").length + pendingGeneralRequests;
   const inboundOpen = containers.filter((row) => row.status !== "Completed").length;
   const outboundOpen = outbound.filter((row) => row.status !== "Dispatched").length;
   const byWarehouse = new Map<string, number>();
@@ -25,10 +31,9 @@ export function DashboardBoard() {
     byWarehouse.set(row.warehouse, (byWarehouse.get(row.warehouse) ?? 0) + row.weightKg);
   }
   const activity = state.activity
-    .filter((item) => canAccess(identity.role, item.href))
+    .filter((item) => canAccess(currentRole, item.href))
     .slice(0, 5);
   const stockWeight = stock.reduce((sum, row) => sum + row.weightKg, 0);
-  const lowStock = stock.filter((row) => row.quantity <= row.reorder).length;
   const unloading = containers.filter((row) => row.status === "Unloading");
   const now = useLiveNow(unloading.some((row) => Boolean(row.demurrage.startedAt)));
 
@@ -37,21 +42,21 @@ export function DashboardBoard() {
       <PageTitle
         title="Dashboard"
         subtitle={
-          identity.role === "worker"
-            ? `${identity.name} · ${roleLabel(identity.role)} · ${identity.warehouse ?? "Assigned warehouse"}`
-            : `${identity.name} · ${roleLabel(identity.role)}`
+          currentRole === "worker"
+            ? `${identity.name} · ${roleLabel(currentRole)} · ${identity.warehouse ?? "Assigned warehouse"}`
+            : `${identity.name} · ${roleLabel(currentRole)}`
         }
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {identity.role === "worker" ? (
+        {currentRole === "worker" ? (
           <>
             <KpiCard label="Assigned stock" value={formatKg(stockWeight)} detail={identity.warehouse ?? "Warehouse"} />
-            <KpiCard label="At or below reorder" value={String(lowStock)} detail="Includes out of stock" />
+            <KpiCard label="My requests" value={String(myGeneralRequests.length)} detail={`${pendingMyRequests} pending / review`} />
           </>
         ) : (
           <>
             <KpiCard label="PO & SO orders" value={String(orders.length)} detail={`${pendingOrders} pending order(s)`} />
-            <KpiCard label="Pending requests" value={String(pendingRequests)} detail="Awaiting Admin approval" />
+            <KpiCard label="Pending requests" value={String(pendingRequests)} detail="Awaiting review & approval" />
           </>
         )}
         <KpiCard label="Incoming open" value={String(inboundOpen)} detail="Not completed" />
@@ -105,12 +110,19 @@ export function DashboardBoard() {
           <Surface className="p-4">
             <h2 className="text-sm font-semibold text-neutral-950">Quick actions</h2>
             <div className="mt-3 grid gap-2">
-              <PrimaryLink href="/tasks">Loading & Unloading Requests</PrimaryLink>
-              {canPerform(identity.role, "create-order") ? <PrimaryLink href="/purchases">PO & SO Orders</PrimaryLink> : null}
-              {canPerform(identity.role, "create-transfer") ? <PrimaryLink href="/transfers">Create transfer</PrimaryLink> : null}
+              {currentRole === "worker" ? (
+                <>
+                  <PrimaryLink href="/tasks?new=true">+ Add New Request</PrimaryLink>
+                  <PrimaryLink href="/tasks">My Requests</PrimaryLink>
+                </>
+              ) : (
+                <PrimaryLink href="/tasks">All Requests</PrimaryLink>
+              )}
+              {canPerform(currentRole, "create-order") ? <PrimaryLink href="/purchases">PO & SO Orders</PrimaryLink> : null}
+              {canPerform(currentRole, "create-transfer") ? <PrimaryLink href="/transfers">Create transfer</PrimaryLink> : null}
               <PrimaryLink href="/documents">Review documents</PrimaryLink>
               <PrimaryLink href="/documents#annex-7">Annex VII</PrimaryLink>
-              {canAccess(identity.role, "/reports") ? <PrimaryLink href="/reports">Open reports</PrimaryLink> : null}
+              {canAccess(currentRole, "/reports") ? <PrimaryLink href="/reports">Open reports</PrimaryLink> : null}
             </div>
           </Surface>
         </div>

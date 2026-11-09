@@ -216,9 +216,9 @@ test("action permissions strictly enforce Admin, Staff, and Worker boundaries", 
 });
 
 test("warehouse operation scoping", () => {
-  assert.equal(canOperateWarehouse("worker", "Bremen", "Bremen"), true);
-  assert.equal(canOperateWarehouse("worker", "Bremen", "Turnhout"), false);
+  assert.equal(canOperateWarehouse("worker", "Bornem", "Bornem"), true);
+  assert.equal(canOperateWarehouse("worker", "Bornem", "Turnhout"), false);
   assert.equal(canOperateWarehouse("owner", null, "Spain"), false);
-  assert.equal(canOperateWarehouse("manager", null, "Bremen"), false);
-  assert.equal(canOperateWarehouse("customer", null, "Bremen"), false);
+  assert.equal(canOperateWarehouse("manager", null, "Bornem"), false);
+  assert.equal(canOperateWarehouse("customer", null, "Bornem"), false);
 });

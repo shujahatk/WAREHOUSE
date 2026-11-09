@@ -19,6 +19,10 @@ import type {
   StockMovement,
   UserProfile,
   Warehouse,
+  GeneralRequestCategory,
+  GeneralRequestPriority,
+  WorkerGeneralRequest,
+  WorkerGeneralRequestAttachment,
 } from "@/domain/schemas";
 import type { Result } from "@/domain/result";
 
@@ -147,6 +151,26 @@ export interface RequestRepository {
   assignWorker(input: { requestId: string; workerId: string; actorId: string }): Promise<Result<RequestRecord>>;
 }
 
+export interface GeneralRequestRepository {
+  list(actorId?: string): Promise<WorkerGeneralRequest[]>;
+  attachments(requestId: string): Promise<WorkerGeneralRequestAttachment[]>;
+  create(input: {
+    category: GeneralRequestCategory;
+    priority?: GeneralRequestPriority;
+    description: string;
+    shipmentId?: string | null;
+    documentIds?: string[];
+    actorId: string;
+  }): Promise<Result<WorkerGeneralRequest>>;
+  decide(input: {
+    requestId: string;
+    decision: "under_review" | "approved" | "declined" | "sent_back" | "completed";
+    responseNote?: string;
+    actorId: string;
+  }): Promise<Result<WorkerGeneralRequest>>;
+  softDelete(input: { requestId: string; actorId: string }): Promise<Result<WorkerGeneralRequest>>;
+}
+
 export interface InventoryRepository {
   balances(actorId?: string): Promise<StockBalance[]>;
   movements(actorId?: string): Promise<StockMovement[]>;
@@ -201,6 +225,7 @@ export interface CustomsRepository {
     mime: string;
     size: number;
     bytesBase64: string;
+    fileId?: string;
     actorId: string;
   }): Promise<Result<CustomsRecord>>;
 }
@@ -220,6 +245,7 @@ export interface Annex7Repository {
     size: number;
     notes: string;
     bytesBase64: string;
+    fileId?: string;
     actorId: string;
   }): Promise<Result<Annex7Record>>;
   review(input: { id: string; actorId: string }): Promise<Result<Annex7Record>>;
@@ -296,6 +322,7 @@ export type Services = {
   purchaseOrders: PurchaseOrderRepository;
   shipments: ShipmentRepository;
   requests: RequestRepository;
+  generalRequests: GeneralRequestRepository;
   inventory: InventoryRepository;
   documents: DocumentRepository;
   customs: CustomsRepository;

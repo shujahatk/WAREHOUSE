@@ -1,5 +1,7 @@
 import type { Role } from "@/lib/permissions";
 import type { SectionMode } from "@/lib/packaging";
+import type { GeneralRequestCategory, GeneralRequestPriority, GeneralRequestStatus } from "./schemas";
+export type { GeneralRequestCategory, GeneralRequestPriority, GeneralRequestStatus };
 
 export type OrderStatus = "Approved" | "Pending" | "Planned" | "Rejected" | "Received";
 export type ContainerStatus = "Planned" | "Registered" | "Unloading" | "In transit" | "Arrived" | "Loaded" | "Completed";
@@ -321,6 +323,69 @@ export type RequestView = {
   lines: RequestViewLine[];
 };
 
+export const GENERAL_REQUEST_CATEGORY_LABELS: Record<GeneralRequestCategory, string> = {
+  materials_packaging: "Materials / Packaging",
+  stock_issue: "Stock / Inventory Issue",
+  loading_unloading: "Loading / Unloading",
+  equipment_maintenance: "Equipment / Maintenance",
+  missing_documents: "Missing Documents / Information",
+  other: "Other Operational Request",
+};
+
+export const GENERAL_REQUEST_PRIORITY_LABELS: Record<GeneralRequestPriority, string> = {
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
+};
+
+export const GENERAL_REQUEST_STATUS_LABELS: Record<GeneralRequestStatus, string> = {
+  submitted: "Submitted",
+  under_review: "Under Review",
+  approved: "Approved",
+  declined: "Rejected",
+  sent_back: "Info Requested",
+  completed: "Completed",
+  deleted: "Deleted",
+};
+
+export type GeneralRequestAttachmentView = {
+  id: string;
+  documentId: string;
+  name: string;
+  mime: string;
+  byteSize: number;
+  url: string | null;
+  storageKey: string;
+};
+
+export type GeneralRequestView = {
+  id: string;
+  number: string;
+  category: GeneralRequestCategory;
+  categoryLabel: string;
+  priority: GeneralRequestPriority;
+  priorityLabel: string;
+  description: string;
+  warehouseId: string;
+  warehouse: string;
+  shipmentId: string | null;
+  shipmentReference: string | null;
+  purchaseOrderId: string | null;
+  purchaseOrderNumber: string | null;
+  createdBy: string;
+  createdByName: string;
+  status: GeneralRequestStatus;
+  statusLabel: string;
+  responseNote: string | null;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  attachments: GeneralRequestAttachmentView[];
+};
+
 export type WorkspaceState = {
   orders: DemoOrder[];
   containers: DemoContainer[];
@@ -335,6 +400,7 @@ export type WorkspaceState = {
   attachments: ShipmentAttachment[];
   postedMovements: PostedMovement[];
   requests: RequestView[];
+  generalRequests: GeneralRequestView[];
   directory: {
     warehouses: { id: string; name: string; country: string }[];
     companies: { id: string; name: string; kind: "supplier" | "customer" }[];
@@ -366,8 +432,20 @@ export function emptyWorkspace(): WorkspaceState {
     attachments: [],
     postedMovements: [],
     requests: [],
+    generalRequests: [],
     directory: { warehouses: [], companies: [] },
   };
+}
+
+export function visibleGeneralRequests(
+  state: WorkspaceState,
+  actor: { role: Role; name: string; warehouse?: string | null },
+): GeneralRequestView[] {
+  if (actor.role === "worker") {
+    // Workers must ONLY see and track their own requests
+    return state.generalRequests.filter((req) => req.createdByName === actor.name);
+  }
+  return state.generalRequests;
 }
 
 export function handoverStatus(shipment: { carrier: string; handover: string }): "Not recorded" | "Carrier recorded" | "Handover recorded" {

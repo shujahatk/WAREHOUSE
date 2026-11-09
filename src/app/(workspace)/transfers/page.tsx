@@ -7,13 +7,13 @@ import { useSession } from "@/components/shell/auth-gate";
 import { formatKg } from "@/domain/view";
 import { canPerform } from "@/lib/permissions";
 
-const warehouses = ["Bremen", "Turnhout", "Spain"];
+const warehouses = ["Bornem", "Turnhout", "Spain", "Pakistan"];
 
 export default function TransfersPage() {
   const { state, transfer, notice } = useDemo();
   const { identity } = useSession();
   const canCreate = canPerform(identity.role, "create-transfer");
-  const [from, setFrom] = useState(identity.warehouse ?? "Bremen");
+  const [from, setFrom] = useState(identity.warehouse ?? "Bornem");
   const [to, setTo] = useState("Spain");
   const [material, setMaterial] = useState("LDPE ROLLEN");
   const [quantity, setQuantity] = useState("1");

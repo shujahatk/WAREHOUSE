@@ -14,7 +14,7 @@ export default function UsersPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("worker");
-  const [warehouse, setWarehouse] = useState("Bremen");
+  const [warehouse, setWarehouse] = useState("Bornem");
 
   return (
     <>
@@ -57,7 +57,7 @@ export default function UsersPage() {
             <label className="text-xs text-neutral-500">
               Warehouse
               <select value={warehouse} onChange={(event) => setWarehouse(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm">
-                {["Bremen", "Turnhout", "Spain"].map((site) => (
+                {["Bornem", "Turnhout", "Spain", "Pakistan"].map((site) => (
                   <option key={site}>{site}</option>
                 ))}
               </select>
@@ -86,7 +86,7 @@ export default function UsersPage() {
                   value={person.role}
                   onChange={(event) => {
                     const next = event.target.value as Role;
-                    changeRole(person.email, next, person.warehouse ?? "Bremen", null);
+                    changeRole(person.email, next, person.warehouse ?? "Bornem", null);
                   }}
                   className="mt-1 h-9 rounded-lg border border-neutral-300 px-2 text-sm"
                 >

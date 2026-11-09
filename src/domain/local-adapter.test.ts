@@ -8,7 +8,12 @@ import { issues, netKg, requestLineSchema } from "./schemas.ts";
 
 const now = "2026-10-22T08:00:00.000Z";
 const reference = JSON.stringify({
-  warehouses: [{ name: "Bremen", country: "Germany" }],
+  warehouses: [
+    { name: "Bornem", country: "Belgium" },
+    { name: "Turnhout", country: "Belgium" },
+    { name: "Spain", country: "Spain" },
+    { name: "Pakistan", country: "Pakistan" },
+  ],
   companies: [{ name: "Meridian Packaging", kind: "customer" }],
   materials: [{ materialNumber: "LDPE", description: "LDPE film", unit: "kg", lowStockThresholdKg: 25 }],
   packagingTypes: [{ name: "Normal Pallet", tareKg: 25 }],
@@ -68,7 +73,7 @@ test("the local store seeds one owner and reference data, and no operational rec
     assert.equal(first.shipments.length, 0);
     assert.equal(first.requests.length, 0);
     assert.equal(first.stockBalances.length, 0);
-    assert.equal(first.warehouses[0]?.name, "Bremen");
+    assert.equal(first.warehouses[0]?.name, "Bornem");
     const reopened = createLocalAdapter(path.join(dir, "store.json"), env(), () => now);
     const second = await reopened.snapshot();
     assert.equal(second.users.length, 1);
@@ -92,7 +97,7 @@ test("sign-in, request numbers, and stock entry stay behind the interfaces", asy
       name: "Bremen Worker",
       email: "worker@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "worker-pass-1",
     });
     assert.equal(addedWorker.error, undefined);
@@ -109,7 +114,7 @@ test("sign-in, request numbers, and stock entry stay behind the interfaces", asy
       number: "CNTR-1",
       po: "PO-1",
       supplier: "North Mill",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
     });
     assert.equal(created.error, undefined);
     assert.equal(created.state.containers[0]?.number, "CNTR-1");
@@ -181,7 +186,7 @@ test("a stock movement cannot drive a balance below zero and is idempotent per l
       name: "Bremen Worker",
       email: "worker@example.com",
       role: "worker",
-      warehouse: "Bremen",
+      warehouse: "Bornem",
       password: "worker-pass-1",
     });
     const snapshot = await store.snapshot();
