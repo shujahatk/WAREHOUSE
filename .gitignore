@@ -64,3 +64,6 @@ stockflow-inventory.csv
 note.txt
 ui ref 1.png
 ui ref 2.png
+
+.vercel
+.env*
