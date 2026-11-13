@@ -570,6 +570,58 @@ export type GeneralRequestAttachmentView = {
   storageKey: string;
 };
 
+export type GeneralRequestOperationalDetails = {
+  materialType: string;
+  materialDescription: string;
+  packagingType: string;
+  packageCount: number;
+  grossWeightKg: number;
+  tarePerPackageKg: number;
+  totalTareWeightKg: number;
+  netWeightKg: number;
+  warehouseLocation: string;
+  notes?: string;
+};
+
+const OP_SPEC_PREFIX = "[OP_SPEC:";
+const OP_SPEC_SUFFIX = "]\n";
+
+export function serializeOperationalRequestDescription(
+  details: GeneralRequestOperationalDetails,
+  customNotes?: string
+): string {
+  const jsonMeta = JSON.stringify(details);
+  const notesText = details.notes || customNotes || "";
+  const humanReadable = [
+    `Material: ${details.materialType}${details.materialDescription ? ` - ${details.materialDescription}` : ""}`,
+    `Packaging: ${details.packagingType} (${details.packageCount} units @ ${details.tarePerPackageKg} kg tare = ${details.totalTareWeightKg} kg tare)`,
+    `Weights: Gross ${details.grossWeightKg.toLocaleString()} kg | Total Tare ${details.totalTareWeightKg.toLocaleString()} kg | Net Material ${details.netWeightKg.toLocaleString()} kg`,
+    `Location: ${details.warehouseLocation}`,
+    notesText ? `Notes: ${notesText}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return `${OP_SPEC_PREFIX}${jsonMeta}${OP_SPEC_SUFFIX}${humanReadable}`;
+}
+
+export function parseOperationalRequestDescription(description: string): {
+  operationalDetails: GeneralRequestOperationalDetails | null;
+  displayDescription: string;
+} {
+  if (description && description.startsWith(OP_SPEC_PREFIX)) {
+    const endIdx = description.indexOf(OP_SPEC_SUFFIX);
+    if (endIdx !== -1) {
+      const jsonStr = description.slice(OP_SPEC_PREFIX.length, endIdx);
+      try {
+        const details = JSON.parse(jsonStr) as GeneralRequestOperationalDetails;
+        const displayDescription = description.slice(endIdx + OP_SPEC_SUFFIX.length).trim();
+        return { operationalDetails: details, displayDescription };
+      } catch {}
+    }
+  }
+  return { operationalDetails: null, displayDescription: description };
+}
+
 export type GeneralRequestView = {
   id: string;
   number: string;
@@ -578,6 +630,7 @@ export type GeneralRequestView = {
   priority: GeneralRequestPriority;
   priorityLabel: string;
   description: string;
+  operationalDetails?: GeneralRequestOperationalDetails | null;
   warehouseId: string;
   warehouse: string;
   shipmentId: string | null;

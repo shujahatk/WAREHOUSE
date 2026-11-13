@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "StockFlow Warehouse & Logistics",
-    short_name: "StockFlow",
+    name: "RM Warehouse & Logistics",
+    short_name: "RM",
     description: "Warehouse operations workspace for inventory weight, containers, purchases, and stock movements.",
     start_url: "/dashboard",
     display: "standalone",

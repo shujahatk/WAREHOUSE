@@ -19,6 +19,8 @@ export type UploadItem = {
   file: File;
   name: string;
   size: number;
+  originalSize: number;
+  wasCompressed?: boolean;
   mime: string;
   thumbnailUrl: string | null;
   progress: number;
@@ -92,10 +94,18 @@ export function UploadCapture({
     }
   };
 
+  const activeSignaturesRef = useRef<Set<string>>(new Set());
+
   const processFiles = async (files: File[]) => {
     if (files.length === 0) return;
 
     for (const rawFile of files) {
+      const signature = `${rawFile.name}:${rawFile.size}:${rawFile.lastModified || 0}`;
+      if (activeSignaturesRef.current.has(signature)) {
+        continue;
+      }
+      activeSignaturesRef.current.add(signature);
+
       const localId = createLocalUploadId(rawFile.name);
       const isImg = rawFile.type.startsWith("image/");
       const thumb = isImg ? URL.createObjectURL(rawFile) : null;
@@ -105,6 +115,8 @@ export function UploadCapture({
         file: rawFile,
         name: rawFile.name,
         size: rawFile.size,
+        originalSize: rawFile.size,
+        wasCompressed: false,
         mime: rawFile.type || "application/octet-stream",
         thumbnailUrl: thumb,
         progress: 10,
@@ -114,14 +126,15 @@ export function UploadCapture({
       setItems((prev) => [newItem, ...prev]);
 
       // Immediate upload execution
-      void startUpload(newItem);
+      void startUpload(newItem, signature);
     }
   };
 
-  const startUpload = async (item: UploadItem) => {
+  const startUpload = async (item: UploadItem, signature?: string) => {
     try {
       // 1. Initial size check
       if (item.file.size > MAX_FILE_SIZE_BYTES) {
+        if (signature) activeSignaturesRef.current.delete(signature);
         setItems((prev) =>
           prev.map((it) =>
             it.id === item.id
@@ -142,7 +155,15 @@ export function UploadCapture({
       setItems((prev) =>
         prev.map((it) =>
           it.id === item.id
-            ? { ...it, progress: 50, status: "uploading", name: compressed.name, size: compressed.size }
+            ? {
+                ...it,
+                progress: 50,
+                status: "uploading",
+                name: compressed.name,
+                size: compressed.size,
+                originalSize: compressed.originalSize,
+                wasCompressed: compressed.wasCompressed,
+              }
             : it
         )
       );
@@ -226,6 +247,8 @@ export function UploadCapture({
   };
 
   const handleRemove = async (item: UploadItem) => {
+    const signature = `${item.file.name}:${item.file.size}:${item.file.lastModified || 0}`;
+    activeSignaturesRef.current.delete(signature);
     if (item.thumbnailUrl) {
       URL.revokeObjectURL(item.thumbnailUrl);
     }
@@ -395,7 +418,10 @@ export function UploadCapture({
                   </div>
 
                   <p className="text-[11px] text-neutral-500">
-                    {(item.size / 1024).toFixed(0)} KB · {kind}
+                    {item.wasCompressed && item.originalSize > item.size
+                      ? `${Math.max(1, Math.round(item.originalSize / 1024))} KB → ${Math.max(1, Math.round(item.size / 1024))} KB (-${Math.round((1 - item.size / item.originalSize) * 100)}%)`
+                      : `${Math.max(1, Math.round(item.size / 1024))} KB`}{" "}
+                    · {kind}
                   </p>
 
                   {/* Progress Bar */}

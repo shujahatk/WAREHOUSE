@@ -4,7 +4,7 @@ import { LoginForm } from "@/components/auth/login-form";
 import { Mark } from "@/components/shell/sidebar";
 
 export const metadata: Metadata = {
-  title: { absolute: "Sign in · StockFlow" },
+  title: { absolute: "Sign in · RM" },
 };
 
 export default function LoginPage() {
@@ -32,7 +32,7 @@ export default function LoginPage() {
       <section className="flex flex-col justify-center px-6 py-12 sm:px-12">
         <div className="mx-auto w-full max-w-sm">
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-950">Welcome back</h1>
-          <p className="mt-1 text-sm text-neutral-500">Sign in to StockFlow</p>
+          <p className="mt-1 text-sm text-neutral-500">Sign in to RM</p>
           <LoginForm />
         </div>
       </section>

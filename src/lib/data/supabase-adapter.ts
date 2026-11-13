@@ -44,7 +44,7 @@ import {
   type OfferActivity,
   type NotificationRecord,
 } from "../../domain/schemas.ts";
-import { emptyWorkspace, type Actor, type WorkspaceState } from "../../domain/view.ts";
+import { emptyWorkspace, serializeOperationalRequestDescription, type Actor, type GeneralRequestOperationalDetails, type WorkspaceState } from "../../domain/view.ts";
 import { isActiveRole } from "../permissions.ts";
 import { MAX_FILE_SIZE_BYTES, detectFileType } from "../security/file-validation.ts";
 import { createSupabaseRestClient, type FetchLike, type SupabaseRestClient } from "../supabase/client.ts";
@@ -686,6 +686,26 @@ export class SupabaseAdapter {
         });
       }
     }
+    for (const wreq of (store.workerGeneralRequests || []).filter((r) => r.status === "submitted" || r.status === "under_review")) {
+      const key = `worker_request:${wreq.status}:${wreq.id}`;
+      if (!existingTargetKeys.has(key)) {
+        const wh = store.warehouses.find((w) => w.id === wreq.warehouseId);
+        synNotifs.push({
+          id: `wreq-${wreq.id}-${wreq.status}`,
+          recipientId: "",
+          eventType: "worker_request",
+          title: `Worker Request ${wreq.number}: ${wreq.status === "under_review" ? "Under Review" : "Pending"}`,
+          message: `Operational request ${wreq.number} (${wreq.category}) at ${wh?.name || "warehouse"} is ${wreq.status.replace("_", " ")}.`,
+          targetType: "worker_general_request",
+          targetId: wreq.id,
+          link: "/tasks",
+          warehouseId: wreq.warehouseId,
+          read: false,
+          readAt: null,
+          createdAt: wreq.updatedAt || wreq.createdAt,
+        });
+      }
+    }
     for (const dem of store.demurrageRecords) {
       if (dem.chargeEur && dem.chargeEur > 0) {
         const key = `demurrage_alert:shipment:${dem.shipmentId}`;
@@ -1150,16 +1170,116 @@ export class SupabaseAdapter {
           break;
         }
         case "createGeneralRequest": {
+          const documentIds = Array.isArray(body.documentIds) ? [...(body.documentIds as string[])] : [];
+          if (Array.isArray(body.attachments)) {
+            for (const att of body.attachments as { name?: string; bytesBase64?: string }[]) {
+              if (att?.name && att?.bytesBase64) {
+                const targetRes = await svc.files.createUploadTarget({
+                  filename: att.name,
+                  mime: att.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+                  byteSize: Math.round(att.bytesBase64.length * 0.75),
+                  kind: att.name.toLowerCase().endsWith(".pdf") ? "other" : "photo",
+                  warehouse: null,
+                  actorId: profile.id,
+                });
+                if (targetRes.ok) {
+                  const confirmRes = await svc.files.confirmUpload({
+                    fileId: targetRes.value.fileId,
+                    bytesBase64: att.bytesBase64,
+                    actorId: profile.id,
+                  });
+                  if (confirmRes.ok) {
+                    documentIds.push(targetRes.value.fileId);
+                  }
+                }
+              }
+            }
+          }
+
+          let finalDescription = text(body.description);
+          const opDetails = body.operationalDetails as Record<string, unknown> | undefined;
+          if (opDetails && typeof opDetails === "object") {
+            const pkgCount = Number(opDetails.packageCount);
+            const gross = Number(opDetails.grossWeightKg);
+            const tarePerPkg = Number(opDetails.tarePerPackageKg);
+            if (!Number.isInteger(pkgCount) || pkgCount <= 0) {
+              error = "Number of packages must be a positive whole number.";
+              break;
+            }
+            if (!Number.isFinite(gross) || gross <= 0) {
+              error = "Gross weight must be greater than zero.";
+              break;
+            }
+            if (!Number.isFinite(tarePerPkg) || tarePerPkg < 0) {
+              error = "Packaging tare weight cannot be negative.";
+              break;
+            }
+            const computedTotalTare = Math.round(pkgCount * tarePerPkg * 1000) / 1000;
+            const computedNet = Math.round((gross - computedTotalTare) * 1000) / 1000;
+            if (computedNet <= 0) {
+              error = "Gross weight must be greater than total tare weight (net weight must be positive).";
+              break;
+            }
+            const validatedDetails: GeneralRequestOperationalDetails = {
+              materialType: String(opDetails.materialType || "").trim() || "General Material",
+              materialDescription: String(opDetails.materialDescription || "").trim(),
+              packagingType: String(opDetails.packagingType || "").trim() || "Standard Packaging",
+              packageCount: pkgCount,
+              grossWeightKg: gross,
+              tarePerPackageKg: tarePerPkg,
+              totalTareWeightKg: computedTotalTare,
+              netWeightKg: computedNet,
+              warehouseLocation: String(opDetails.warehouseLocation || "").trim() || "Warehouse",
+              notes: typeof opDetails.notes === "string" ? opDetails.notes.trim() : undefined,
+            };
+            finalDescription = serializeOperationalRequestDescription(validatedDetails, finalDescription || undefined);
+          }
+
+          if (!finalDescription) {
+            error = "A request description is required.";
+            break;
+          }
+
+          // Resolve shipment UUID if shipment reference was passed
+          let shipmentUuid: string | null = null;
+          const rawShipment = text(body.shipmentId || body.shipment);
+          if (rawShipment) {
+            const shipRes = await this.client.select<Record<string, unknown>>(
+              "shipments",
+              `select=id&or=(id.eq.${encodeURIComponent(rawShipment)},reference.eq.${encodeURIComponent(rawShipment)})`,
+              token,
+            );
+            if (shipRes.ok && shipRes.value.length > 0) {
+              shipmentUuid = String(shipRes.value[0].id);
+            } else {
+              shipmentUuid = rawShipment;
+            }
+          }
+
           const res = await svc.generalRequests.create({
             category: body.category as GeneralRequestCategory,
             priority: (body.priority as GeneralRequestPriority) || "normal",
-            description: text(body.description),
-            shipmentId: text(body.shipmentId || body.shipment) || null,
-            documentIds: Array.isArray(body.documentIds) ? (body.documentIds as string[]) : undefined,
+            description: finalDescription,
+            shipmentId: shipmentUuid,
+            documentIds: documentIds.length > 0 ? documentIds : undefined,
             actorId: profile.id,
           });
           if (!res.ok) error = res.error;
-          else notice = "Your request was submitted.";
+          else {
+            notice = "Your request was submitted.";
+            try {
+              await this.client.rpc("rpc_create_notification", {
+                p_recipient_id: profile.id,
+                p_event_type: "worker_request_submitted",
+                p_title: `Request Submitted: ${res.value.number}`,
+                p_message: `Your operational request ${res.value.number} has been submitted for review.`,
+                p_target_type: "worker_general_request",
+                p_target_id: res.value.id,
+                p_link: "/tasks",
+                p_warehouse_id: res.value.warehouseId || profile.warehouseId || null,
+              }, token);
+            } catch {}
+          }
           break;
         }
         case "decideGeneralRequest": {
@@ -1175,7 +1295,23 @@ export class SupabaseAdapter {
             actorId: profile.id,
           });
           if (!res.ok) error = res.error;
-          else notice = "Request updated.";
+          else {
+            notice = "Request updated.";
+            try {
+              if (res.value.createdBy && res.value.createdBy !== profile.id) {
+                await this.client.rpc("rpc_create_notification", {
+                  p_recipient_id: res.value.createdBy,
+                  p_event_type: "worker_request_decided",
+                  p_title: `Request ${res.value.number} Updated: ${res.value.status.replace("_", " ")}`,
+                  p_message: `Your request ${res.value.number} was marked "${res.value.status.replace("_", " ")}" by ${profile.name}.${res.value.responseNote ? ` Note: ${res.value.responseNote}` : ""}`,
+                  p_target_type: "worker_general_request",
+                  p_target_id: res.value.id,
+                  p_link: "/tasks",
+                  p_warehouse_id: res.value.warehouseId || null,
+                }, token);
+              }
+            } catch {}
+          }
           break;
         }
         case "deleteGeneralRequest": {

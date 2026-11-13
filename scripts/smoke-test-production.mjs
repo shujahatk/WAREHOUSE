@@ -51,14 +51,14 @@ async function smokeTest() {
   await check('Homepage (HTTP GET /)', async () => {
     const res = await fetch(PROD_URL);
     const text = await res.text();
-    const isOk = res.status === 200 && text.includes('StockFlow');
-    return { ok: isOk, detail: `Status ${res.status}, Length: ${text.length} bytes, contains StockFlow title` };
+    const isOk = res.status === 200 && (text.includes('RM') || text.includes('StockFlow'));
+    return { ok: isOk, detail: `Status ${res.status}, Length: ${text.length} bytes, contains RM/StockFlow branding` };
   });
 
   await check('Login Page (HTTP GET /login)', async () => {
     const res = await fetch(`${PROD_URL}/login`);
     const text = await res.text();
-    const isOk = res.status === 200 && (text.includes('Sign in') || text.includes('StockFlow') || text.includes('password'));
+    const isOk = res.status === 200 && (text.includes('Sign in') || text.includes('RM') || text.includes('password'));
     return { ok: isOk, detail: `Status ${res.status}, renders sign-in form correctly` };
   });
 
@@ -66,7 +66,7 @@ async function smokeTest() {
   await check('PWA Webmanifest (HTTP GET /manifest.webmanifest)', async () => {
     const res = await fetch(`${PROD_URL}/manifest.webmanifest`);
     const json = await res.json().catch(() => null);
-    const isOk = res.status === 200 && json && json.name?.includes('StockFlow');
+    const isOk = res.status === 200 && json && (json.name?.includes('RM') || json.name?.includes('StockFlow'));
     return { ok: isOk, detail: `Status ${res.status}, Name: "${json?.name}", Short Name: "${json?.short_name}"` };
   });
 

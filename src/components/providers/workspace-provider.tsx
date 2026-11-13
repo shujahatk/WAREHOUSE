@@ -1,9 +1,21 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loadWorkspace, runCommand, signOutAction } from "@/domain/actions";
-import { emptyWorkspace, type Actor, type DemoDocument, type DemoState } from "@/domain/view";
+import { emptyWorkspace, type Actor, type DemoDocument, type DemoState, type GeneralRequestOperationalDetails } from "@/domain/view";
 import type { Role } from "@/lib/permissions";
+
+let authEpochCounter = 0;
+const authListeners = new Set<() => void>();
+
+export function notifyAuthChanged(): void {
+  authEpochCounter += 1;
+  for (const listener of authListeners) {
+    try {
+      listener();
+    } catch {}
+  }
+}
 
 type Text = Promise<string | undefined>;
 
@@ -70,6 +82,7 @@ export type WorkspaceApi = {
     shipmentId?: string | null;
     attachments?: { name: string; bytesBase64: string }[];
     documentIds?: string[];
+    operationalDetails?: GeneralRequestOperationalDetails;
   }) => Text;
   decideGeneralRequest: (draft: {
     requestId: string;
@@ -105,31 +118,73 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [actor, setActor] = useState<Actor | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [syncedEpoch, setSyncedEpoch] = useState<number>(() => authEpochCounter);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const lastRevisionRef = useRef<string>("");
   const channelRef = useRef<BroadcastChannel | null>(null);
 
-  useEffect(() => {
+  const fetchWorkspaceState = useCallback(async (targetEpoch?: number) => {
+    const epochToCommit = targetEpoch ?? authEpochCounter;
+    try {
+      const result = await loadWorkspace();
+      setState(result.state);
+      setActor(result.actor);
+      setSyncedEpoch(epochToCommit);
+      setReady(true);
+      setLastSyncedAt(new Date());
+    } catch {
+      setSyncedEpoch(epochToCommit);
+      setReady(true);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
     let active = true;
+    const currentEpoch = authEpochCounter;
     void loadWorkspace().then((result) => {
       if (!active) return;
       setState(result.state);
       setActor(result.actor);
+      setSyncedEpoch(currentEpoch);
       setReady(true);
       setLastSyncedAt(new Date());
+    }).catch(() => {
+      if (!active) return;
+      setSyncedEpoch(currentEpoch);
+      setReady(true);
     });
+    return () => {
+      active = false;
+      setReady(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const handleAuthChange = () => {
+      if (!active) return;
+      setReady(false);
+      void fetchWorkspaceState(authEpochCounter);
+    };
+    authListeners.add(handleAuthChange);
 
     let bc: BroadcastChannel | null = null;
     try {
       bc = new BroadcastChannel("stockflow-sync");
       channelRef.current = bc;
       bc.onmessage = (event) => {
-        if (event?.data?.type === "store_updated") {
+        if (event?.data?.type === "store_updated" || event?.data?.type === "auth_changed") {
+          if (event?.data?.type === "auth_changed") {
+            setReady(false);
+          }
           void loadWorkspace().then((result) => {
             if (!active) return;
             setState(result.state);
-            if (result.actor) setActor(result.actor);
+            setActor(result.actor);
+            setSyncedEpoch(authEpochCounter);
+            setReady(true);
             setLastSyncedAt(new Date());
           });
         }
@@ -148,7 +203,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             const result = await loadWorkspace();
             if (active) {
               setState(result.state);
-              if (result.actor) setActor(result.actor);
+              setActor(result.actor);
               setLastSyncedAt(new Date());
             }
             setIsSyncing(false);
@@ -168,6 +223,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     return () => {
       active = false;
+      authListeners.delete(handleAuthChange);
       clearInterval(interval);
       if (typeof window !== "undefined") {
         window.removeEventListener("focus", onFocus);
@@ -176,7 +232,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         bc?.close();
       } catch {}
     };
-  }, []);
+  }, [fetchWorkspaceState]);
+
+  const effectiveReady = ready && syncedEpoch === authEpochCounter;
 
   const api = useMemo<WorkspaceApi>(() => {
     const run = async (name: string, payload: unknown = {}): Promise<string | undefined> => {
@@ -202,15 +260,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return {
       state,
       actor,
-      ready,
+      ready: effectiveReady,
       setActor,
       notice,
       isSyncing,
       lastSyncedAt,
       signOut: async () => {
-        await signOutAction();
+        setReady(false);
         setActor(null);
         setState(emptyWorkspace());
+        setNotice(null);
+        lastRevisionRef.current = "";
+        await signOutAction();
+        authEpochCounter += 1;
+        setSyncedEpoch(authEpochCounter);
+        try {
+          channelRef.current?.postMessage({ type: "auth_changed" });
+        } catch {}
       },
       approve: (number) => run("approve", { number }),
       reject: (number) => run("reject", { number }),
@@ -271,7 +337,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         try {
           const result = await loadWorkspace();
           setState(result.state);
-          if (result.actor) setActor(result.actor);
+          setActor(result.actor);
+          setSyncedEpoch(authEpochCounter);
+          setReady(true);
           setLastSyncedAt(new Date());
         } finally {
           setIsSyncing(false);
@@ -279,7 +347,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       },
       reset: () => run("reset"),
     };
-  }, [actor, notice, ready, state, isSyncing, lastSyncedAt]);
+  }, [actor, notice, effectiveReady, state, isSyncing, lastSyncedAt]);
 
   return <WorkspaceContext.Provider value={api}>{children}</WorkspaceContext.Provider>;
 }

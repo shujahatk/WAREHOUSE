@@ -27,13 +27,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <WorkspaceSearch.Provider value={query}>
-      <div className="min-h-screen bg-[#f4f4f5] text-neutral-950">
+      <div className="min-h-screen bg-[#f4f4f5] text-neutral-950 overflow-x-hidden">
         <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-[232px] lg:flex-col">
           <Sidebar pathname={pathname} role={activeRole} />
         </div>
         <div className="lg:pl-[232px]">
           <TopNav query={query} onQuery={setQuery} identity={identity} onLogout={logout} />
-          <main className="px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:pb-8">
+          <main className="px-3.5 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:px-6 lg:px-8 lg:pb-8">
             <div className="mx-auto max-w-6xl">
               {allowed ? (
                 children
@@ -50,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav
           aria-label="Mobile"
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-white lg:hidden"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-white lg:hidden pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-2px_10px_rgba(0,0,0,0.05)]"
         >
           <ul
             className="grid"

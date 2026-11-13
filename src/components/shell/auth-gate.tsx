@@ -67,5 +67,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  return (
+    <SessionContext.Provider value={value}>
+      <div key={actor?.email || "anon"} className="contents">
+        {children}
+      </div>
+    </SessionContext.Provider>
+  );
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { UnloadScreen } from "@/components/ref/unload-panel";
 
-export const metadata: Metadata = { title: { absolute: "Container · StockFlow" } };
+export const metadata: Metadata = { title: { absolute: "Container · RM" } };
 
 export default function ContainerDetailPage({ params }: { params: Promise<{ container: string }> }) {
   return (

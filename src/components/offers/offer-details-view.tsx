@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { OfferView } from "@/domain/view";
 import type { Role } from "@/lib/permissions";
+import { compressImageIfNeeded, fileToBase64 } from "@/lib/client-image";
 import { OfferDecisionModal } from "./offer-decision-modal";
 import { OfferStatusModal } from "./offer-status-modal";
 import { OfferFormModal } from "./offer-form-modal";
@@ -102,26 +103,34 @@ export function OfferDetailsView({
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>, fileKind: "image" | "document") {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    setActionError(null);
+    setActionNotice(null);
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const res = reader.result as string;
-          const comma = res.indexOf(",");
-          resolve(comma !== -1 ? res.slice(comma + 1) : res);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      try {
+        const optimized = await compressImageIfNeeded(file);
+        const base64 = await fileToBase64(optimized.blob);
 
-      await onAddAttachment?.({
-        name: file.name,
-        mime: file.type || (fileKind === "image" ? "image/jpeg" : "application/pdf"),
-        bytesBase64: base64,
-        kind: fileKind,
-      });
+        const err = await onAddAttachment?.({
+          name: optimized.name,
+          mime: optimized.mime || (fileKind === "image" ? "image/jpeg" : "application/pdf"),
+          bytesBase64: base64,
+          kind: fileKind,
+        });
+        if (err) {
+          setActionError(err);
+        } else {
+          setActionNotice(
+            optimized.wasCompressed
+              ? `Uploaded ${optimized.name} (optimized from ${Math.round(optimized.originalSize / 1024)} KB to ${Math.round(optimized.size / 1024)} KB).`
+              : `Uploaded ${optimized.name}.`
+          );
+        }
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : `Failed to upload ${file.name}`);
+      }
     }
+    e.target.value = "";
   }
 
   return (
@@ -283,7 +292,7 @@ export function OfferDetailsView({
       ) : null}
 
       {/* Tabs Navigation */}
-      <div className="flex border-b border-neutral-200 text-xs font-medium">
+      <div className="flex overflow-x-auto border-b border-neutral-200 text-xs font-medium whitespace-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
         <button
           type="button"
           onClick={() => setActiveTab("material")}

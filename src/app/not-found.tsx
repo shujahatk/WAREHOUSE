@@ -10,7 +10,7 @@ export default function NotFound() {
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-24">
       <p className="text-[11px] font-medium tracking-[0.16em] text-neutral-500 uppercase">404</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
-        This page is not in StockFlow
+        This page is not in RM
       </h1>
       <p className="mt-2 text-sm leading-6 text-neutral-600">
         The address does not match a workspace route.

@@ -47,7 +47,19 @@ export async function signInAction(email: string, password: string): Promise<{ e
 export async function signOutAction(): Promise<void> {
   const jar = await cookies();
   const current = jar.get(COOKIE)?.value;
-  if (current) await getAdapter().signOut(current);
+  if (current) {
+    try {
+      await getAdapter().signOut(current);
+    } catch { }
+  }
+  jar.set(COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
+    secure: process.env.NODE_ENV === "production",
+  });
   jar.delete(COOKIE);
 }
 

@@ -8,6 +8,10 @@ import { hashPassword, verifyPassword } from "./passwords.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { upsertCompany, upsertWarehouse } from "./seed.ts";
 import {
+  serializeOperationalRequestDescription,
+  type GeneralRequestOperationalDetails,
+} from "./view.ts";
+import {
   issues,
   netKg,
   requestLineSchema,
@@ -426,8 +430,43 @@ export function createGeneralRequest(
   const priority = priorityResult.success ? priorityResult.data : "normal";
 
   const description = text(payload.description);
-  if (!description) {
+  if (!description && !payload.operationalDetails) {
     return fail("A request description is required.");
+  }
+
+  let finalDescription = description;
+  const opDetails = payload.operationalDetails as Record<string, unknown> | undefined;
+  if (opDetails && typeof opDetails === "object") {
+    const pkgCount = Number(opDetails.packageCount);
+    const gross = Number(opDetails.grossWeightKg);
+    const tarePerPkg = Number(opDetails.tarePerPackageKg);
+    if (!Number.isInteger(pkgCount) || pkgCount <= 0) {
+      return fail("Number of packages must be a positive whole number.");
+    }
+    if (!Number.isFinite(gross) || gross <= 0) {
+      return fail("Gross weight must be greater than zero.");
+    }
+    if (!Number.isFinite(tarePerPkg) || tarePerPkg < 0) {
+      return fail("Packaging tare weight cannot be negative.");
+    }
+    const computedTotalTare = Math.round(pkgCount * tarePerPkg * 1000) / 1000;
+    const computedNet = Math.round((gross - computedTotalTare) * 1000) / 1000;
+    if (computedNet <= 0) {
+      return fail("Gross weight must be greater than total tare weight (net weight must be positive).");
+    }
+    const validatedDetails: GeneralRequestOperationalDetails = {
+      materialType: String(opDetails.materialType || "").trim() || "General Material",
+      materialDescription: String(opDetails.materialDescription || "").trim(),
+      packagingType: String(opDetails.packagingType || "").trim() || "Standard Packaging",
+      packageCount: pkgCount,
+      grossWeightKg: gross,
+      tarePerPackageKg: tarePerPkg,
+      totalTareWeightKg: computedTotalTare,
+      netWeightKg: computedNet,
+      warehouseLocation: String(opDetails.warehouseLocation || "").trim() || (warehouseOf(store, actor) ?? "Warehouse"),
+      notes: typeof opDetails.notes === "string" ? opDetails.notes.trim() : undefined,
+    };
+    finalDescription = serializeOperationalRequestDescription(validatedDetails, description || undefined);
   }
 
   let shipmentId: string | null = null;
@@ -459,7 +498,7 @@ export function createGeneralRequest(
     number,
     category: categoryResult.data,
     priority,
-    description,
+    description: finalDescription,
     warehouseId: actor.warehouseId,
     shipmentId,
     purchaseOrderId,

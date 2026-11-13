@@ -12,7 +12,7 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
       await expect(page).toHaveURL(/\/login/);
     }
     await expect(page.locator("h1")).toContainText(/Welcome back/i);
-    await expect(page.locator("body")).toContainText(/Sign in to StockFlow/i);
+    await expect(page.locator("body")).toContainText(/Sign in to (RM|StockFlow)/i);
   });
 
   test("2. Rate limiting protects login from brute force", async ({ page }) => {

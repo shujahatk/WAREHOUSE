@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { OfferView } from "@/domain/view";
+import { compressImageIfNeeded, fileToBase64 } from "@/lib/client-image";
 
 type AttachmentDraft = {
   name: string;
@@ -9,6 +10,8 @@ type AttachmentDraft = {
   bytesBase64: string;
   kind: "image" | "document";
   size: number;
+  originalSize?: number;
+  wasCompressed?: boolean;
 };
 
 export function OfferFormModal(props: {
@@ -79,28 +82,31 @@ function OfferFormContent({
         continue;
       }
 
-      const isImg = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(file.name);
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const res = reader.result as string;
-          const commaIdx = res.indexOf(",");
-          resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      try {
+        const isImg = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(file.name);
+        const optimized = await compressImageIfNeeded(file);
+        const base64 = await fileToBase64(optimized.blob);
 
-      newAttachments.push({
-        name: file.name,
-        mime: file.type || "application/octet-stream",
-        bytesBase64: base64,
-        kind: isImg ? "image" : "document",
-        size: file.size,
-      });
+        newAttachments.push({
+          name: optimized.name,
+          mime: optimized.mime || "application/octet-stream",
+          bytesBase64: base64,
+          kind: isImg ? "image" : "document",
+          size: optimized.size,
+          originalSize: optimized.originalSize,
+          wasCompressed: optimized.wasCompressed,
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `Failed to process ${file.name}`);
+      }
     }
 
-    setAttachments((prev) => [...prev, ...newAttachments]);
+    setAttachments((prev) => {
+      const existingNames = new Set(prev.map((p) => `${p.name}:${p.size}`));
+      const deduplicated = newAttachments.filter((a) => !existingNames.has(`${a.name}:${a.size}`));
+      return [...prev, ...deduplicated];
+    });
+    e.target.value = "";
   }
 
   function removeAttachment(index: number) {

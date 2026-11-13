@@ -18,6 +18,7 @@ import {
   GENERAL_REQUEST_STATUS_LABELS,
   type GeneralRequestView,
   type GeneralRequestAttachmentView,
+  parseOperationalRequestDescription,
   OFFER_STATUS_LABELS,
   OFFER_PRIORITY_LABELS,
   OFFER_APPROVAL_LABELS,
@@ -418,6 +419,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       const order = req.purchaseOrderId ? poById.get(req.purchaseOrderId) : null;
       const creator = userById.get(req.createdBy);
       const decider = req.decidedBy ? userById.get(req.decidedBy) : null;
+      const { operationalDetails } = parseOperationalRequestDescription(req.description);
 
       return {
         id: req.id,
@@ -427,6 +429,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
         priority: req.priority,
         priorityLabel: GENERAL_REQUEST_PRIORITY_LABELS[req.priority] ?? req.priority,
         description: req.description,
+        operationalDetails,
         warehouseId: req.warehouseId,
         warehouse: warehouseName.get(req.warehouseId) ?? "",
         shipmentId: req.shipmentId,

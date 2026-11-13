@@ -6,13 +6,17 @@ import { useIsMounted } from "@/lib/use-mounted";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { PageTitle, StatusPill, Surface } from "@/components/ref/chrome";
 import { useSession } from "@/components/shell/auth-gate";
+import { compressImageIfNeeded, fileToBase64, formatFileSize } from "@/lib/client-image";
 import {
   formatKg,
   openTasks,
+  parseOperationalRequestDescription,
+  serializeOperationalRequestDescription,
   type GeneralRequestCategory,
   type GeneralRequestPriority,
   type GeneralRequestView,
   type GeneralRequestAttachmentView,
+  type GeneralRequestOperationalDetails,
 } from "@/domain/view";
 
 const CATEGORY_OPTIONS: { id: GeneralRequestCategory; label: string; desc: string }[] = [
@@ -54,18 +58,167 @@ export function TaskBoard() {
   const isManager = identity.role === "manager";
   const isOwner = identity.role === "owner";
 
-  // Create request modal state
+  // 12-field structured operational request modal state
   const [showCreateModal, setShowCreateModal] = useState(() => {
     return typeof window !== "undefined" && window.location.search.includes("new=true");
   });
+  const [modalStep, setModalStep] = useState<"edit" | "review">("edit");
   const [category, setCategory] = useState<GeneralRequestCategory>("materials_packaging");
   const [priority, setPriority] = useState<GeneralRequestPriority>("normal");
-  const [description, setDescription] = useState("");
+  const [materialType, setMaterialType] = useState("LDPE");
+  const [materialDescription, setMaterialDescription] = useState("LDPE film");
+  const [packagingType, setPackagingType] = useState("Normal Pallet");
+  const [packageCount, setPackageCount] = useState("1");
+  const [tarePerPackageKg, setTarePerPackageKg] = useState("25");
+  const [grossWeightKg, setGrossWeightKg] = useState("");
+  const [warehouseLocation, setWarehouseLocation] = useState(() => `${identity.warehouse || "Bornem"} - Loading Bay 1`);
   const [shipmentId, setShipmentId] = useState("");
-  const [stagedFiles, setStagedFiles] = useState<{ file: File; name: string; size: number; base64: string }[]>([]);
+  const [notes, setNotes] = useState("");
+  const [stagedFiles, setStagedFiles] = useState<{
+    file: File;
+    name: string;
+    size: number;
+    originalSize: number;
+    wasCompressed: boolean;
+    kind: "photo" | "document";
+    base64: string;
+  }[]>([]);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-calculated weight and packaging values
+  const parsedPackageCount = parseInt(packageCount, 10) || 0;
+  const parsedGrossKg = parseFloat(grossWeightKg) || 0;
+  const parsedUnitTareKg = parseFloat(tarePerPackageKg) || 0;
+  const totalTareWeightKg = Math.max(0, Math.round(parsedPackageCount * parsedUnitTareKg * 1000) / 1000);
+  const netWeightKg = Math.round((parsedGrossKg - totalTareWeightKg) * 1000) / 1000;
+  const isNetWeightValid = parsedGrossKg > 0 && parsedPackageCount > 0 && netWeightKg > 0;
+
+  const handlePackagingTypeChange = (pkgName: string) => {
+    setPackagingType(pkgName);
+    const matched = demo.state.packaging?.find((p) => p.label === pkgName);
+    if (matched && matched.tareKg !== null) {
+      setTarePerPackageKg(String(matched.tareKg));
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fileKind: "photo" | "document") => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setCreateError(null);
+
+    const newFiles: {
+      file: File;
+      name: string;
+      size: number;
+      originalSize: number;
+      wasCompressed: boolean;
+      kind: "photo" | "document";
+      base64: string;
+    }[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const optimized = await compressImageIfNeeded(file);
+        const base64 = await fileToBase64(optimized.blob);
+        newFiles.push({
+          file,
+          name: optimized.name,
+          size: optimized.size,
+          originalSize: optimized.originalSize,
+          wasCompressed: optimized.wasCompressed,
+          kind: fileKind,
+          base64,
+        });
+      } catch (err) {
+        setCreateError(err instanceof Error ? err.message : `Failed to process ${file.name}`);
+        return;
+      }
+    }
+
+    setStagedFiles((prev) => [...prev, ...newFiles]);
+    e.target.value = "";
+  };
+
+  const removeStagedFile = (index: number) => {
+    setStagedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleProceedToReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!materialType.trim()) {
+      setCreateError("Material / Product Type is required.");
+      return;
+    }
+    if (parsedPackageCount <= 0) {
+      setCreateError("Package count must be at least 1.");
+      return;
+    }
+    if (parsedGrossKg <= 0) {
+      setCreateError("Gross weight must be greater than zero.");
+      return;
+    }
+    if (netWeightKg <= 0) {
+      setCreateError("Gross weight must be greater than total tare weight (net weight must be positive).");
+      return;
+    }
+    setCreateError(null);
+    setModalStep("review");
+  };
+
+  const handleCreateSubmit = async () => {
+    if (!isNetWeightValid) {
+      setCreateError("Gross weight must be greater than total tare weight (net weight must be positive).");
+      return;
+    }
+
+    setCreateSubmitting(true);
+    setCreateError(null);
+
+    const opDetails: GeneralRequestOperationalDetails = {
+      materialType: materialType.trim(),
+      materialDescription: materialDescription.trim() || materialType.trim(),
+      packagingType: packagingType.trim(),
+      packageCount: parsedPackageCount,
+      grossWeightKg: parsedGrossKg,
+      tarePerPackageKg: parsedUnitTareKg,
+      totalTareWeightKg,
+      netWeightKg,
+      warehouseLocation: warehouseLocation.trim() || (identity.warehouse ?? "Warehouse"),
+      notes: notes.trim() || undefined,
+    };
+
+    const serialized = serializeOperationalRequestDescription(opDetails, notes.trim() || undefined);
+
+    const attachments = stagedFiles.map((f) => ({
+      name: f.name,
+      bytesBase64: f.base64,
+    }));
+
+    const err = await demo.createGeneralRequest({
+      category,
+      priority,
+      description: serialized,
+      shipmentId: shipmentId || null,
+      attachments: attachments.length > 0 ? attachments : undefined,
+      operationalDetails: opDetails,
+    });
+
+    if (err) {
+      setCreateError(err);
+      setCreateSubmitting(false);
+    } else {
+      setShowCreateModal(false);
+      setModalStep("edit");
+      setGrossWeightKg("");
+      setNotes("");
+      setStagedFiles([]);
+      setCreateSubmitting(false);
+    }
+  };
 
   // Decision & Action dialog state
   const [actionTarget, setActionTarget] = useState<{
@@ -127,72 +280,6 @@ export function TaskBoard() {
           .map((o) => ({ id: o.number, label: `Outbound: ${o.number} (${o.customer || "Customer"})` })),
       );
   }, [demo.state.containers, demo.state.outbound, isWorker, identity.warehouse]);
-
-  // Staging files
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const newFiles: { file: File; name: string; size: number; base64: string }[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (file.size > 10 * 1024 * 1024) {
-        setCreateError(`File "${file.name}" exceeds the 10 MB limit.`);
-        return;
-      }
-      try {
-        const base64 = await readFileAsBase64(file);
-        newFiles.push({ file, name: file.name, size: file.size, base64 });
-      } catch {
-        setCreateError(`Could not read file "${file.name}".`);
-        return;
-      }
-    }
-    setStagedFiles((prev) => [...prev, ...newFiles]);
-    setCreateError(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const removeStagedFile = (index: number) => {
-    setStagedFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  // Submit new request
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!description.trim()) {
-      setCreateError("Please enter a description for your request.");
-      return;
-    }
-    setCreateSubmitting(true);
-    setCreateError(null);
-
-    const attachments = stagedFiles.map((f) => ({
-      name: f.name,
-      bytesBase64: f.base64,
-    }));
-
-    const err = await demo.createGeneralRequest({
-      category,
-      priority,
-      description: description.trim(),
-      shipmentId: shipmentId || null,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    });
-
-    if (err) {
-      setCreateError(err);
-      setCreateSubmitting(false);
-    } else {
-      setShowCreateModal(false);
-      setDescription("");
-      setCategory("materials_packaging");
-      setPriority("normal");
-      setShipmentId("");
-      setStagedFiles([]);
-      setCreateSubmitting(false);
-    }
-  };
 
   // Execute decision / action
   const handleExecuteAction = async () => {
@@ -408,10 +495,55 @@ export function TaskBoard() {
                       </div>
                     </div>
 
-                    {/* Description Body */}
-                    <div className="text-sm text-neutral-900 whitespace-pre-line leading-relaxed">
-                      {req.description}
-                    </div>
+                    {/* Description Body & Operational Breakdown */}
+                    {(() => {
+                      const opParsed = req.operationalDetails || parseOperationalRequestDescription(req.description).operationalDetails;
+                      const displayDesc = opParsed
+                        ? parseOperationalRequestDescription(req.description).displayDescription
+                        : req.description;
+
+                      if (opParsed) {
+                        return (
+                          <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3.5 text-xs space-y-2.5">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-neutral-500">Material Type & Specs</span>
+                                <p className="font-bold text-neutral-950 mt-0.5">{opParsed.materialType}</p>
+                                {opParsed.materialDescription ? (
+                                  <p className="text-[11px] text-neutral-600 truncate">{opParsed.materialDescription}</p>
+                                ) : null}
+                              </div>
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-neutral-500">Packaging & Unit Tare</span>
+                                <p className="font-bold text-neutral-950 mt-0.5">{opParsed.packageCount} × {opParsed.packagingType}</p>
+                                <p className="text-[11px] text-neutral-600">Total Tare: {opParsed.totalTareWeightKg.toLocaleString()} kg</p>
+                              </div>
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-neutral-500">Weights (kg)</span>
+                                <p className="font-bold text-neutral-950 mt-0.5">Gross: {opParsed.grossWeightKg.toLocaleString()} kg</p>
+                                <p className="text-[11px] font-bold text-emerald-700">Net: {opParsed.netWeightKg.toLocaleString()} kg</p>
+                              </div>
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-neutral-500">Location</span>
+                                <p className="font-bold text-neutral-950 mt-0.5">{opParsed.warehouseLocation}</p>
+                              </div>
+                            </div>
+                            {opParsed.notes ? (
+                              <div className="border-t border-neutral-200/80 pt-2 text-neutral-700">
+                                <span className="font-semibold text-neutral-900">Notes: </span>
+                                {opParsed.notes}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="text-sm text-neutral-900 whitespace-pre-line leading-relaxed">
+                          {displayDesc}
+                        </div>
+                      );
+                    })()}
 
                     {/* Linked Shipment/Order if any */}
                     {req.shipmentReference || req.purchaseOrderNumber ? (
@@ -728,22 +860,34 @@ export function TaskBoard() {
       </div>
 
       {/* ========================================================================= */}
-      {/* Add New Request Modal (Worker) */}
+      {/* Add New Request Modal (Worker) - 12 Structured Fields & Review Summary */}
       {/* ========================================================================= */}
       {showCreateModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl transition-all">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl bg-white p-4 sm:p-6 shadow-2xl transition-all my-auto max-h-[92vh] overflow-y-auto">
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
               <div>
-                <h3 className="text-base font-bold text-neutral-950">+ Add New Warehouse Request</h3>
-                <p className="text-xs text-neutral-500">
-                  Submit a request for your assigned warehouse ({identity.warehouse ?? "Warehouse"}).
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-neutral-950">
+                    {modalStep === "edit" ? "+ New Operational Warehouse Request" : "Review Request Summary"}
+                  </h3>
+                  <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    {modalStep === "edit" ? "Step 1 of 2: Details" : "Step 2 of 2: Confirm"}
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Assigned warehouse: <strong className="text-neutral-800">{identity.warehouse ?? "Warehouse"}</strong>
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setModalStep("edit");
+                  setCreateError(null);
+                }}
+                className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -751,169 +895,450 @@ export function TaskBoard() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="mt-4 space-y-4">
-              {createError ? (
-                <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
-                  {createError}
-                </div>
-              ) : null}
-
-              {/* 1. Category */}
-              <div>
-                <label className="block text-xs font-semibold text-neutral-800 uppercase tracking-wide">
-                  Request Category <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as GeneralRequestCategory)}
-                  className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
-                >
-                  {CATEGORY_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[11px] text-neutral-500">
-                  {CATEGORY_OPTIONS.find((c) => c.id === category)?.desc}
-                </p>
+            {createError ? (
+              <div role="alert" className="mt-3 rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
+                {createError}
               </div>
+            ) : null}
 
-              {/* 2. Priority */}
-              <div>
-                <label className="block text-xs font-semibold text-neutral-800 uppercase tracking-wide">
-                  Priority
-                </label>
-                <div className="mt-1 grid grid-cols-4 gap-2">
-                  {PRIORITY_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setPriority(opt.id)}
-                      className={`rounded-lg py-1.5 text-xs font-medium border text-center transition ${
-                        priority === opt.id
-                          ? "border-neutral-950 bg-neutral-950 text-white shadow-xs"
-                          : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100"
-                      }`}
+            {modalStep === "edit" ? (
+              <form onSubmit={handleProceedToReview} className="mt-4 space-y-4 text-xs">
+                {/* 1. Request Type / Category & 2. Priority */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      1. Request Category <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value as GeneralRequestCategory)}
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
                     >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      {CATEGORY_OPTIONS.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              {/* 3. Description (Required) */}
-              <div>
-                <label className="block text-xs font-semibold text-neutral-800 uppercase tracking-wide">
-                  Description <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe the issue, required materials, or task details..."
-                  className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
-                  required
-                />
-              </div>
-
-              {/* 4. Optional Linked Shipment */}
-              {relevantShipments.length > 0 ? (
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-800 uppercase tracking-wide">
-                    Linked Shipment / Container <span className="text-neutral-400 font-normal">(Optional)</span>
-                  </label>
-                  <select
-                    value={shipmentId}
-                    onChange={(e) => setShipmentId(e.target.value)}
-                    className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
-                  >
-                    <option value="">None / General warehouse request</option>
-                    {relevantShipments.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-
-              {/* 5. Photos & Documents Attachment Upload */}
-              <div>
-                <label className="block text-xs font-semibold text-neutral-800 uppercase tracking-wide">
-                  Photos & Document Attachments <span className="text-neutral-400 font-normal">(Optional)</span>
-                </label>
-                <div className="mt-1.5">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf,.doc,.docx,.txt"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="worker-request-file-input"
-                  />
-                  <label
-                    htmlFor="worker-request-file-input"
-                    className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-4 transition hover:border-neutral-900 hover:bg-neutral-100"
-                  >
-                    <svg className="h-6 w-6 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <span className="mt-1 text-xs font-medium text-neutral-700">
-                      Click to attach photos or documents
-                    </span>
-                    <span className="text-[10px] text-neutral-400">PNG, JPG, PDF up to 10 MB</span>
-                  </label>
-                </div>
-
-                {/* Staged Files Preview */}
-                {stagedFiles.length > 0 ? (
-                  <ul className="mt-2.5 divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
-                    {stagedFiles.map((sf, idx) => (
-                      <li key={idx} className="flex items-center justify-between p-2 text-xs">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="font-mono text-neutral-400">#{idx + 1}</span>
-                          <span className="font-medium text-neutral-900 truncate">{sf.name}</span>
-                          <span className="text-[11px] text-neutral-400">({formatBytes(sf.size)})</span>
-                        </div>
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      2. Priority Level
+                    </label>
+                    <div className="mt-1 grid grid-cols-4 gap-1.5">
+                      {PRIORITY_OPTIONS.map((opt) => (
                         <button
+                          key={opt.id}
                           type="button"
-                          onClick={() => removeStagedFile(idx)}
-                          className="text-xs font-semibold text-rose-600 hover:underline shrink-0"
+                          onClick={() => setPriority(opt.id)}
+                          className={`rounded-lg py-2 text-xs font-medium border text-center transition ${
+                            priority === opt.id
+                              ? "border-neutral-950 bg-neutral-950 text-white shadow-xs font-bold"
+                              : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100"
+                          }`}
                         >
-                          Remove
+                          {opt.label}
                         </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-              {/* Form Actions */}
-              <div className="flex items-center justify-end gap-2 border-t border-neutral-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  disabled={createSubmitting}
-                  className="rounded-lg border border-neutral-300 px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createSubmitting}
-                  className="rounded-lg bg-neutral-950 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 disabled:opacity-50"
-                >
-                  {createSubmitting ? "Submitting Request..." : "Submit Request"}
-                </button>
+                {/* 3. Material/Product Type & 4. Material Description */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-neutral-100 pt-3">
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      3. Material / Product Type <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={materialType}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setMaterialType(val);
+                        if (val === "LDPE") setMaterialDescription("LDPE film");
+                        else if (val === "HDPE") setMaterialDescription("HDPE natural flakes / regrind");
+                        else if (val === "PP") setMaterialDescription("PP woven bags / flakes");
+                        else if (val === "PET") setMaterialDescription("PET bottle flakes");
+                      }}
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    >
+                      <option value="LDPE">LDPE (Low-Density Polyethylene)</option>
+                      <option value="HDPE">HDPE (High-Density Polyethylene)</option>
+                      <option value="PP">PP (Polypropylene)</option>
+                      <option value="PET">PET (Polyethylene Terephthalate)</option>
+                      <option value="Plastics">Plastics (General / Mixed)</option>
+                      <option value="Cardboard">Cardboard & Paper</option>
+                      <option value="Metals">Metals & Scrap</option>
+                      <option value="Other">Other Material</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      4. Material Description
+                    </label>
+                    <input
+                      type="text"
+                      value={materialDescription}
+                      onChange={(e) => setMaterialDescription(e.target.value)}
+                      placeholder="e.g. LDPE 98/2 clean transparent film, baled"
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                {/* 5. Packaging Type, 6. Number of Packages, 7. Tare Weight */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-neutral-100 pt-3">
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      5. Packaging Type <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={packagingType}
+                      onChange={(e) => handlePackagingTypeChange(e.target.value)}
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    >
+                      {(demo.state.packaging || []).map((pkg) => (
+                        <option key={pkg.id} value={pkg.label}>
+                          {pkg.label} ({pkg.tareKg !== null ? `${pkg.tareKg} kg tare` : "no tare"})
+                        </option>
+                      ))}
+                      <option value="Big Bag">Big Bag (2 kg tare)</option>
+                      <option value="Euro Pallet">Euro Pallet (20 kg tare)</option>
+                      <option value="Normal Pallet">Normal Pallet (25 kg tare)</option>
+                      <option value="Octabin">Octabin (15 kg tare)</option>
+                      <option value="None / Bulk">None / Bulk (0 kg tare)</option>
+                      <option value="Custom">Custom Packaging</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      6. Number of Packages <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      required
+                      value={packageCount}
+                      onChange={(e) => setPackageCount(e.target.value)}
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      7. Tare per Unit (kg)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={tarePerPackageKg}
+                      onChange={(e) => setTarePerPackageKg(e.target.value)}
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                {/* Weights Calculation Bar: 8. Gross Weight, Total Tare, and 9. Net Weight */}
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3.5 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                    <div>
+                      <label className="block font-semibold text-neutral-900 uppercase tracking-wide">
+                        8. Gross Weight (kg) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0.001"
+                        step="any"
+                        required
+                        placeholder="e.g. 1540"
+                        value={grossWeightKg}
+                        onChange={(e) => setGrossWeightKg(e.target.value)}
+                        className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-sm font-semibold text-neutral-950 focus:border-neutral-950 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <span className="block font-semibold text-neutral-600 uppercase tracking-wide">
+                        Total Packaging Tare
+                      </span>
+                      <div className="mt-1 flex h-[38px] items-center rounded-lg border border-neutral-200 bg-white px-3 font-mono font-medium text-neutral-800">
+                        {totalTareWeightKg.toLocaleString()} kg
+                        <span className="ml-1 text-[10px] text-neutral-400">({parsedPackageCount} × {parsedUnitTareKg} kg)</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="block font-semibold text-neutral-900 uppercase tracking-wide">
+                        9. Net Material Weight (kg)
+                      </span>
+                      <div
+                        className={`mt-1 flex h-[38px] items-center justify-between rounded-lg px-3 font-mono text-sm font-bold border transition ${
+                          isNetWeightValid
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                            : "bg-rose-50 border-rose-300 text-rose-800"
+                        }`}
+                      >
+                        <span>{netWeightKg > 0 ? `${netWeightKg.toLocaleString()} kg` : "0 kg"}</span>
+                        <span className="text-[10px] uppercase tracking-wider">
+                          {isNetWeightValid ? "✓ Valid Net" : "Invalid Weight"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {parsedGrossKg > 0 && netWeightKg <= 0 ? (
+                    <p className="text-[11px] font-semibold text-rose-600">
+                      ⚠️ Gross weight ({parsedGrossKg} kg) must be greater than total tare ({totalTareWeightKg} kg). Net weight must be positive.
+                    </p>
+                  ) : null}
+                </div>
+
+                {/* 10. Warehouse & Location & Optional Linked Shipment */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-neutral-100 pt-3">
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      10. Warehouse & Specific Location <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={warehouseLocation}
+                      onChange={(e) => setWarehouseLocation(e.target.value)}
+                      placeholder="e.g. Bornem - Bay 2 / Section C"
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      Linked Shipment / Container <span className="text-neutral-400 font-normal">(Optional)</span>
+                    </label>
+                    <select
+                      value={shipmentId}
+                      onChange={(e) => setShipmentId(e.target.value)}
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    >
+                      <option value="">None / General warehouse request</option>
+                      {relevantShipments.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 11. Photos & 12. Supporting Documents Upload */}
+                <div className="space-y-2 border-t border-neutral-100 pt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                      11. Photos & 12. Supporting Documents
+                    </label>
+                    <span className="text-[11px] text-neutral-500">Auto-compressed up to 1920px (max 10 MB)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Camera / Photo Button */}
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-neutral-950 px-3 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 active:scale-[0.99]"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <span>📷 Add Photos (Camera / Gallery)</span>
+                    </button>
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => void handleFileUpload(e, "photo")}
+                      className="hidden"
+                    />
+
+                    {/* Document Button */}
+                    <button
+                      type="button"
+                      onClick={() => docInputRef.current?.click()}
+                      className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-50 active:scale-[0.99]"
+                    >
+                      <svg className="h-4 w-4 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      <span>📄 Attach Document (PDF / Office)</span>
+                    </button>
+                    <input
+                      ref={docInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.xlsx,.txt"
+                      onChange={(e) => void handleFileUpload(e, "document")}
+                      className="hidden"
+                    />
+                  </div>
+
+                  {/* Staged Files List */}
+                  {stagedFiles.length > 0 ? (
+                    <ul className="mt-2 divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+                      {stagedFiles.map((sf, idx) => (
+                        <li key={idx} className="flex items-center justify-between p-2.5">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-base">{sf.kind === "photo" ? "📷" : "📄"}</span>
+                            <div className="truncate">
+                              <p className="font-medium text-neutral-900 truncate">{sf.name}</p>
+                              <p className="text-[10px] text-neutral-500">
+                                {sf.wasCompressed && sf.originalSize > sf.size
+                                  ? `${formatFileSize(sf.originalSize)} → ${formatFileSize(sf.size)} (-${Math.round((1 - sf.size / sf.originalSize) * 100)}% optimized)`
+                                  : formatFileSize(sf.size)}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeStagedFile(idx)}
+                            className="text-xs font-semibold text-rose-600 hover:underline shrink-0 ml-2"
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+
+                {/* Additional Notes */}
+                <div className="border-t border-neutral-100 pt-3">
+                  <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                    Additional Notes & Instructions <span className="text-neutral-400 font-normal">(Optional)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Provide any additional handling instructions, defect notes, or operational details..."
+                    className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex items-center justify-end gap-2 border-t border-neutral-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="min-h-[40px] rounded-lg border border-neutral-300 px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!isNetWeightValid}
+                    className="min-h-[40px] rounded-lg bg-neutral-950 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 disabled:opacity-50"
+                  >
+                    Review Request Summary →
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Step 2: Review Operational Summary */
+              <div className="mt-4 space-y-4 text-xs">
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-3">
+                  <h4 className="font-bold text-neutral-950 text-sm border-b border-neutral-200 pb-2">
+                    Operational Request Review Summary
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Request Category</span>
+                      <p className="font-semibold text-neutral-900">{CATEGORY_OPTIONS.find((c) => c.id === category)?.label}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Priority</span>
+                      <p className="font-semibold text-neutral-900 capitalize">{priority}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Material / Product</span>
+                      <p className="font-bold text-neutral-900">{materialType}</p>
+                      {materialDescription ? <p className="text-[11px] text-neutral-600">{materialDescription}</p> : null}
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Packaging</span>
+                      <p className="font-bold text-neutral-900">{parsedPackageCount} × {packagingType}</p>
+                      <p className="text-[11px] text-neutral-600">Unit Tare: {parsedUnitTareKg} kg</p>
+                    </div>
+                  </div>
+
+                  {/* Weights Breakdown Card */}
+                  <div className="rounded-lg border border-neutral-200 bg-white p-3 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Gross Weight</span>
+                      <p className="text-sm font-bold text-neutral-900">{parsedGrossKg.toLocaleString()} kg</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Total Packaging Tare</span>
+                      <p className="text-sm font-bold text-neutral-700">{totalTareWeightKg.toLocaleString()} kg</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-emerald-700">Calculated Net Weight</span>
+                      <p className="text-sm font-bold text-emerald-800">{netWeightKg.toLocaleString()} kg</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Location</span>
+                      <p className="font-semibold text-neutral-900">{warehouseLocation}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Linked Shipment</span>
+                      <p className="font-semibold text-neutral-900">{shipmentId || "None / General"}</p>
+                    </div>
+                  </div>
+
+                  {notes ? (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">Notes & Instructions</span>
+                      <p className="text-neutral-800 whitespace-pre-wrap">{notes}</p>
+                    </div>
+                  ) : null}
+
+                  {stagedFiles.length > 0 ? (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500">
+                        Attachments ({stagedFiles.length} file{stagedFiles.length > 1 ? "s" : ""})
+                      </span>
+                      <p className="text-neutral-700">{stagedFiles.map((f) => f.name).join(", ")}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-neutral-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setModalStep("edit")}
+                    disabled={createSubmitting}
+                    className="min-h-[40px] rounded-lg border border-neutral-300 px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                  >
+                    ← Back to Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateSubmit()}
+                    disabled={createSubmitting}
+                    className="min-h-[40px] rounded-lg bg-neutral-950 px-6 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 disabled:opacity-50"
+                  >
+                    {createSubmitting ? "Submitting Request..." : "Confirm & Submit Request"}
+                  </button>
+                </div>
               </div>
-            </form>
+            )}
           </div>
         </div>
       ) : null}
@@ -1093,21 +1518,4 @@ export function TaskBoard() {
       ) : null}
     </>
   );
-}
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const commaIndex = result.indexOf(",");
-      if (commaIndex !== -1) {
-        resolve(result.slice(commaIndex + 1));
-      } else {
-        resolve(result);
-      }
-    };
-    reader.onerror = (err) => reject(err);
-    reader.readAsDataURL(file);
-  });
 }

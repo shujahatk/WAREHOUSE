@@ -20,7 +20,7 @@ export default function SettingsPage() {
         <Panel title="Workspace" description="Production system parameters.">
           <DefinitionList
             items={[
-              { term: "Name", detail: "StockFlow" },
+              { term: "Name", detail: "RM" },
               { term: "Warehouses", detail: "Bornem, Turnhout, Spain, Pakistan" },
               { term: "Storage", detail: "Typed Service Interfaces (LocalAdapter / Postgres ready)" },
               { term: "Audit Log", detail: "Append-only active" },

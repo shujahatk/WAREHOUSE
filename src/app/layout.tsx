@@ -22,8 +22,8 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "StockFlow",
-    template: "%s · StockFlow",
+    default: "RM",
+    template: "%s · RM",
   },
   description:
     "Warehouse operations workspace for inventory weight, containers, purchases, and stock movements.",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "StockFlow",
+    title: "RM",
   },
   icons: {
     icon: "/icons/icon-192.png",

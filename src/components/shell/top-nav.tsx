@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { Icon } from "@/components/icons";
 import { formatInstant, type DemoIdentity } from "@/domain/view";
@@ -19,7 +19,18 @@ export function TopNav({
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const { state, markNotificationRead, markAllNotificationsRead } = useDemo();
+
+  useLayoutEffect(() => {
+    const details = detailsRef.current;
+    return () => {
+      setOpen(false);
+      if (details) {
+        details.open = false;
+      }
+    };
+  }, []);
 
   const notifications = state.notifications || [];
   const unreadNotifications = notifications.filter((n) => !n.read);
@@ -29,8 +40,8 @@ export function TopNav({
   return (
     <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white px-4 py-3 sm:px-6">
       <div className="flex items-center gap-3">
-        <Link href="/dashboard" className="text-sm font-semibold tracking-tight text-neutral-950 lg:hidden">
-          StockFlow
+        <Link href="/dashboard" className="text-base font-semibold tracking-tight text-neutral-950 lg:hidden">
+          RM
         </Link>
         <form
           role="search"
@@ -68,7 +79,7 @@ export function TopNav({
               ) : null}
             </button>
             {open ? (
-              <div className="absolute right-0 z-40 mt-2 w-80 sm:w-96 rounded-2xl border border-neutral-200 bg-white shadow-lg overflow-hidden text-sm">
+              <div className="fixed inset-x-3 top-16 z-40 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-96 rounded-2xl border border-neutral-200 bg-white shadow-lg overflow-hidden text-sm">
                 <div className="flex items-center justify-between border-b border-neutral-100 bg-neutral-50/70 px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-neutral-950">Notifications</span>
@@ -147,7 +158,7 @@ export function TopNav({
               </div>
             ) : null}
           </div>
-          <details className="relative">
+          <details ref={detailsRef} className="relative">
             <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded-full border border-neutral-200 pr-3 pl-1">
               <span suppressHydrationWarning className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-[11px] font-medium text-white">
                 {identity.name ? identity.name.slice(0, 1) : "U"}
@@ -161,7 +172,17 @@ export function TopNav({
               <p suppressHydrationWarning className="mt-1 text-xs text-neutral-500">
                 {`${roleLabel(identity.role)}${identity.warehouse ? ` · ${identity.warehouse}` : ""}`}
               </p>
-              <button type="button" onClick={onLogout} className="mt-3 text-sm font-medium text-neutral-950 underline underline-offset-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  if (detailsRef.current) {
+                    detailsRef.current.open = false;
+                  }
+                  onLogout();
+                }}
+                className="mt-3 min-h-[36px] text-sm font-medium text-neutral-950 underline underline-offset-4"
+              >
                 Log out
               </button>
             </div>
@@ -177,7 +198,7 @@ export function TopNav({
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           placeholder="Search by PO, container, supplier..."
-          className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm"
+          className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-base sm:text-sm"
         />
       </form>
     </header>

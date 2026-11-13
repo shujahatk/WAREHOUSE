@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PurchaseDetail } from "@/components/ref/purchase-detail";
 
-export const metadata: Metadata = { title: { absolute: "Purchase order · StockFlow" } };
+export const metadata: Metadata = { title: { absolute: "Purchase order · RM" } };
 
 export default function PurchaseDetailPage({ params }: { params: Promise<{ order: string }> }) {
   return (

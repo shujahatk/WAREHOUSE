@@ -12,8 +12,8 @@ export function Mark({ light = false }: { light?: boolean }) {
       <svg viewBox="0 0 20 16" className="h-4 w-5" aria-hidden="true">
         <path d="M2 14 7 2 M8 14 13 2 M14 14l3-7" fill="none" stroke={light ? "#fff" : "#111"} strokeWidth="1.7" strokeLinecap="round" />
       </svg>
-      <span className={cn("text-sm font-semibold tracking-tight", light ? "text-white" : "text-neutral-950")}>
-        StockFlow
+      <span className={cn("text-base font-bold tracking-tight", light ? "text-white" : "text-neutral-950")}>
+        RM
       </span>
     </span>
   );
@@ -64,7 +64,7 @@ export function Sidebar({
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#111111] text-white">
       <div className="flex h-16 items-center px-5">
-        <Link href="/dashboard" onClick={onNavigate} aria-label="StockFlow">
+        <Link href="/dashboard" onClick={onNavigate} aria-label="RM">
           <Mark light />
         </Link>
       </div>
@@ -79,7 +79,7 @@ export function Sidebar({
         ))}
       </nav>
       <p className="px-5 py-4 text-[11px] leading-5 text-neutral-500">
-        StockFlow Warehouse & Logistics
+        RM Warehouse & Logistics
       </p>
     </div>
   );
