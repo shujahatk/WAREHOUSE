@@ -13,9 +13,27 @@ async function main() {
   const passLine = creds.split(/\r?\n/).find(l => l.startsWith('password='));
   const token = passLine.replace('password=', '').trim();
 
-  // 2. Fetch list of artifacts for run 43423530112
-  console.log('[1/4] Querying GitHub API for Run 43423530112 artifacts...');
-  const res = await fetch('https://api.github.com/repos/shujahatk/WAREHOUSE/actions/runs/43423530112/artifacts', {
+  // 2. Determine target run ID
+  let runId = process.argv[2];
+  if (!runId) {
+    const runsRes = await fetch('https://api.github.com/repos/shujahatk/WAREHOUSE/actions/runs?per_page=5', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'StockFlow-Disaster-Recovery-Verifier',
+      },
+    });
+    const runsData = await runsRes.json();
+    const backupRuns = (runsData.workflow_runs || []).filter(r => r.name.includes('Backup'));
+    if (backupRuns.length > 0) {
+      runId = backupRuns[0].id.toString();
+    } else {
+      runId = '43431902449';
+    }
+  }
+
+  console.log(`[1/4] Querying GitHub API for Run ${runId} artifacts...`);
+  const res = await fetch(`https://api.github.com/repos/shujahatk/WAREHOUSE/actions/runs/${runId}/artifacts`, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
@@ -25,7 +43,7 @@ async function main() {
 
   const data = await res.json();
   if (!data.artifacts || data.artifacts.length === 0) {
-    throw new Error('No artifacts found for run 43423530112');
+    throw new Error(`No artifacts found for run ${runId}`);
   }
 
   const artifact = data.artifacts[0];
