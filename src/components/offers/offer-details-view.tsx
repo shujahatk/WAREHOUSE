@@ -8,6 +8,7 @@ import { compressImageIfNeeded, fileToBase64 } from "@/lib/client-image";
 import { OfferDecisionModal } from "./offer-decision-modal";
 import { OfferStatusModal } from "./offer-status-modal";
 import { OfferFormModal } from "./offer-form-modal";
+import { AttachmentPreviewModal, type PreviewAttachmentItem } from "@/components/files/attachment-preview-modal";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-neutral-100 text-neutral-700 border-neutral-300" },
@@ -60,7 +61,7 @@ export function OfferDetailsView({
   const [decisionModalOpen, setDecisionModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<PreviewAttachmentItem | null>(null);
 
   const [newComment, setNewComment] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
@@ -464,10 +465,26 @@ export function OfferDetailsView({
                   className="group relative overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 shadow-2xs"
                 >
                   <div
-                    onClick={() => setPreviewImage(img.url || `/api/files/${img.id}`)}
-                    className="flex h-36 w-full cursor-pointer items-center justify-center bg-neutral-50 p-2 text-center text-xs text-neutral-600 hover:bg-neutral-100"
+                    onClick={() =>
+                      setPreviewItem({
+                        id: img.id,
+                        name: img.name,
+                        mime: img.mime || "image/jpeg",
+                        byteSize: img.byteSize,
+                        url: img.url || `/api/files/${img.id}`,
+                        uploadedByName: img.uploadedByName,
+                        uploadedAt: img.createdAt,
+                      })
+                    }
+                    className="relative flex h-36 w-full cursor-pointer items-center justify-center bg-neutral-900/5 p-1 overflow-hidden hover:opacity-90 transition"
                   >
-                    <span className="font-medium truncate">{img.name}</span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url || `/api/files/${img.id}`}
+                      alt={img.name}
+                      className="h-full w-full object-cover rounded-t-lg"
+                      loading="lazy"
+                    />
                   </div>
                   <div className="p-2.5 bg-white text-[11px] flex items-center justify-between">
                     <span className="truncate text-neutral-700">{img.name}</span>
@@ -475,7 +492,7 @@ export function OfferDetailsView({
                       <button
                         type="button"
                         onClick={() => onDeleteAttachment?.(img.id)}
-                        className="text-rose-500 hover:text-rose-700 font-bold ml-2"
+                        className="text-rose-500 hover:text-rose-700 font-bold ml-2 min-h-[30px] min-w-[30px] flex items-center justify-center"
                         title="Delete photo"
                       >
                         &times;
@@ -525,11 +542,28 @@ export function OfferDetailsView({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPreviewItem({
+                          id: doc.id,
+                          name: doc.name,
+                          mime: doc.mime || (doc.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream"),
+                          byteSize: doc.byteSize,
+                          url: doc.url || `/api/files/${doc.id}`,
+                          uploadedByName: doc.uploadedByName,
+                          uploadedAt: doc.createdAt,
+                        })
+                      }
+                      className="rounded-lg bg-neutral-950 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-800 transition min-h-[36px]"
+                    >
+                      Preview
+                    </button>
                     <a
                       href={doc.url || `/api/files/${doc.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded-lg border border-neutral-200 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                      className="rounded-lg border border-neutral-200 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 min-h-[36px] flex items-center justify-center"
                     >
                       Download
                     </a>
@@ -537,7 +571,7 @@ export function OfferDetailsView({
                       <button
                         type="button"
                         onClick={() => onDeleteAttachment?.(doc.id)}
-                        className="rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 font-bold"
+                        className="rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 font-bold min-h-[36px]"
                       >
                         Delete
                       </button>
@@ -668,26 +702,8 @@ export function OfferDetailsView({
         />
       ) : null}
 
-      {/* Image Preview Modal */}
-      {previewImage ? (
-        <div
-          onClick={() => setPreviewImage(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-        >
-          <div className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-xl bg-white p-4">
-            <button
-              type="button"
-              onClick={() => setPreviewImage(null)}
-              className="absolute right-3 top-3 text-2xl font-bold text-neutral-700 hover:text-black"
-            >
-              &times;
-            </button>
-            <p className="text-xs text-neutral-500 mb-2">Image Preview</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewImage} alt="Preview" className="max-h-[80vh] max-w-full rounded-lg object-contain" />
-          </div>
-        </div>
-      ) : null}
+      {/* Attachment Preview Modal */}
+      <AttachmentPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
     </div>
   );
 }

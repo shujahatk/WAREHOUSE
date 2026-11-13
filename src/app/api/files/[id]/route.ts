@@ -28,6 +28,17 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   const store = await adapter.snapshot(sessionId);
   const doc = store.documents.find((d) => d.storageKey === id || d.id === id);
+  const offerAtt = (store.offerAttachments || []).find((a) => a.storageKey === id || a.id === id);
+
+  // Offer Moderator: can access offer-related attachments only
+  if (user.role === "moderator" && !offerAtt) {
+    return new Response("Forbidden: Offer moderators can only access offer attachments.", { status: 403 });
+  }
+
+  // Staff and Worker: strictly zero access to offer attachments
+  if (offerAtt && (user.role === "worker" || user.role === "manager")) {
+    return new Response("Forbidden: You do not have permission to access offer attachments.", { status: 403 });
+  }
 
   if (doc && user.role === "worker") {
     // If this document is attached to a worker general request, only the creator worker (or staff/admin) can access it

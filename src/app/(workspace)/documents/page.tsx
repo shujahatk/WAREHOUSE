@@ -9,6 +9,7 @@ import { useWorkspaceSearch } from "@/components/shell/search-context";
 import { visibleDocuments, type DemoDocument } from "@/domain/view";
 import { canPerform } from "@/lib/permissions";
 import { UploadCapture } from "@/components/files/upload-capture";
+import { AttachmentPreviewModal, type PreviewAttachmentItem } from "@/components/files/attachment-preview-modal";
 
 const categories = ["All", "Purchase", "Container", "Transport"] as const;
 
@@ -18,6 +19,7 @@ export default function DocumentsPage() {
   const query = useWorkspaceSearch().trim().toLowerCase();
   const [category, setCategory] = useState<(typeof categories)[number]>("All");
   const [selected, setSelected] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<PreviewAttachmentItem | null>(null);
   const [uploadCategory, setUploadCategory] = useState<DemoDocument["category"]>("Purchase");
   const canAdd = canPerform(identity.role, "add-document");
   const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
@@ -91,9 +93,30 @@ export default function DocumentsPage() {
               <h2 className="mt-1 text-sm font-semibold">{current.name}</h2>
               <p className="mt-2 text-sm text-neutral-600">{current.meta}</p>
               {current.url ? (
-                <a href={current.url} className="mt-3 inline-flex h-9 items-center rounded-lg bg-neutral-950 px-3 text-xs font-medium text-white">
-                  Download {current.name}
-                </a>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPreviewItem({
+                        id: current.id,
+                        name: current.name,
+                        mime: current.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+                        url: current.url,
+                        category: current.category,
+                      })
+                    }
+                    className="inline-flex h-9 items-center rounded-lg bg-neutral-950 px-3.5 text-xs font-semibold text-white hover:bg-neutral-800 transition"
+                  >
+                    👁 Preview Document
+                  </button>
+                  <a
+                    href={current.url}
+                    download={current.name}
+                    className="inline-flex h-9 items-center rounded-lg border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition"
+                  >
+                    Download
+                  </a>
+                </div>
               ) : (
                 <p className="mt-3 text-xs text-neutral-500">No file download available for this entry.</p>
               )}
@@ -106,6 +129,7 @@ export default function DocumentsPage() {
       <div className="mt-4">
         <AnnexDesk />
       </div>
+      <AttachmentPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
     </>
   );
 }

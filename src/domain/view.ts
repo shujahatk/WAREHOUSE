@@ -551,7 +551,7 @@ export const GENERAL_REQUEST_PRIORITY_LABELS: Record<GeneralRequestPriority, str
 };
 
 export const GENERAL_REQUEST_STATUS_LABELS: Record<GeneralRequestStatus, string> = {
-  submitted: "Submitted",
+  submitted: "Pending Admin Approval",
   under_review: "Under Review",
   approved: "Approved",
   declined: "Rejected",
@@ -571,6 +571,7 @@ export type GeneralRequestAttachmentView = {
 };
 
 export type GeneralRequestOperationalDetails = {
+  requestType: "loading" | "unloading";
   materialType: string;
   materialDescription: string;
   packagingType: string;
@@ -581,6 +582,12 @@ export type GeneralRequestOperationalDetails = {
   netWeightKg: number;
   warehouseLocation: string;
   notes?: string;
+  assignedPoSoNumber?: string | null;
+  assignedPoSoBy?: string | null;
+  assignedPoSoByName?: string | null;
+  assignedPoSoAt?: string | null;
+  inventoryMoved?: boolean;
+  inventoryMovementId?: string | null;
 };
 
 const OP_SPEC_PREFIX = "[OP_SPEC:";
@@ -592,11 +599,14 @@ export function serializeOperationalRequestDescription(
 ): string {
   const jsonMeta = JSON.stringify(details);
   const notesText = details.notes || customNotes || "";
+  const typeLabel = details.requestType === "loading" ? "Loading (Dispatch)" : "Unloading (Receipt)";
   const humanReadable = [
+    `Operation Type: ${typeLabel}`,
     `Material: ${details.materialType}${details.materialDescription ? ` - ${details.materialDescription}` : ""}`,
     `Packaging: ${details.packagingType} (${details.packageCount} units @ ${details.tarePerPackageKg} kg tare = ${details.totalTareWeightKg} kg tare)`,
     `Weights: Gross ${details.grossWeightKg.toLocaleString()} kg | Total Tare ${details.totalTareWeightKg.toLocaleString()} kg | Net Material ${details.netWeightKg.toLocaleString()} kg`,
     `Location: ${details.warehouseLocation}`,
+    details.assignedPoSoNumber ? `Assigned Reference: ${details.assignedPoSoNumber}` : "",
     notesText ? `Notes: ${notesText}` : "",
   ]
     .filter(Boolean)
@@ -613,7 +623,26 @@ export function parseOperationalRequestDescription(description: string): {
     if (endIdx !== -1) {
       const jsonStr = description.slice(OP_SPEC_PREFIX.length, endIdx);
       try {
-        const details = JSON.parse(jsonStr) as GeneralRequestOperationalDetails;
+        const parsed = JSON.parse(jsonStr) as Partial<GeneralRequestOperationalDetails>;
+        const details: GeneralRequestOperationalDetails = {
+          requestType: parsed.requestType === "loading" ? "loading" : "unloading",
+          materialType: parsed.materialType || "General Material",
+          materialDescription: parsed.materialDescription || "",
+          packagingType: parsed.packagingType || "Standard Packaging",
+          packageCount: Number(parsed.packageCount) || 1,
+          grossWeightKg: Number(parsed.grossWeightKg) || 0,
+          tarePerPackageKg: Number(parsed.tarePerPackageKg) || 0,
+          totalTareWeightKg: Number(parsed.totalTareWeightKg) || 0,
+          netWeightKg: Number(parsed.netWeightKg) || 0,
+          warehouseLocation: parsed.warehouseLocation || "Warehouse",
+          notes: parsed.notes,
+          assignedPoSoNumber: parsed.assignedPoSoNumber || null,
+          assignedPoSoBy: parsed.assignedPoSoBy || null,
+          assignedPoSoByName: parsed.assignedPoSoByName || null,
+          assignedPoSoAt: parsed.assignedPoSoAt || null,
+          inventoryMoved: Boolean(parsed.inventoryMoved),
+          inventoryMovementId: parsed.inventoryMovementId || null,
+        };
         const displayDescription = description.slice(endIdx + OP_SPEC_SUFFIX.length).trim();
         return { operationalDetails: details, displayDescription };
       } catch {}

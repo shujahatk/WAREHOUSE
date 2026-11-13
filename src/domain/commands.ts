@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword } from "./passwords.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { upsertCompany, upsertWarehouse } from "./seed.ts";
 import {
+  parseOperationalRequestDescription,
   serializeOperationalRequestDescription,
   type GeneralRequestOperationalDetails,
 } from "./view.ts";
@@ -455,6 +456,7 @@ export function createGeneralRequest(
       return fail("Gross weight must be greater than total tare weight (net weight must be positive).");
     }
     const validatedDetails: GeneralRequestOperationalDetails = {
+      requestType: (opDetails.requestType === "loading" ? "loading" : "unloading") as "loading" | "unloading",
       materialType: String(opDetails.materialType || "").trim() || "General Material",
       materialDescription: String(opDetails.materialDescription || "").trim(),
       packagingType: String(opDetails.packagingType || "").trim() || "Standard Packaging",
@@ -465,6 +467,11 @@ export function createGeneralRequest(
       netWeightKg: computedNet,
       warehouseLocation: String(opDetails.warehouseLocation || "").trim() || (warehouseOf(store, actor) ?? "Warehouse"),
       notes: typeof opDetails.notes === "string" ? opDetails.notes.trim() : undefined,
+      assignedPoSoNumber: null,
+      assignedPoSoBy: null,
+      assignedPoSoByName: null,
+      assignedPoSoAt: null,
+      inventoryMoved: false,
     };
     finalDescription = serializeOperationalRequestDescription(validatedDetails, description || undefined);
   }
@@ -642,6 +649,94 @@ export function decideGeneralRequest(
     if (oldStatus !== "approved") {
       return fail("Only approved requests can be completed.");
     }
+
+    // Stage 4: Operational completion and automated stock movement
+    const { operationalDetails } = parseOperationalRequestDescription(request.description);
+    if (operationalDetails && !operationalDetails.inventoryMoved && operationalDetails.netWeightKg > 0) {
+      if (!operationalDetails.assignedPoSoNumber) {
+        return fail("Staff must assign a PO or SO number before this operation can be completed.");
+      }
+
+      const whId = request.warehouseId || actor.warehouseId || (store.warehouses.length > 0 ? store.warehouses[0].id : randomUUID());
+      const targetMatType = operationalDetails.materialType.toLowerCase().trim();
+      let mat = store.materials.find(
+        (m) => m.materialNumber.toLowerCase() === targetMatType || m.description.toLowerCase().includes(targetMatType)
+      );
+      if (!mat && store.materials.length > 0) {
+        mat = store.materials[0];
+      }
+      const matId = mat?.id || randomUUID();
+      const isUnloading = operationalDetails.requestType === "unloading";
+      const direction: "in" | "out" = isUnloading ? "in" : "out";
+      const weightKg = operationalDetails.netWeightKg;
+
+      const balance = store.stockBalances.find((b) => b.materialId === matId && b.warehouseId === whId);
+      const current = balance?.weightKg ?? 0;
+
+      if (direction === "out" && current < weightKg) {
+        return fail(`Insufficient stock in warehouse for ${mat?.description || operationalDetails.materialType}. Available: ${current} kg, Required: ${weightKg} kg.`);
+      }
+
+      const next = roundKg(direction === "in" ? current + weightKg : current - weightKg);
+      if (balance) {
+        balance.weightKg = next;
+      } else {
+        store.stockBalances.push({
+          id: randomUUID(),
+          materialId: matId,
+          warehouseId: whId,
+          weightKg: next,
+        });
+      }
+
+      const movementId = randomUUID();
+      const movement: StockMovement = {
+        id: movementId,
+        materialId: matId,
+        warehouseId: whId,
+        weightKg,
+        direction,
+        requestId: request.id,
+        requestLineId: request.id,
+        createdAt: now,
+        createdBy: actor.id,
+      };
+      store.stockMovements.push(movement);
+
+      const wh = store.warehouses.find((w) => w.id === whId);
+      const pkg = store.packagingTypes.find((p) => p.name.toLowerCase() === operationalDetails.packagingType.toLowerCase());
+
+      if (!store.inventoryHistory) store.inventoryHistory = [];
+      store.inventoryHistory.push({
+        id: randomUUID(),
+        materialId: matId,
+        materialName: mat?.description ?? operationalDetails.materialType,
+        warehouseId: whId,
+        warehouseName: wh?.name ?? "Warehouse",
+        containerNumber: operationalDetails.warehouseLocation || null,
+        quantityBefore: current,
+        quantityChange: direction === "in" ? weightKg : -weightKg,
+        quantityAfter: next,
+        packagingTypeId: pkg?.id ?? null,
+        packagingTypeName: operationalDetails.packagingType,
+        packagingCount: operationalDetails.packageCount,
+        packagingUnitTareKg: operationalDetails.tarePerPackageKg,
+        totalPackagingWeightKg: operationalDetails.totalTareWeightKg,
+        grossWeightKg: operationalDetails.grossWeightKg,
+        operationType: direction === "in" ? "receipt" : "dispatch",
+        operationReason: isUnloading ? "Worker unloading request completed" : "Worker loading request completed",
+        reference: request.number,
+        poNumber: isUnloading ? operationalDetails.assignedPoSoNumber : null,
+        soNumber: !isUnloading ? operationalDetails.assignedPoSoNumber : null,
+        performedBy: actor.id,
+        performedByName: actor.name,
+        createdAt: now,
+      });
+
+      operationalDetails.inventoryMoved = true;
+      operationalDetails.inventoryMovementId = movementId;
+      request.description = serializeOperationalRequestDescription(operationalDetails, operationalDetails.notes);
+    }
   } else {
     return fail(`Invalid decision: ${decision}.`);
   }
@@ -663,6 +758,109 @@ export function decideGeneralRequest(
     `${request.number} is now ${decision}.`,
     now,
     oldStatus
+  );
+
+  return ok(request);
+}
+
+export function assignPoSoToGeneralRequest(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<WorkerGeneralRequest> {
+  if (actor.role !== "manager") {
+    return fail("Only Staff can assign PO/SO numbers to approved requests.");
+  }
+  const reqId = text(payload.requestId || payload.id);
+  const request = (store.workerGeneralRequests || []).find((r) => r.id === reqId);
+  if (!request) return fail("General request not found.");
+
+  if (request.status !== "approved") {
+    return fail("PO/SO references can only be assigned after Admin has approved the request.");
+  }
+
+  const rawPoSo = text(payload.poSoNumber || payload.number || payload.reference).toUpperCase();
+  if (!rawPoSo) {
+    return fail("A PO or SO reference number is required.");
+  }
+
+  // Strictly enforce only PO- or SO- prefix
+  const isPo = rawPoSo.startsWith("PO-");
+  const isSo = rawPoSo.startsWith("SO-");
+  if (!isPo && !isSo) {
+    return fail("Only PO (Purchase Order) and SO (Sales Order) references are permitted (e.g. PO-2026-0001 or SO-2026-0001).");
+  }
+
+  const { operationalDetails } = parseOperationalRequestDescription(request.description);
+  if (operationalDetails) {
+    // If requestType is loading (dispatch), require SO
+    if (operationalDetails.requestType === "loading" && !isSo) {
+      return fail("Loading (dispatch) operations require an SO (Sales Order) reference.");
+    }
+    // If requestType is unloading (receipt), require PO
+    if (operationalDetails.requestType === "unloading" && !isPo) {
+      return fail("Unloading (receipt) operations require a PO (Purchase Order) reference.");
+    }
+  }
+
+  // Prevent duplicate PO/SO reference conflict across existing active assigned requests
+  const conflict = (store.workerGeneralRequests || []).find(
+    (r) =>
+      r.id !== request.id &&
+      r.status !== "deleted" &&
+      r.status !== "declined" &&
+      parseOperationalRequestDescription(r.description).operationalDetails?.assignedPoSoNumber === rawPoSo
+  );
+  if (conflict) {
+    return fail(`Reference number ${rawPoSo} is already assigned to request ${conflict.number}.`);
+  }
+
+  const updatedDetails: GeneralRequestOperationalDetails = operationalDetails
+    ? {
+        ...operationalDetails,
+        assignedPoSoNumber: rawPoSo,
+        assignedPoSoBy: actor.id,
+        assignedPoSoByName: actor.name,
+        assignedPoSoAt: now,
+      }
+    : {
+        requestType: isPo ? "unloading" : "loading",
+        materialType: "General Material",
+        materialDescription: "",
+        packagingType: "Standard Packaging",
+        packageCount: 1,
+        grossWeightKg: 0,
+        tarePerPackageKg: 0,
+        totalTareWeightKg: 0,
+        netWeightKg: 0,
+        warehouseLocation: warehouseOf(store, actor) ?? "Warehouse",
+        assignedPoSoNumber: rawPoSo,
+        assignedPoSoBy: actor.id,
+        assignedPoSoByName: actor.name,
+        assignedPoSoAt: now,
+        inventoryMoved: false,
+      };
+
+  request.description = serializeOperationalRequestDescription(updatedDetails, updatedDetails.notes);
+
+  // Link to existing purchase order if matching PO exists
+  const existingPo = store.purchaseOrders.find((p) => p.number.toUpperCase() === rawPoSo);
+  if (existingPo) {
+    request.purchaseOrderId = existingPo.id;
+  }
+
+  request.updatedAt = now;
+
+  audit(
+    store,
+    actor.id,
+    "general-request-poso-assigned",
+    "general-request",
+    request.id,
+    `Assigned ${rawPoSo} to ${request.number}. Ready for warehouse execution.`,
+    now,
+    request.status
   );
 
   return ok(request);
@@ -2034,6 +2232,8 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
       return asCommand(createGeneralRequest(store, actor, record(body), now), "Your request was submitted.");
     case "decideGeneralRequest":
       return asCommand(decideGeneralRequest(store, actor, record(body), now), "Request updated.");
+    case "assignPoSoToGeneralRequest":
+      return asCommand(assignPoSoToGeneralRequest(store, actor, record(body), now), "PO/SO reference assigned.");
     case "deleteGeneralRequest":
       return asCommand(softDeleteGeneralRequest(store, actor, text(body.requestId || body.id), now), "Request was deleted.");
     case "createOffer":

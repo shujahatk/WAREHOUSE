@@ -7,6 +7,7 @@ import { useDemo } from "@/components/providers/workspace-provider";
 import { useSession } from "@/components/shell/auth-gate";
 import { canReadOrder, formatEuro, formatKg } from "@/domain/view";
 import { canPerform } from "@/lib/permissions";
+import { AttachmentPreviewModal, type PreviewAttachmentItem } from "@/components/files/attachment-preview-modal";
 
 export function PurchaseDetail({ number }: { number: string }) {
   const { state, approve, reject, editPurchase, notice } = useDemo();
@@ -19,6 +20,7 @@ export function PurchaseDetail({ number }: { number: string }) {
   const [material, setMaterial] = useState(order?.material ?? "");
   const [quantity, setQuantity] = useState(order ? String(order.quantityKg) : "");
   const [value, setValue] = useState(order ? String(order.valueEur) : "");
+  const [previewItem, setPreviewItem] = useState<PreviewAttachmentItem | null>(null);
   if (!order) {
     return (
       <>
@@ -120,12 +122,71 @@ export function PurchaseDetail({ number }: { number: string }) {
             <Field term="Notes" value={order.notes.trim() ? order.notes : "None"} />
           </dl>
         </Surface>
-        <Surface className="flex items-center justify-center p-4">
-          <div className="flex flex-col items-center gap-3">
-            <Link href="/documents" className="text-sm font-medium underline underline-offset-4">
-              View Documents
+        <Surface className="p-4">
+          <div className="flex items-center justify-between border-b border-neutral-200 pb-2 mb-3">
+            <h2 className="text-sm font-semibold">Attached Documents</h2>
+            <Link href="/documents" className="text-xs font-medium text-neutral-600 hover:text-neutral-900 underline underline-offset-4">
+              All Files &rarr;
             </Link>
           </div>
+          {(() => {
+            const orderAttachments = (state.attachments || []).filter(
+              (att) => att.po && att.po.toLowerCase() === order.number.toLowerCase()
+            );
+            if (orderAttachments.length === 0) {
+              return (
+                <div className="py-4 text-center">
+                  <p className="text-xs text-neutral-500">No documents or photos attached to this order yet.</p>
+                  <Link href="/documents" className="mt-2 inline-block text-xs font-medium text-neutral-900 underline underline-offset-4">
+                    Upload to Documents
+                  </Link>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-2">
+                {orderAttachments.map((att) => {
+                  const isImg = att.mime.startsWith("image/");
+                  const isPdf = att.mime === "application/pdf" || att.name.toLowerCase().endsWith(".pdf");
+                  return (
+                    <div
+                      key={att.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 transition"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-base shrink-0">{isImg ? "🖼️" : isPdf ? "📄" : "📎"}</span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-neutral-900 truncate">{att.readableName || att.name}</p>
+                          <p className="text-[10px] text-neutral-500 truncate">
+                            {att.role} &bull; {(att.size / 1024).toFixed(0)} KB
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewItem({
+                            id: att.id,
+                            name: att.readableName || att.name,
+                            mime: att.mime,
+                            byteSize: att.size,
+                            url: att.url,
+                            uploadedByName: att.uploadedByName || att.uploadedBy || "Unknown",
+                            uploadedAt: att.uploadedAt,
+                            category: att.role,
+                            warehouse: att.warehouse,
+                          })
+                        }
+                        className="shrink-0 rounded bg-white px-2.5 py-1 text-xs font-medium text-neutral-900 border border-neutral-300 hover:bg-neutral-50 shadow-2xs"
+                      >
+                        Preview
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </Surface>
         <Surface className="p-4">
           <h2 className="text-sm font-semibold">Supplier / Customer</h2>
@@ -142,6 +203,7 @@ export function PurchaseDetail({ number }: { number: string }) {
           </dl>
         </Surface>
       </div>
+      <AttachmentPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
     </>
   );
 }

@@ -205,7 +205,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       mime: item.mime,
       role: item.kind as "cmr" | "photo" | "annex7" | "customs_proof" | "other",
       size: item.byteSize,
-      url: sign(item.storageKey),
+      url: (item.storageKey ? sign(item.storageKey) : null) || `/api/files/${encodeURIComponent(item.id)}`,
       requestId: item.requestId ?? req?.id ?? null,
       requestNumber: item.requestNumber ?? req?.number ?? null,
       containerNumber: item.containerNumber ?? null,
@@ -232,7 +232,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
 
   const documents: DemoDocument[] = store.documents
     .filter((item) => item.kind !== "photo")
-    .map((item) => documentView(store, item, sign(item.storageKey)));
+    .map((item) => documentView(store, item, (item.storageKey ? sign(item.storageKey) : null) || `/api/files/${encodeURIComponent(item.id)}`));
 
   const conversations = conversationsFrom(store, userById);
 
@@ -410,7 +410,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
             name: doc?.readableName || doc?.name || "Document",
             mime: doc?.mime || "application/octet-stream",
             byteSize: doc?.byteSize || 0,
-            url: doc?.storageKey ? sign(doc.storageKey) : null,
+            url: (doc?.storageKey ? sign(doc.storageKey) : null) || `/api/files/${encodeURIComponent(att.documentId)}`,
             storageKey: doc?.storageKey || "",
           };
         });
@@ -421,11 +421,13 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       const decider = req.decidedBy ? userById.get(req.decidedBy) : null;
       const { operationalDetails } = parseOperationalRequestDescription(req.description);
 
+      const opTypeLabel = operationalDetails?.requestType === "loading" ? "Loading" : operationalDetails?.requestType === "unloading" ? "Unloading" : null;
+
       return {
         id: req.id,
         number: req.number,
         category: req.category,
-        categoryLabel: GENERAL_REQUEST_CATEGORY_LABELS[req.category] ?? req.category,
+        categoryLabel: opTypeLabel || (GENERAL_REQUEST_CATEGORY_LABELS[req.category] ?? req.category),
         priority: req.priority,
         priorityLabel: GENERAL_REQUEST_PRIORITY_LABELS[req.priority] ?? req.priority,
         description: req.description,
@@ -435,7 +437,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
         shipmentId: req.shipmentId,
         shipmentReference: shipment?.reference ?? null,
         purchaseOrderId: req.purchaseOrderId,
-        purchaseOrderNumber: order?.number ?? null,
+        purchaseOrderNumber: operationalDetails?.assignedPoSoNumber || order?.number || null,
         createdBy: req.createdBy,
         createdByName: creator?.name ?? "Worker",
         status: req.status,
@@ -468,7 +470,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
             kind: att.kind,
             mime: att.mime,
             byteSize: att.byteSize,
-            url: att.storageKey ? sign(att.storageKey) : att.url ?? null,
+            url: (att.storageKey ? sign(att.storageKey) : null) || att.url || `/api/files/${encodeURIComponent(att.id)}`,
             storageKey: att.storageKey,
             uploadedBy: att.uploadedBy,
             uploadedByName: uploader?.name ?? "User",

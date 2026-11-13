@@ -72,6 +72,7 @@ test("1. Image & file optimization parameters: 1920px max dimension, quality 0.7
 
 test("2. Structured Operational Request serialization, parsing, and weight auto-calculations", () => {
   const details: GeneralRequestOperationalDetails = {
+    requestType: "unloading",
     materialType: "LDPE",
     materialDescription: "LDPE 98/2 Transparent Film Bales",
     packagingType: "Normal Pallet",
@@ -229,12 +230,13 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     assert.equal(staffAuth.ok, true);
     if (!staffAuth.ok) return;
 
-    // 1. Worker submits operational request
+    // 1. Worker submits operational request (Unloading)
     const createRes = await store.run(workerAuth.value.sessionId, "createGeneralRequest", {
       category: "loading_unloading",
       priority: "high",
       description: "Truck arrival unloading request",
       operationalDetails: {
+        requestType: "unloading",
         materialType: "HDPE",
         materialDescription: "HDPE Regrind",
         packagingType: "Big Bag",
@@ -280,7 +282,40 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     const snap3 = await store.snapshot();
     assert.equal(snap3.workerGeneralRequests[0].status, "approved");
 
-    // 5. Worker completes the approved operation
+    // 5. Stage 3 & 4: Staff must assign PO number before Unloading request can be completed
+    // 5a. Worker tries to complete before PO assignment -> MUST BE BLOCKED
+    const workerEarlyComplete = await store.run(workerAuth.value.sessionId, "decideGeneralRequest", {
+      requestId: req.id,
+      decision: "completed",
+    });
+    assert.ok(workerEarlyComplete.error);
+    assert.match(workerEarlyComplete.error ?? "", /Staff must assign a PO or SO number/i);
+
+    // 5b. Worker attempts to assign PO number -> MUST BE BLOCKED (Staff only)
+    const workerAssign = await store.run(workerAuth.value.sessionId, "assignPoSoToGeneralRequest", {
+      requestId: req.id,
+      poSoNumber: "PO-2026-0001",
+    });
+    assert.ok(workerAssign.error);
+    assert.match(workerAssign.error ?? "", /Only Staff can assign/i);
+
+    // 5c. Staff assigns wrong prefix (SO to Unloading) -> MUST BE BLOCKED
+    const staffWrongPrefix = await store.run(staffAuth.value.sessionId, "assignPoSoToGeneralRequest", {
+      requestId: req.id,
+      poSoNumber: "SO-2026-0001",
+    });
+    assert.ok(staffWrongPrefix.error);
+    assert.match(staffWrongPrefix.error ?? "", /Unloading.*require a PO/i);
+
+    // 5d. Staff assigns valid PO number -> SUCCEEDS
+    const staffValidAssign = await store.run(staffAuth.value.sessionId, "assignPoSoToGeneralRequest", {
+      requestId: req.id,
+      poSoNumber: "PO-2026-0001",
+    });
+    assert.equal(staffValidAssign.error, undefined);
+    assert.match(staffValidAssign.notice ?? "", /PO\/SO reference assigned/i);
+
+    // 5e. Worker completes the approved & assigned Unloading operation
     const workerComplete = await store.run(workerAuth.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "completed",
@@ -289,9 +324,124 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     assert.equal(workerComplete.error, undefined);
 
     const snap4 = await store.snapshot();
-    assert.equal(snap4.workerGeneralRequests[0].status, "completed");
+    const completedReq = snap4.workerGeneralRequests.find((r) => r.id === req.id);
+    assert.ok(completedReq);
+    assert.equal(completedReq.status, "completed");
 
-    // 6. Non-owner / authenticated user DELETE on purchase orders is strictly blocked
+    // Verify inventory increase from Unloading (10,020 - 20 = 10,000 kg HDPE added to Bornem)
+    const bornemHdpeBalance = snap4.stockBalances.find(
+      (b) => b.materialId === "HDPE" || snap4.materials.find((m) => m.id === b.materialId)?.materialNumber === "HDPE"
+    );
+    assert.ok(bornemHdpeBalance);
+    assert.equal(bornemHdpeBalance.weightKg, 10000);
+
+    // Verify append-only inventoryHistory contains the PO reference
+    const historyEntry = snap4.inventoryHistory.find((h) => h.poNumber === "PO-2026-0001");
+    assert.ok(historyEntry);
+    assert.equal(historyEntry.quantityChange, 10000);
+    assert.equal(historyEntry.operationType, "receipt");
+
+    // 6. Test Stage 1-4 for Loading (Outbound Dispatch) and Insufficient Stock Prevention
+    // 6a. Worker submits Loading request for 2,000 kg HDPE
+    const loadReqRes = await store.run(workerAuth.value.sessionId, "createGeneralRequest", {
+      category: "loading_unloading",
+      priority: "urgent",
+      description: "Dispatch HDPE regrind to client",
+      operationalDetails: {
+        requestType: "loading",
+        materialType: "HDPE",
+        packagingType: "Normal Pallet",
+        packageCount: 2,
+        grossWeightKg: 2050,
+        tarePerPackageKg: 25,
+        warehouseLocation: "Bornem - Bay 2",
+      },
+    });
+    assert.equal(loadReqRes.error, undefined);
+    const snap5 = await store.snapshot();
+    const loadReq = snap5.workerGeneralRequests.find((r) => r.id !== req.id);
+    assert.ok(loadReq);
+
+    // Admin approves loading request
+    await store.run(adminAuth.value.sessionId, "decideGeneralRequest", {
+      requestId: loadReq.id,
+      decision: "approved",
+      responseNote: "Loading approved for collection",
+    });
+
+    // Staff assigns PO to Loading -> BLOCKED (Loading requires SO-)
+    const loadWrongPrefix = await store.run(staffAuth.value.sessionId, "assignPoSoToGeneralRequest", {
+      requestId: loadReq.id,
+      poSoNumber: "PO-2026-0002",
+    });
+    assert.ok(loadWrongPrefix.error);
+    assert.match(loadWrongPrefix.error ?? "", /Loading.*require an SO/i);
+
+    // Staff assigns valid SO number -> SUCCEEDS
+    const loadValidAssign = await store.run(staffAuth.value.sessionId, "assignPoSoToGeneralRequest", {
+      requestId: loadReq.id,
+      poSoNumber: "SO-2026-0001",
+    });
+    assert.equal(loadValidAssign.error, undefined);
+
+    // Worker completes loading -> Stock deducted from 10,000 to 8,000 kg
+    const loadComplete = await store.run(workerAuth.value.sessionId, "decideGeneralRequest", {
+      requestId: loadReq.id,
+      decision: "completed",
+    });
+    assert.equal(loadComplete.error, undefined);
+
+    const snap6 = await store.snapshot();
+    const updatedBalance = snap6.stockBalances.find((b) => b.id === bornemHdpeBalance.id);
+    assert.ok(updatedBalance);
+    assert.equal(updatedBalance.weightKg, 8000);
+
+    const soHistory = snap6.inventoryHistory.find((h) => h.soNumber === "SO-2026-0001");
+    assert.ok(soHistory);
+    assert.equal(soHistory.quantityChange, -2000);
+    assert.equal(soHistory.operationType, "dispatch");
+
+    // 6b. Insufficient stock prevention: submit Loading for 50,000 kg (only 8,000 available)
+    const excessLoadRes = await store.run(workerAuth.value.sessionId, "createGeneralRequest", {
+      category: "loading_unloading",
+      priority: "normal",
+      description: "Excess dispatch request",
+      operationalDetails: {
+        requestType: "loading",
+        materialType: "HDPE",
+        packagingType: "Normal Pallet",
+        packageCount: 10,
+        grossWeightKg: 50250,
+        tarePerPackageKg: 25,
+      },
+    });
+    assert.equal(excessLoadRes.error, undefined);
+    const snap7 = await store.snapshot();
+    const excessReq = snap7.workerGeneralRequests.find((r) => r.id !== req.id && r.id !== loadReq.id);
+    assert.ok(excessReq);
+
+    await store.run(adminAuth.value.sessionId, "decideGeneralRequest", {
+      requestId: excessReq.id,
+      decision: "approved",
+    });
+    await store.run(staffAuth.value.sessionId, "assignPoSoToGeneralRequest", {
+      requestId: excessReq.id,
+      poSoNumber: "SO-2026-0002",
+    });
+
+    const excessComplete = await store.run(workerAuth.value.sessionId, "decideGeneralRequest", {
+      requestId: excessReq.id,
+      decision: "completed",
+    });
+    assert.ok(excessComplete.error);
+    assert.match(excessComplete.error ?? "", /Insufficient stock/i);
+
+    // Stock remains unchanged at 8000 kg
+    const snap8 = await store.snapshot();
+    const finalBalance = snap8.stockBalances.find((b) => b.id === bornemHdpeBalance.id);
+    assert.equal(finalBalance?.weightKg, 8000);
+
+    // 7. Non-owner / authenticated user DELETE on purchase orders is strictly blocked
     assert.equal(can(workerAuth.value.profile, "order:delete"), false);
     assert.equal(can(staffAuth.value.profile, "order:delete"), false);
     assert.equal(can(adminAuth.value.profile, "order:delete"), false);

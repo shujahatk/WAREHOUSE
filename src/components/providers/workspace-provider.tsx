@@ -91,6 +91,11 @@ export type WorkspaceApi = {
     reason?: string;
     note?: string;
   }) => Text;
+  assignPoSoToGeneralRequest: (draft: {
+    requestId: string;
+    poSoNumber: string;
+    notes?: string;
+  }) => Text;
   deleteGeneralRequest: (requestId: string) => Text;
   createOffer: (draft: Record<string, unknown>) => Text;
   editOffer: (draft: Record<string, unknown>) => Text;
@@ -213,7 +218,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       } catch {}
     };
 
-    const interval = setInterval(checkSync, 4000);
+    const interval = setInterval(checkSync, 10000);
     const onFocus = () => {
       void checkSync();
     };
@@ -319,6 +324,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       createRequest: (direction, shipment) => run("createRequest", { direction, shipment }),
       createGeneralRequest: (draft) => run("createGeneralRequest", draft),
       decideGeneralRequest: (draft) => run("decideGeneralRequest", draft),
+      assignPoSoToGeneralRequest: (draft) => run("assignPoSoToGeneralRequest", draft),
       deleteGeneralRequest: (requestId) => run("deleteGeneralRequest", { requestId }),
       createOffer: (draft) => run("createOffer", draft),
       editOffer: (draft) => run("editOffer", draft),

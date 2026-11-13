@@ -44,7 +44,7 @@ import {
   type OfferActivity,
   type NotificationRecord,
 } from "../../domain/schemas.ts";
-import { emptyWorkspace, serializeOperationalRequestDescription, type Actor, type GeneralRequestOperationalDetails, type WorkspaceState } from "../../domain/view.ts";
+import { emptyWorkspace, parseOperationalRequestDescription, serializeOperationalRequestDescription, type Actor, type GeneralRequestOperationalDetails, type WorkspaceState } from "../../domain/view.ts";
 import { isActiveRole } from "../permissions.ts";
 import { MAX_FILE_SIZE_BYTES, detectFileType } from "../security/file-validation.ts";
 import { createSupabaseRestClient, type FetchLike, type SupabaseRestClient } from "../supabase/client.ts";
@@ -533,6 +533,7 @@ export class SupabaseAdapter {
   async snapshot(sessionId?: string | null): Promise<StoreData> {
     const token = this.resolveToken(sessionId);
     const store = emptyStore();
+    store.fileSecret = process.env.STOCKFLOW_FILE_SECRET || "rm-stockflow-files-secret-token-key-2026-32chars";
 
     const [
       warehousesRes,
@@ -765,18 +766,37 @@ export class SupabaseAdapter {
 
   async openFile(key: string, _exp: string, _sig: string, _nowMs: number, sessionId?: string | null) {
     const token = this.resolveToken(sessionId);
+    // 1. Search in documents (both by id and storage_key, non-deleted)
     const docsRes = await this.client.select<Record<string, unknown>>(
       "documents",
-      `select=*&or=(storage_key.eq.${encodeURIComponent(key)},id.eq.${encodeURIComponent(key)})&status=eq.active`,
+      `select=*&or=(storage_key.eq.${encodeURIComponent(key)},id.eq.${encodeURIComponent(key)})&status=neq.deleted`,
       token,
     );
     const docRow = docsRes.ok && docsRes.value.length > 0 ? mapDocument(docsRes.value[0]) : null;
-    const storagePath = docRow?.storageKey || key;
+    let storagePath = docRow?.storageKey || key;
+    let docName = docRow?.readableName || docRow?.name;
+    let docMime = docRow?.mime;
+
+    // 2. If not found in documents, search in offer_attachments
+    if (!docRow) {
+      const attRes = await this.client.select<Record<string, unknown>>(
+        "offer_attachments",
+        `select=*&or=(storage_key.eq.${encodeURIComponent(key)},id.eq.${encodeURIComponent(key)})`,
+        token,
+      );
+      if (attRes.ok && attRes.value.length > 0) {
+        const att = attRes.value[0];
+        storagePath = String(att.storage_key || key);
+        docName = String(att.name || key.split("/").pop() || "offer-attachment");
+        docMime = String(att.mime || "application/octet-stream");
+      }
+    }
+
     const downloadRes = await this.client.storage.download(storagePath, token);
     if (!downloadRes.ok) return null;
     return {
-      name: docRow?.readableName || docRow?.name || key.split("/").pop() || "document",
-      mime: docRow?.mime || downloadRes.value.mime,
+      name: docName || key.split("/").pop() || "document",
+      mime: docMime || downloadRes.value.mime,
       bytes: downloadRes.value.bytes,
     };
   }
@@ -1221,6 +1241,7 @@ export class SupabaseAdapter {
               break;
             }
             const validatedDetails: GeneralRequestOperationalDetails = {
+              requestType: (opDetails.requestType === "loading" ? "loading" : "unloading") as "loading" | "unloading",
               materialType: String(opDetails.materialType || "").trim() || "General Material",
               materialDescription: String(opDetails.materialDescription || "").trim(),
               packagingType: String(opDetails.packagingType || "").trim() || "Standard Packaging",
@@ -1231,6 +1252,11 @@ export class SupabaseAdapter {
               netWeightKg: computedNet,
               warehouseLocation: String(opDetails.warehouseLocation || "").trim() || "Warehouse",
               notes: typeof opDetails.notes === "string" ? opDetails.notes.trim() : undefined,
+              assignedPoSoNumber: null,
+              assignedPoSoBy: null,
+              assignedPoSoByName: null,
+              assignedPoSoAt: null,
+              inventoryMoved: false,
             };
             finalDescription = serializeOperationalRequestDescription(validatedDetails, finalDescription || undefined);
           }
@@ -1283,14 +1309,173 @@ export class SupabaseAdapter {
           break;
         }
         case "decideGeneralRequest": {
+          const reqId = text(body.requestId || body.id);
+          const decision = text(body.decision) as
+            | "under_review"
+            | "approved"
+            | "declined"
+            | "sent_back"
+            | "completed";
+
+          // If completing, verify operational requirements & move stock
+          if (decision === "completed") {
+            const reqRes = await this.client.select<Record<string, unknown>>(
+              "worker_general_requests",
+              `select=*&id=eq.${encodeURIComponent(reqId)}`,
+              token,
+            );
+            if (reqRes.ok && reqRes.value.length > 0) {
+              const reqRow = mapWorkerGeneralRequest(reqRes.value[0]);
+              const { operationalDetails } = parseOperationalRequestDescription(reqRow.description);
+              if (operationalDetails && !operationalDetails.inventoryMoved && operationalDetails.netWeightKg > 0) {
+                if (!operationalDetails.assignedPoSoNumber) {
+                  error = "Staff must assign a PO or SO number before this operation can be completed.";
+                  break;
+                }
+
+                const whId = reqRow.warehouseId || profile.warehouseId;
+                if (!whId) {
+                  error = "Warehouse ID is required for stock movement.";
+                  break;
+                }
+
+                // Look up material in DB
+                const matRes = await this.client.select<Record<string, unknown>>(
+                  "materials",
+                  "select=*&limit=10",
+                  token,
+                );
+                let matId: string | null = null;
+                let matName = operationalDetails.materialType;
+                if (matRes.ok && matRes.value.length > 0) {
+                  const targetMatType = operationalDetails.materialType.toLowerCase().trim();
+                  const found = matRes.value.find((m) =>
+                    String(m.material_number || "").toLowerCase() === targetMatType ||
+                    String(m.description || "").toLowerCase().includes(targetMatType)
+                  );
+                  if (found) {
+                    matId = String(found.id);
+                    matName = String(found.description || found.material_number);
+                  } else {
+                    matId = String(matRes.value[0].id);
+                    matName = String(matRes.value[0].description || matRes.value[0].material_number);
+                  }
+                }
+
+                if (!matId) {
+                  error = "No material records found in database.";
+                  break;
+                }
+
+                const isUnloading = operationalDetails.requestType === "unloading";
+                const direction: "in" | "out" = isUnloading ? "in" : "out";
+                const weightKg = operationalDetails.netWeightKg;
+
+                // Check existing balance
+                const balRes = await this.client.select<Record<string, unknown>>(
+                  "stock_balances",
+                  `select=*&material_id=eq.${encodeURIComponent(matId)}&warehouse_id=eq.${encodeURIComponent(whId)}`,
+                  token,
+                );
+                const currentBalance = balRes.ok && balRes.value.length > 0 ? Number(balRes.value[0].weight_kg) : 0;
+
+                if (direction === "out" && currentBalance < weightKg) {
+                  error = `Insufficient stock in warehouse for ${matName}. Available: ${currentBalance} kg, Required: ${weightKg} kg.`;
+                  break;
+                }
+
+                const nextBalance = Math.round((direction === "in" ? currentBalance + weightKg : currentBalance - weightKg) * 1000) / 1000;
+
+                // Update stock balance
+                if (balRes.ok && balRes.value.length > 0) {
+                  await this.client.update<Record<string, unknown>>(
+                    "stock_balances",
+                    `id=eq.${encodeURIComponent(String(balRes.value[0].id))}`,
+                    { weight_kg: nextBalance },
+                    token,
+                  );
+                } else {
+                  await this.client.insert<Record<string, unknown>>(
+                    "stock_balances",
+                    {
+                      material_id: matId,
+                      warehouse_id: whId,
+                      weight_kg: nextBalance,
+                    },
+                    token,
+                  );
+                }
+
+                // Insert stock movement
+                const movementRes = await this.client.insert<Record<string, unknown>>(
+                  "stock_movements",
+                  {
+                    material_id: matId,
+                    warehouse_id: whId,
+                    weight_kg: weightKg,
+                    direction,
+                    request_id: null,
+                    request_line_id: null,
+                    created_by: profile.id,
+                  },
+                  token,
+                );
+
+                // Insert inventory history
+                const whRes = await this.client.select<Record<string, unknown>>(
+                  "warehouses",
+                  `select=name&id=eq.${encodeURIComponent(whId)}`,
+                  token,
+                );
+                const whName = whRes.ok && whRes.value[0] ? String(whRes.value[0].name) : "Warehouse";
+
+                await this.client.insert<Record<string, unknown>>(
+                  "inventory_history",
+                  {
+                    material_id: matId,
+                    material_name: matName,
+                    warehouse_id: whId,
+                    warehouse_name: whName,
+                    container_number: operationalDetails.warehouseLocation || null,
+                    quantity_before: currentBalance,
+                    quantity_change: direction === "in" ? weightKg : -weightKg,
+                    quantity_after: nextBalance,
+                    packaging_type_id: null,
+                    packaging_type_name: operationalDetails.packagingType,
+                    packaging_count: operationalDetails.packageCount,
+                    packaging_unit_tare_kg: operationalDetails.tarePerPackageKg,
+                    total_packaging_weight_kg: operationalDetails.totalTareWeightKg,
+                    gross_weight_kg: operationalDetails.grossWeightKg,
+                    operation_type: direction === "in" ? "receipt" : "dispatch",
+                    operation_reason: isUnloading ? "Worker unloading request completed" : "Worker loading request completed",
+                    reference: reqRow.number,
+                    po_number: isUnloading ? operationalDetails.assignedPoSoNumber : null,
+                    so_number: !isUnloading ? operationalDetails.assignedPoSoNumber : null,
+                    performed_by: profile.id,
+                    performed_by_name: profile.name,
+                  },
+                  token,
+                );
+
+                // Mark inventoryMoved in description
+                operationalDetails.inventoryMoved = true;
+                if (movementRes.ok && movementRes.value) {
+                  operationalDetails.inventoryMovementId = String(movementRes.value.id || "");
+                }
+                const updatedDesc = serializeOperationalRequestDescription(operationalDetails, operationalDetails.notes);
+                await this.client.update<Record<string, unknown>>(
+                  "worker_general_requests",
+                  `id=eq.${encodeURIComponent(reqId)}`,
+                  { description: updatedDesc },
+                  token,
+                );
+              }
+            }
+          }
+
           const res = await svc.generalRequests.decide({
-            requestId: text(body.requestId || body.id),
-            decision: text(body.decision) as
-              | "under_review"
-              | "approved"
-              | "declined"
-              | "sent_back"
-              | "completed",
+            requestId: reqId,
+            decision,
             responseNote: text(body.reason || body.note || body.responseNote) || undefined,
             actorId: profile.id,
           });
@@ -1308,6 +1493,126 @@ export class SupabaseAdapter {
                   p_target_id: res.value.id,
                   p_link: "/tasks",
                   p_warehouse_id: res.value.warehouseId || null,
+                }, token);
+              }
+            } catch {}
+          }
+          break;
+        }
+        case "assignPoSoToGeneralRequest": {
+          if (profile.role !== "manager") {
+            error = "Only Staff can assign PO/SO numbers to approved requests.";
+            break;
+          }
+          const reqId = text(body.requestId || body.id);
+          const reqRes = await this.client.select<Record<string, unknown>>(
+            "worker_general_requests",
+            `select=*&id=eq.${encodeURIComponent(reqId)}`,
+            token,
+          );
+          if (!reqRes.ok || reqRes.value.length === 0) {
+            error = "General request not found.";
+            break;
+          }
+          const currentReq = mapWorkerGeneralRequest(reqRes.value[0]);
+          if (currentReq.status !== "approved") {
+            error = "PO/SO references can only be assigned after Admin has approved the request.";
+            break;
+          }
+
+          const rawPoSo = text(body.poSoNumber || body.number || body.reference).toUpperCase();
+          if (!rawPoSo) {
+            error = "A PO or SO reference number is required.";
+            break;
+          }
+          const isPo = rawPoSo.startsWith("PO-");
+          const isSo = rawPoSo.startsWith("SO-");
+          if (!isPo && !isSo) {
+            error = "Only PO (Purchase Order) and SO (Sales Order) references are permitted (e.g. PO-2026-0001 or SO-2026-0001).";
+            break;
+          }
+
+          const { operationalDetails } = parseOperationalRequestDescription(currentReq.description);
+          if (operationalDetails) {
+            if (operationalDetails.requestType === "loading" && !isSo) {
+              error = "Loading (dispatch) operations require an SO (Sales Order) reference.";
+              break;
+            }
+            if (operationalDetails.requestType === "unloading" && !isPo) {
+              error = "Unloading (receipt) operations require a PO (Purchase Order) reference.";
+              break;
+            }
+          }
+
+          const updatedDetails: GeneralRequestOperationalDetails = operationalDetails
+            ? {
+                ...operationalDetails,
+                assignedPoSoNumber: rawPoSo,
+                assignedPoSoBy: profile.id,
+                assignedPoSoByName: profile.name,
+                assignedPoSoAt: this.now(),
+              }
+            : {
+                requestType: isPo ? "unloading" : "loading",
+                materialType: "General Material",
+                materialDescription: "",
+                packagingType: "Standard Packaging",
+                packageCount: 1,
+                grossWeightKg: 0,
+                tarePerPackageKg: 0,
+                totalTareWeightKg: 0,
+                netWeightKg: 0,
+                warehouseLocation: "Warehouse",
+                assignedPoSoNumber: rawPoSo,
+                assignedPoSoBy: profile.id,
+                assignedPoSoByName: profile.name,
+                assignedPoSoAt: this.now(),
+                inventoryMoved: false,
+              };
+
+          const newDesc = serializeOperationalRequestDescription(updatedDetails, updatedDetails.notes);
+
+          let matchedPoUuid: string | null = null;
+          if (isPo) {
+            const poMatch = await this.client.select<Record<string, unknown>>(
+              "purchase_orders",
+              `select=id&number=ilike.${encodeURIComponent(rawPoSo)}`,
+              token,
+            );
+            if (poMatch.ok && poMatch.value.length > 0) {
+              matchedPoUuid = String(poMatch.value[0].id);
+            }
+          }
+
+          const updatePayload: Record<string, unknown> = {
+            description: newDesc,
+            updated_at: this.now(),
+          };
+          if (matchedPoUuid) {
+            updatePayload.purchase_order_id = matchedPoUuid;
+          }
+
+          const upRes = await this.client.update<Record<string, unknown>>(
+            "worker_general_requests",
+            `id=eq.${encodeURIComponent(reqId)}`,
+            updatePayload,
+            token,
+          );
+          if (!upRes.ok) {
+            error = upRes.error;
+          } else {
+            notice = `Assigned ${rawPoSo} to ${currentReq.number}.`;
+            try {
+              if (currentReq.createdBy) {
+                await this.client.rpc("rpc_create_notification", {
+                  p_recipient_id: currentReq.createdBy,
+                  p_event_type: "worker_request_poso_assigned",
+                  p_title: `Reference Assigned: ${rawPoSo}`,
+                  p_message: `Staff has assigned ${rawPoSo} to your request ${currentReq.number}. Ready for execution.`,
+                  p_target_type: "worker_general_request",
+                  p_target_id: currentReq.id,
+                  p_link: "/tasks",
+                  p_warehouse_id: currentReq.warehouseId || null,
                 }, token);
               }
             } catch {}

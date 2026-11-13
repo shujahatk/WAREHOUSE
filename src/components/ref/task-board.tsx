@@ -6,7 +6,8 @@ import { useIsMounted } from "@/lib/use-mounted";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { PageTitle, StatusPill, Surface } from "@/components/ref/chrome";
 import { useSession } from "@/components/shell/auth-gate";
-import { compressImageIfNeeded, fileToBase64, formatFileSize } from "@/lib/client-image";
+import { compressImageIfNeeded, fileToBase64 } from "@/lib/client-image";
+import { AttachmentPreviewModal, type PreviewAttachmentItem } from "@/components/files/attachment-preview-modal";
 import {
   formatKg,
   openTasks,
@@ -15,18 +16,8 @@ import {
   type GeneralRequestCategory,
   type GeneralRequestPriority,
   type GeneralRequestView,
-  type GeneralRequestAttachmentView,
   type GeneralRequestOperationalDetails,
 } from "@/domain/view";
-
-const CATEGORY_OPTIONS: { id: GeneralRequestCategory; label: string; desc: string }[] = [
-  { id: "materials_packaging", label: "Materials / Packaging", desc: "Request extra pallets, wrap, straps, or report packaging defects" },
-  { id: "stock_issue", label: "Stock / Inventory Issue", desc: "Report damaged stock, discrepancies, or inventory storage issues" },
-  { id: "loading_unloading", label: "Loading / Unloading", desc: "Operations assistance, container issues, or bay bottlenecks" },
-  { id: "equipment_maintenance", label: "Equipment / Maintenance", desc: "Forklift, dock plate, scanner, or facility repairs needed" },
-  { id: "missing_documents", label: "Missing Documents / Information", desc: "Missing CMR, packing lists, delivery instructions, or seal numbers" },
-  { id: "other", label: "Other Operational Request", desc: "Any other urgent or routine warehouse operational request" },
-];
 
 const PRIORITY_OPTIONS: { id: GeneralRequestPriority; label: string; tone: string }[] = [
   { id: "normal", label: "Normal", tone: "bg-neutral-100 text-neutral-800" },
@@ -58,12 +49,12 @@ export function TaskBoard() {
   const isManager = identity.role === "manager";
   const isOwner = identity.role === "owner";
 
-  // 12-field structured operational request modal state
+  // Structured operational request modal state (Only Loading and Unloading)
   const [showCreateModal, setShowCreateModal] = useState(() => {
     return typeof window !== "undefined" && window.location.search.includes("new=true");
   });
   const [modalStep, setModalStep] = useState<"edit" | "review">("edit");
-  const [category, setCategory] = useState<GeneralRequestCategory>("materials_packaging");
+  const [requestType, setRequestType] = useState<"loading" | "unloading">("unloading");
   const [priority, setPriority] = useState<GeneralRequestPriority>("normal");
   const [materialType, setMaterialType] = useState("LDPE");
   const [materialDescription, setMaterialDescription] = useState("LDPE film");
@@ -71,7 +62,7 @@ export function TaskBoard() {
   const [packageCount, setPackageCount] = useState("1");
   const [tarePerPackageKg, setTarePerPackageKg] = useState("25");
   const [grossWeightKg, setGrossWeightKg] = useState("");
-  const [warehouseLocation, setWarehouseLocation] = useState(() => `${identity.warehouse || "Bornem"} - Loading Bay 1`);
+  const [warehouseLocation, setWarehouseLocation] = useState(() => `${identity.warehouse || "Bornem"} - Bay 1`);
   const [shipmentId, setShipmentId] = useState("");
   const [notes, setNotes] = useState("");
   const [stagedFiles, setStagedFiles] = useState<{
@@ -179,6 +170,7 @@ export function TaskBoard() {
     setCreateError(null);
 
     const opDetails: GeneralRequestOperationalDetails = {
+      requestType,
       materialType: materialType.trim(),
       materialDescription: materialDescription.trim() || materialType.trim(),
       packagingType: packagingType.trim(),
@@ -189,6 +181,11 @@ export function TaskBoard() {
       netWeightKg,
       warehouseLocation: warehouseLocation.trim() || (identity.warehouse ?? "Warehouse"),
       notes: notes.trim() || undefined,
+      assignedPoSoNumber: null,
+      assignedPoSoBy: null,
+      assignedPoSoByName: null,
+      assignedPoSoAt: null,
+      inventoryMoved: false,
     };
 
     const serialized = serializeOperationalRequestDescription(opDetails, notes.trim() || undefined);
@@ -199,7 +196,7 @@ export function TaskBoard() {
     }));
 
     const err = await demo.createGeneralRequest({
-      category,
+      category: "loading_unloading" as GeneralRequestCategory,
       priority,
       description: serialized,
       shipmentId: shipmentId || null,
@@ -220,25 +217,31 @@ export function TaskBoard() {
     }
   };
 
-  // Decision & Action dialog state
+  // Decision Modal State
   const [actionTarget, setActionTarget] = useState<{
     request: GeneralRequestView;
-    decision: "approved" | "declined" | "under_review" | "sent_back" | "completed" | "delete";
+    decision: "under_review" | "approved" | "declined" | "sent_back" | "completed" | "delete";
   } | null>(null);
   const [actionNote, setActionNote] = useState("");
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Staff PO/SO Assignment Modal State (Stage 3)
+  const [assignTarget, setAssignTarget] = useState<GeneralRequestView | null>(null);
+  const [assignPoSoNumber, setAssignPoSoNumber] = useState<string>("");
+  const [assignSubmitting, setAssignSubmitting] = useState<boolean>(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
   // Preview attachment state
-  const [previewAttachment, setPreviewAttachment] = useState<GeneralRequestAttachmentView | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<PreviewAttachmentItem | null>(null);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [warehouseFilter, setWarehouseFilter] = useState<string>("all");
   const [showShipmentSection, setShowShipmentSection] = useState(false);
 
-  // Filter general requests according to strict role permissions:
+  // Filter requests according to strict role permissions:
   // Workers ONLY see and track their own requests
   const visibleGeneral = useMemo(() => {
     let list = demo.state.generalRequests || [];
@@ -248,14 +251,23 @@ export function TaskBoard() {
     if (statusFilter !== "all") {
       list = list.filter((r) => r.status === statusFilter);
     }
-    if (categoryFilter !== "all") {
-      list = list.filter((r) => r.category === categoryFilter);
+    if (typeFilter !== "all") {
+      list = list.filter((r) => {
+        const details = r.operationalDetails || parseOperationalRequestDescription(r.description).operationalDetails;
+        if (typeFilter === "loading") {
+          return details?.requestType === "loading";
+        }
+        if (typeFilter === "unloading") {
+          return details?.requestType === "unloading" || r.category === "loading_unloading";
+        }
+        return true;
+      });
     }
     if (warehouseFilter !== "all" && !isWorker) {
       list = list.filter((r) => r.warehouse.toLowerCase() === warehouseFilter.toLowerCase());
     }
     return list;
-  }, [demo.state.generalRequests, isWorker, identity.name, statusFilter, categoryFilter, warehouseFilter]);
+  }, [demo.state.generalRequests, isWorker, identity.name, statusFilter, typeFilter, warehouseFilter]);
 
   // Loading/Unloading shipment requests
   const tasks = openTasks(demo.state, identity);
@@ -321,6 +333,49 @@ export function TaskBoard() {
     }
   };
 
+  // Staff PO/SO Assignment Handler
+  const handleAssignPoSoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignTarget) return;
+
+    const trimmed = assignPoSoNumber.trim().toUpperCase();
+    if (!trimmed) {
+      setAssignError("Please enter a PO or SO reference number.");
+      return;
+    }
+    if (!trimmed.startsWith("PO-") && !trimmed.startsWith("SO-")) {
+      setAssignError("Only PO (Purchase Order) and SO (Sales Order) references are permitted (e.g. PO-2026-0001 or SO-2026-0001).");
+      return;
+    }
+
+    const { operationalDetails } = parseOperationalRequestDescription(assignTarget.description);
+    if (operationalDetails?.requestType === "loading" && !trimmed.startsWith("SO-")) {
+      setAssignError("Loading (dispatch) operations require an SO (Sales Order) reference.");
+      return;
+    }
+    if (operationalDetails?.requestType === "unloading" && !trimmed.startsWith("PO-")) {
+      setAssignError("Unloading (receipt) operations require a PO (Purchase Order) reference.");
+      return;
+    }
+
+    setAssignSubmitting(true);
+    setAssignError(null);
+
+    const err = await demo.assignPoSoToGeneralRequest({
+      requestId: assignTarget.id,
+      poSoNumber: trimmed,
+    });
+
+    if (err) {
+      setAssignError(err);
+      setAssignSubmitting(false);
+    } else {
+      setAssignTarget(null);
+      setAssignPoSoNumber("");
+      setAssignSubmitting(false);
+    }
+  };
+
   if (!mounted || !demo.ready) {
     return (
       <div className="space-y-4">
@@ -336,10 +391,10 @@ export function TaskBoard() {
   const pageTitle = isWorker ? "My Requests" : "All Requests";
 
   const pageSubtitle = isWorker
-    ? `${identity.warehouse ?? "Assigned warehouse"} · Submit operational requests, attach documents/photos, and track status`
+    ? `${identity.warehouse ?? "Assigned warehouse"} · Submit Loading and Unloading requests with weights, photos, and documents`
     : isOwner
-      ? "Admin view · Review attachments and audit history, approve or reject worker requests across all warehouses (operational records are read-only)"
-      : "Staff view · Review operational requests, request information, and process approved work across warehouses";
+      ? "Admin view · Review attachments and audit history, approve or reject worker requests across warehouses (operational records are read-only)"
+      : "Staff view · Assign PO/SO numbers to approved requests and process operational completions";
 
   return (
     <>
@@ -349,13 +404,16 @@ export function TaskBoard() {
           <div>
             <button
               type="button"
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-neutral-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 transition"
+              onClick={() => {
+                setShowCreateModal(true);
+                setModalStep("edit");
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-neutral-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 transition min-h-[44px]"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-              + Add New Request
+              + New Loading / Unloading Request
             </button>
           </div>
         ) : null}
@@ -370,7 +428,7 @@ export function TaskBoard() {
               <span className="font-medium text-neutral-500 mr-1">Status:</span>
               {[
                 { id: "all", label: "All Requests" },
-                { id: "submitted", label: "Submitted" },
+                { id: "submitted", label: "Pending Approval" },
                 { id: "under_review", label: "Under Review" },
                 { id: "approved", label: "Approved" },
                 { id: "sent_back", label: "Info Requested" },
@@ -381,7 +439,7 @@ export function TaskBoard() {
                   key={tab.id}
                   type="button"
                   onClick={() => setStatusFilter(tab.id)}
-                  className={`rounded-md px-2.5 py-1 font-medium transition ${
+                  className={`rounded-md px-2.5 py-1 font-medium transition min-h-[36px] sm:min-h-0 ${
                     statusFilter === tab.id
                       ? "bg-neutral-950 text-white shadow-xs"
                       : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
@@ -393,19 +451,16 @@ export function TaskBoard() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Category Filter */}
+              {/* Request Type Filter */}
               <select
-                aria-label="Filter requests by category"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs text-neutral-800 focus:border-neutral-950 focus:outline-hidden"
+                aria-label="Filter requests by operation type"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs text-neutral-800 focus:border-neutral-950 focus:outline-hidden min-h-[36px] sm:min-h-0"
               >
-                <option value="all">All Categories</option>
-                {CATEGORY_OPTIONS.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.label}
-                  </option>
-                ))}
+                <option value="all">All Operations</option>
+                <option value="unloading">📥 Unloading (Receipt)</option>
+                <option value="loading">📤 Loading (Dispatch)</option>
               </select>
 
               {/* Warehouse Filter (Office Only) */}
@@ -414,7 +469,7 @@ export function TaskBoard() {
                   aria-label="Filter requests by warehouse"
                   value={warehouseFilter}
                   onChange={(e) => setWarehouseFilter(e.target.value)}
-                  className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs text-neutral-800 focus:border-neutral-950 focus:outline-hidden"
+                  className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs text-neutral-800 focus:border-neutral-950 focus:outline-hidden min-h-[36px] sm:min-h-0"
                 >
                   <option value="all">All Warehouses</option>
                   {demo.state.directory.warehouses.map((wh) => (
@@ -428,38 +483,31 @@ export function TaskBoard() {
           </div>
         </Surface>
 
-        {/* Requests List */}
+        {/* Request List */}
         {visibleGeneral.length === 0 ? (
-          <Surface className="px-6 py-12 text-center">
-            <svg
-              className="mx-auto h-10 w-10 text-neutral-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <h3 className="mt-2 text-sm font-semibold text-neutral-900">
-              {isWorker ? "No requests submitted yet" : "No requests found matching criteria"}
-            </h3>
+          <Surface className="p-12 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 className="mt-3 text-sm font-semibold text-neutral-900">No requests found</h3>
             <p className="mt-1 text-xs text-neutral-500 max-w-md mx-auto">
               {isWorker
-                ? "Submit requests for materials, equipment maintenance, stock issues, or missing operational documents."
+                ? "Submit a Loading or Unloading request to begin intake or dispatch operations."
                 : "Operational requests submitted by workers across warehouses will appear here."}
             </p>
             {isWorker ? (
               <div className="mt-4">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-950 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800"
+                  onClick={() => {
+                    setShowCreateModal(true);
+                    setModalStep("edit");
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-950 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 min-h-[44px]"
                 >
-                  + Add New Request
+                  + New Request
                 </button>
               </div>
             ) : null}
@@ -468,6 +516,9 @@ export function TaskBoard() {
           <div className="space-y-3">
             {visibleGeneral.map((req) => {
               const priorityInfo = PRIORITY_OPTIONS.find((p) => p.id === req.priority);
+              const opParsed = req.operationalDetails || parseOperationalRequestDescription(req.description).operationalDetails;
+              const isUnloading = opParsed?.requestType === "unloading" || req.category === "loading_unloading";
+
               return (
                 <Surface key={req.id} className="p-4 transition hover:border-neutral-300">
                   <div className="flex flex-col gap-3">
@@ -475,8 +526,12 @@ export function TaskBoard() {
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 pb-2.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-sm font-bold text-neutral-950">{req.number}</span>
-                        <span className="rounded-md bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700">
-                          {req.categoryLabel}
+                        <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold ${
+                          opParsed?.requestType === "loading"
+                            ? "bg-blue-50 text-blue-800 border border-blue-200"
+                            : "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                        }`}>
+                          {opParsed?.requestType === "loading" ? "📤 Loading" : "📥 Unloading"}
                         </span>
                         {priorityInfo && priorityInfo.id !== "normal" ? (
                           <span className={`rounded-md px-2 py-0.5 text-xs ${priorityInfo.tone}`}>
@@ -484,7 +539,7 @@ export function TaskBoard() {
                           </span>
                         ) : null}
                         <span className="text-xs text-neutral-500">·</span>
-                        <span className="text-xs font-medium text-neutral-700">{req.warehouse}</span>
+                        <span className="text-xs font-medium text-neutral-700">📍 {req.warehouse}</span>
                         {!isWorker ? (
                           <span className="text-xs text-neutral-500">by {req.createdByName}</span>
                         ) : null}
@@ -495,57 +550,64 @@ export function TaskBoard() {
                       </div>
                     </div>
 
-                    {/* Description Body & Operational Breakdown */}
-                    {(() => {
-                      const opParsed = req.operationalDetails || parseOperationalRequestDescription(req.description).operationalDetails;
-                      const displayDesc = opParsed
-                        ? parseOperationalRequestDescription(req.description).displayDescription
-                        : req.description;
-
-                      if (opParsed) {
-                        return (
-                          <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3.5 text-xs space-y-2.5">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                              <div>
-                                <span className="text-[10px] uppercase font-bold text-neutral-500">Material Type & Specs</span>
-                                <p className="font-bold text-neutral-950 mt-0.5">{opParsed.materialType}</p>
-                                {opParsed.materialDescription ? (
-                                  <p className="text-[11px] text-neutral-600 truncate">{opParsed.materialDescription}</p>
+                    {/* Operational Details Breakdown Card */}
+                    {opParsed ? (
+                      <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3.5 text-xs space-y-2.5">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-neutral-500">Operation & Ref</span>
+                            <p className="font-bold text-neutral-950 mt-0.5">
+                              {opParsed.requestType === "loading" ? "Loading (Dispatch)" : "Unloading (Receipt)"}
+                            </p>
+                            {opParsed.assignedPoSoNumber ? (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 rounded bg-neutral-950 text-white font-mono text-[10px] px-1.5 py-0.5 font-bold">
+                                  {opParsed.assignedPoSoNumber}
+                                </span>
+                                {opParsed.inventoryMoved ? (
+                                  <span className="text-[10px] text-emerald-700 font-semibold">✓ Stock Updated</span>
                                 ) : null}
                               </div>
-                              <div>
-                                <span className="text-[10px] uppercase font-bold text-neutral-500">Packaging & Unit Tare</span>
-                                <p className="font-bold text-neutral-950 mt-0.5">{opParsed.packageCount} × {opParsed.packagingType}</p>
-                                <p className="text-[11px] text-neutral-600">Total Tare: {opParsed.totalTareWeightKg.toLocaleString()} kg</p>
-                              </div>
-                              <div>
-                                <span className="text-[10px] uppercase font-bold text-neutral-500">Weights (kg)</span>
-                                <p className="font-bold text-neutral-950 mt-0.5">Gross: {opParsed.grossWeightKg.toLocaleString()} kg</p>
-                                <p className="text-[11px] font-bold text-emerald-700">Net: {opParsed.netWeightKg.toLocaleString()} kg</p>
-                              </div>
-                              <div>
-                                <span className="text-[10px] uppercase font-bold text-neutral-500">Location</span>
-                                <p className="font-bold text-neutral-950 mt-0.5">{opParsed.warehouseLocation}</p>
-                              </div>
-                            </div>
-                            {opParsed.notes ? (
-                              <div className="border-t border-neutral-200/80 pt-2 text-neutral-700">
-                                <span className="font-semibold text-neutral-900">Notes: </span>
-                                {opParsed.notes}
-                              </div>
+                            ) : (
+                              <p className="text-[10px] text-amber-700 italic mt-0.5">
+                                Awaiting Staff PO/SO
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-neutral-500">Material & Packaging</span>
+                            <p className="font-bold text-neutral-950 mt-0.5">{opParsed.materialType}</p>
+                            <p className="text-[11px] text-neutral-600">
+                              {opParsed.packageCount} × {opParsed.packagingType} ({opParsed.totalTareWeightKg} kg tare)
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-neutral-500">Weights (kg)</span>
+                            <p className="font-bold text-neutral-950 mt-0.5">Gross: {opParsed.grossWeightKg.toLocaleString()} kg</p>
+                            <p className="text-[11px] font-bold text-emerald-700">Net: {opParsed.netWeightKg.toLocaleString()} kg</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-neutral-500">Location</span>
+                            <p className="font-bold text-neutral-950 mt-0.5">{opParsed.warehouseLocation}</p>
+                            {opParsed.materialDescription ? (
+                              <p className="text-[10px] text-neutral-500 truncate">{opParsed.materialDescription}</p>
                             ) : null}
                           </div>
-                        );
-                      }
-
-                      return (
-                        <div className="text-sm text-neutral-900 whitespace-pre-line leading-relaxed">
-                          {displayDesc}
                         </div>
-                      );
-                    })()}
+                        {opParsed.notes ? (
+                          <div className="border-t border-neutral-200/80 pt-2 text-neutral-700">
+                            <span className="font-semibold text-neutral-900">Notes: </span>
+                            {opParsed.notes}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-neutral-900 whitespace-pre-line leading-relaxed">
+                        {req.description}
+                      </div>
+                    )}
 
-                    {/* Linked Shipment/Order if any */}
+                    {/* Linked Shipment/Order */}
                     {req.shipmentReference || req.purchaseOrderNumber ? (
                       <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-600 bg-neutral-50 rounded-md px-3 py-1.5">
                         <span className="font-medium text-neutral-700">Linked:</span>
@@ -556,7 +618,7 @@ export function TaskBoard() {
                         ) : null}
                         {req.purchaseOrderNumber ? (
                           <span>
-                            PO: <strong className="text-neutral-900">{req.purchaseOrderNumber}</strong>
+                            Reference: <strong className="text-neutral-900">{req.purchaseOrderNumber}</strong>
                           </span>
                         ) : null}
                       </div>
@@ -578,8 +640,19 @@ export function TaskBoard() {
                               <button
                                 key={att.id}
                                 type="button"
-                                onClick={() => setPreviewAttachment(att)}
-                                className="group flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs text-neutral-800 transition hover:border-neutral-950 hover:bg-neutral-50"
+                                onClick={() =>
+                                  setPreviewAttachment({
+                                    id: att.documentId || att.id,
+                                    name: att.name,
+                                    mime: att.mime,
+                                    byteSize: att.byteSize,
+                                    url: att.url,
+                                    uploadedByName: req.createdByName,
+                                    uploadedAt: req.createdAt,
+                                    warehouse: req.warehouse,
+                                  })
+                                }
+                                className="group flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs text-neutral-800 transition hover:border-neutral-950 hover:bg-neutral-50 min-h-[36px]"
                               >
                                 {isImg ? (
                                   <svg className="h-4 w-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -616,9 +689,9 @@ export function TaskBoard() {
                           {req.status === "declined"
                             ? "Rejection Reason from Admin:"
                             : req.status === "sent_back"
-                              ? "Information Requested by Staff/Admin:"
+                              ? "Information Requested:"
                               : req.status === "approved"
-                                ? "Approval Feedback:"
+                                ? "Admin Approval Notes:"
                                 : "Decision Note:"}
                         </div>
                         <p className="whitespace-pre-line">{req.responseNote}</p>
@@ -641,19 +714,25 @@ export function TaskBoard() {
                         {isWorker ? (
                           <>
                             {req.status === "approved" ? (
-                              <button
-                                type="button"
-                                onClick={() => setActionTarget({ request: req, decision: "completed" })}
-                                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition"
-                              >
-                                ✓ Mark Completed
-                              </button>
+                              opParsed?.assignedPoSoNumber ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setActionTarget({ request: req, decision: "completed" })}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition min-h-[36px]"
+                                >
+                                  ✓ Complete Operation & Update Stock
+                                </button>
+                              ) : (
+                                <span className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">
+                                  Awaiting Staff PO/SO Assignment
+                                </span>
+                              )
                             ) : null}
                             {["submitted", "declined", "sent_back"].includes(req.status) ? (
                               <button
                                 type="button"
                                 onClick={() => setActionTarget({ request: req, decision: "delete" })}
-                                className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:border-rose-400 hover:text-rose-600 transition"
+                                className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:border-rose-400 hover:text-rose-600 transition min-h-[36px]"
                               >
                                 Delete Request
                               </button>
@@ -661,14 +740,14 @@ export function TaskBoard() {
                           </>
                         ) : null}
 
-                        {/* Staff Actions */}
+                        {/* Staff Actions (Stage 3) */}
                         {isManager ? (
                           <>
                             {req.status === "submitted" ? (
                               <button
                                 type="button"
                                 onClick={() => setActionTarget({ request: req, decision: "under_review" })}
-                                className="rounded-md border border-blue-400 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-900 hover:bg-blue-100 transition"
+                                className="rounded-md border border-blue-400 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-900 hover:bg-blue-100 transition min-h-[36px]"
                               >
                                 Mark Under Review
                               </button>
@@ -677,19 +756,34 @@ export function TaskBoard() {
                               <button
                                 type="button"
                                 onClick={() => setActionTarget({ request: req, decision: "sent_back" })}
-                                className="rounded-md border border-purple-300 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-900 hover:bg-purple-100 transition"
+                                className="rounded-md border border-purple-300 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-900 hover:bg-purple-100 transition min-h-[36px]"
                               >
                                 Request Information
                               </button>
                             ) : null}
                             {req.status === "approved" ? (
-                              <button
-                                type="button"
-                                onClick={() => setActionTarget({ request: req, decision: "completed" })}
-                                className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-800 transition"
-                              >
-                                Process & Complete
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAssignTarget(req);
+                                    setAssignPoSoNumber(opParsed?.assignedPoSoNumber || (isUnloading ? "PO-2026-" : "SO-2026-"));
+                                    setAssignError(null);
+                                  }}
+                                  className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 transition min-h-[36px]"
+                                >
+                                  {opParsed?.assignedPoSoNumber ? "Edit PO/SO Reference" : "+ Assign PO/SO Reference"}
+                                </button>
+                                {opParsed?.assignedPoSoNumber ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setActionTarget({ request: req, decision: "completed" })}
+                                    className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition min-h-[36px]"
+                                  >
+                                    Process & Complete
+                                  </button>
+                                ) : null}
+                              </>
                             ) : null}
                             {["submitted", "under_review"].includes(req.status) ? (
                               <span className="text-[11px] text-neutral-400 italic">
@@ -699,7 +793,7 @@ export function TaskBoard() {
                           </>
                         ) : null}
 
-                        {/* Admin Actions */}
+                        {/* Admin Actions (Stage 2) */}
                         {isOwner ? (
                           <>
                             {["submitted", "under_review"].includes(req.status) ? (
@@ -707,14 +801,14 @@ export function TaskBoard() {
                                 <button
                                   type="button"
                                   onClick={() => setActionTarget({ request: req, decision: "approved" })}
-                                  className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition"
+                                  className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition min-h-[36px]"
                                 >
                                   ✓ Approve
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setActionTarget({ request: req, decision: "declined" })}
-                                  className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 transition"
+                                  className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 transition min-h-[36px]"
                                 >
                                   ✕ Reject
                                 </button>
@@ -722,7 +816,7 @@ export function TaskBoard() {
                                   <button
                                     type="button"
                                     onClick={() => setActionTarget({ request: req, decision: "under_review" })}
-                                    className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 transition"
+                                    className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 transition min-h-[36px]"
                                   >
                                     Under Review
                                   </button>
@@ -730,20 +824,16 @@ export function TaskBoard() {
                                 <button
                                   type="button"
                                   onClick={() => setActionTarget({ request: req, decision: "sent_back" })}
-                                  className="rounded-md border border-purple-300 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-900 hover:bg-purple-100 transition"
+                                  className="rounded-md border border-purple-300 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-900 hover:bg-purple-100 transition min-h-[36px]"
                                 >
                                   Request Info
                                 </button>
                               </>
                             ) : null}
                             {req.status === "approved" ? (
-                              <button
-                                type="button"
-                                onClick={() => setActionTarget({ request: req, decision: "completed" })}
-                                className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-800 transition"
-                              >
-                                Mark Completed
-                              </button>
+                              <span className="text-xs text-neutral-500 italic">
+                                Approved · Awaiting Staff PO/SO processing
+                              </span>
                             ) : null}
                           </>
                         ) : null}
@@ -755,36 +845,23 @@ export function TaskBoard() {
             })}
           </div>
         )}
-      </div>
 
-      {/* Secondary Section: Shipment Loading & Unloading Operations */}
-      <div className="mt-8 pt-6 border-t border-neutral-200 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-neutral-950">Shipment Operations & Action Queue</h2>
-            <p className="text-xs text-neutral-500">
-              Container and truck loading/unloading operations linked directly to transport shipments.
-            </p>
-          </div>
+        {/* Shipment Requests Collapsible */}
+        <div className="pt-2">
           <button
             type="button"
-            onClick={() => setShowShipmentSection(!showShipmentSection)}
-            className="text-xs font-medium text-neutral-600 hover:text-neutral-950 underline underline-offset-4"
+            onClick={() => setShowShipmentSection((prev) => !prev)}
+            className="flex items-center gap-2 text-xs font-medium text-neutral-500 hover:text-neutral-900 transition"
           >
-            {showShipmentSection ? "Hide Operations" : "Show Operations"}
+            <span>{showShipmentSection ? "▼ Hide" : "▶ View"} Legacy Shipment Requests ({shipmentRequests.length})</span>
           </button>
         </div>
 
         {showShipmentSection ? (
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="space-y-3 lg:col-span-1">
-              <h3 className="text-sm font-semibold text-neutral-950">Action queue</h3>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-neutral-950">Active Action Cards</h3>
               <ul className="space-y-2">
-                {tasks.length === 0 ? (
-                  <li>
-                    <Surface className="px-4 py-6 text-sm text-neutral-600">No open action items.</Surface>
-                  </li>
-                ) : null}
                 {tasks.map((task) => (
                   <li key={task.title}>
                     <Link href={task.href}>
@@ -860,17 +937,17 @@ export function TaskBoard() {
       </div>
 
       {/* ========================================================================= */}
-      {/* Add New Request Modal (Worker) - 12 Structured Fields & Review Summary */}
+      {/* Add New Request Modal (Worker) - Exactly Loading or Unloading */}
       {/* ========================================================================= */}
       {showCreateModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-2xl rounded-2xl bg-white p-4 sm:p-6 shadow-2xl transition-all my-auto max-h-[92vh] overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl bg-white p-4 sm:p-6 shadow-2xl transition-all my-auto max-h-[92vh] overflow-y-auto max-sm:rounded-none max-sm:h-full max-sm:max-h-full">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-neutral-950">
-                    {modalStep === "edit" ? "+ New Operational Warehouse Request" : "Review Request Summary"}
+                    {modalStep === "edit" ? "+ New Loading / Unloading Request" : "Review Request Summary"}
                   </h3>
                   <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold text-white">
                     {modalStep === "edit" ? "Step 1 of 2: Details" : "Step 2 of 2: Confirm"}
@@ -887,7 +964,7 @@ export function TaskBoard() {
                   setModalStep("edit");
                   setCreateError(null);
                 }}
-                className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+                className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -896,60 +973,82 @@ export function TaskBoard() {
             </div>
 
             {createError ? (
-              <div role="alert" className="mt-3 rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
+              <div role="alert" className="mt-3 rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 font-medium">
                 {createError}
               </div>
             ) : null}
 
             {modalStep === "edit" ? (
               <form onSubmit={handleProceedToReview} className="mt-4 space-y-4 text-xs">
-                {/* 1. Request Type / Category & 2. Priority */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      1. Request Category <span className="text-rose-500">*</span>
-                    </label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value as GeneralRequestCategory)}
-                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                {/* 1. Request Type (Strictly Loading or Unloading) */}
+                <div>
+                  <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                    1. Operation Request Type <span className="text-rose-500">*</span>
+                  </label>
+                  <p className="text-[11px] text-neutral-500 mb-2">Select the operational task to perform at the warehouse.</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setRequestType("unloading")}
+                      className={`flex items-center gap-3 rounded-xl p-3.5 border transition min-h-[56px] text-left ${
+                        requestType === "unloading"
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-600 shadow-xs"
+                          : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100"
+                      }`}
                     >
-                      {CATEGORY_OPTIONS.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <span className="text-2xl shrink-0">📥</span>
+                      <div>
+                        <div className="font-bold text-sm">Unloading</div>
+                        <div className="text-[11px] opacity-80 font-normal">Intake & Receiving into Stock</div>
+                      </div>
+                    </button>
 
-                  <div>
-                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      2. Priority Level
-                    </label>
-                    <div className="mt-1 grid grid-cols-4 gap-1.5">
-                      {PRIORITY_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => setPriority(opt.id)}
-                          className={`rounded-lg py-2 text-xs font-medium border text-center transition ${
-                            priority === opt.id
-                              ? "border-neutral-950 bg-neutral-950 text-white shadow-xs font-bold"
-                              : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100"
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRequestType("loading")}
+                      className={`flex items-center gap-3 rounded-xl p-3.5 border transition min-h-[56px] text-left ${
+                        requestType === "loading"
+                          ? "border-blue-600 bg-blue-50 text-blue-950 ring-2 ring-blue-600 shadow-xs"
+                          : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100"
+                      }`}
+                    >
+                      <span className="text-2xl shrink-0">📤</span>
+                      <div>
+                        <div className="font-bold text-sm">Loading</div>
+                        <div className="text-[11px] opacity-80 font-normal">Outbound Dispatch from Stock</div>
+                      </div>
+                    </button>
                   </div>
                 </div>
 
-                {/* 3. Material/Product Type & 4. Material Description */}
+                {/* Priority Selection */}
+                <div>
+                  <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                    Priority Level
+                  </label>
+                  <div className="mt-1 grid grid-cols-4 gap-1.5">
+                    {PRIORITY_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setPriority(opt.id)}
+                        className={`rounded-lg py-2.5 text-xs font-medium border text-center transition min-h-[44px] ${
+                          priority === opt.id
+                            ? "border-neutral-950 bg-neutral-950 text-white shadow-xs font-bold"
+                            : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Material/Product Type & 3. Material Description */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-neutral-100 pt-3">
                   <div>
                     <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      3. Material / Product Type <span className="text-rose-500">*</span>
+                      2. Material / Product Type <span className="text-rose-500">*</span>
                     </label>
                     <select
                       value={materialType}
@@ -961,7 +1060,7 @@ export function TaskBoard() {
                         else if (val === "PP") setMaterialDescription("PP woven bags / flakes");
                         else if (val === "PET") setMaterialDescription("PET bottle flakes");
                       }}
-                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden min-h-[44px]"
                     >
                       <option value="LDPE">LDPE (Low-Density Polyethylene)</option>
                       <option value="HDPE">HDPE (High-Density Polyethylene)</option>
@@ -976,154 +1075,137 @@ export function TaskBoard() {
 
                   <div>
                     <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      4. Material Description
+                      3. Material Description
                     </label>
                     <input
                       type="text"
                       value={materialDescription}
                       onChange={(e) => setMaterialDescription(e.target.value)}
-                      placeholder="e.g. LDPE 98/2 clean transparent film, baled"
-                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                      placeholder="e.g. LDPE 98/2 transparent film, baled"
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden min-h-[44px]"
                     />
                   </div>
                 </div>
 
-                {/* 5. Packaging Type, 6. Number of Packages, 7. Tare Weight */}
+                {/* 4. Packaging Type, 5. Number of Packages, 6. Tare Weight */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-neutral-100 pt-3">
                   <div>
                     <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      5. Packaging Type <span className="text-rose-500">*</span>
+                      4. Packaging Type <span className="text-rose-500">*</span>
                     </label>
                     <select
                       value={packagingType}
                       onChange={(e) => handlePackagingTypeChange(e.target.value)}
-                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden min-h-[44px]"
                     >
-                      {(demo.state.packaging || []).map((pkg) => (
-                        <option key={pkg.id} value={pkg.label}>
-                          {pkg.label} ({pkg.tareKg !== null ? `${pkg.tareKg} kg tare` : "no tare"})
-                        </option>
-                      ))}
-                      <option value="Big Bag">Big Bag (2 kg tare)</option>
-                      <option value="Euro Pallet">Euro Pallet (20 kg tare)</option>
                       <option value="Normal Pallet">Normal Pallet (25 kg tare)</option>
-                      <option value="Octabin">Octabin (15 kg tare)</option>
-                      <option value="None / Bulk">None / Bulk (0 kg tare)</option>
-                      <option value="Custom">Custom Packaging</option>
+                      <option value="Euro Pallet">Euro Pallet (20 kg tare)</option>
+                      <option value="Big Bag">Big Bag (2 kg tare)</option>
+                      <option value="None / Loose">None / Loose (0 kg tare)</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      6. Number of Packages <span className="text-rose-500">*</span>
+                      5. Number of Packages <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="number"
                       min="1"
                       step="1"
-                      required
                       value={packageCount}
                       onChange={(e) => setPackageCount(e.target.value)}
-                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                      required
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden min-h-[44px]"
                     />
                   </div>
 
                   <div>
                     <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      7. Tare per Unit (kg)
+                      Packaging Unit Tare (kg)
                     </label>
                     <input
                       type="number"
                       min="0"
-                      step="any"
+                      step="0.1"
                       value={tarePerPackageKg}
                       onChange={(e) => setTarePerPackageKg(e.target.value)}
-                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden min-h-[44px]"
                     />
                   </div>
                 </div>
 
-                {/* Weights Calculation Bar: 8. Gross Weight, Total Tare, and 9. Net Weight */}
-                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3.5 space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                    <div>
-                      <label className="block font-semibold text-neutral-900 uppercase tracking-wide">
-                        8. Gross Weight (kg) <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0.001"
-                        step="any"
-                        required
-                        placeholder="e.g. 1540"
-                        value={grossWeightKg}
-                        onChange={(e) => setGrossWeightKg(e.target.value)}
-                        className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-sm font-semibold text-neutral-950 focus:border-neutral-950 focus:outline-hidden"
-                      />
-                    </div>
-
-                    <div>
-                      <span className="block font-semibold text-neutral-600 uppercase tracking-wide">
-                        Total Packaging Tare
-                      </span>
-                      <div className="mt-1 flex h-[38px] items-center rounded-lg border border-neutral-200 bg-white px-3 font-mono font-medium text-neutral-800">
-                        {totalTareWeightKg.toLocaleString()} kg
-                        <span className="ml-1 text-[10px] text-neutral-400">({parsedPackageCount} × {parsedUnitTareKg} kg)</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block font-semibold text-neutral-900 uppercase tracking-wide">
-                        9. Net Material Weight (kg)
-                      </span>
-                      <div
-                        className={`mt-1 flex h-[38px] items-center justify-between rounded-lg px-3 font-mono text-sm font-bold border transition ${
-                          isNetWeightValid
-                            ? "bg-emerald-50 border-emerald-300 text-emerald-800"
-                            : "bg-rose-50 border-rose-300 text-rose-800"
-                        }`}
-                      >
-                        <span>{netWeightKg > 0 ? `${netWeightKg.toLocaleString()} kg` : "0 kg"}</span>
-                        <span className="text-[10px] uppercase tracking-wider">
-                          {isNetWeightValid ? "✓ Valid Net" : "Invalid Weight"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {parsedGrossKg > 0 && netWeightKg <= 0 ? (
-                    <p className="text-[11px] font-semibold text-rose-600">
-                      ⚠️ Gross weight ({parsedGrossKg} kg) must be greater than total tare ({totalTareWeightKg} kg). Net weight must be positive.
-                    </p>
-                  ) : null}
-                </div>
-
-                {/* 10. Warehouse & Location & Optional Linked Shipment */}
+                {/* 7. Gross Weight & Live Net Weight Calculation */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-neutral-100 pt-3">
                   <div>
                     <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      10. Warehouse & Specific Location <span className="text-rose-500">*</span>
+                      6. Gross Weight (kg) <span className="text-rose-500">*</span>
                     </label>
                     <input
-                      type="text"
+                      type="number"
+                      min="1"
+                      step="0.1"
+                      value={grossWeightKg}
+                      onChange={(e) => setGrossWeightKg(e.target.value)}
+                      placeholder="e.g. 15400"
                       required
-                      value={warehouseLocation}
-                      onChange={(e) => setWarehouseLocation(e.target.value)}
-                      placeholder="e.g. Bornem - Bay 2 / Section C"
-                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden min-h-[44px]"
                     />
                   </div>
 
                   <div>
                     <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      Linked Shipment / Container <span className="text-neutral-400 font-normal">(Optional)</span>
+                      7. Net Material Weight (Auto-Calculated)
+                    </label>
+                    <div className="mt-1 flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-100 px-3.5 py-2 min-h-[44px]">
+                      <div>
+                        <span className="font-mono text-base font-bold text-emerald-800">
+                          {isNetWeightValid ? `${netWeightKg.toLocaleString()} kg` : "—"}
+                        </span>
+                        <div className="text-[10px] text-neutral-500">
+                          Formula: Gross ({parsedGrossKg || 0} kg) − Tare ({totalTareWeightKg} kg)
+                        </div>
+                      </div>
+                      {isNetWeightValid ? (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                          Valid Net Weight
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                          Enter Gross &gt; Tare
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 8. Warehouse Location */}
+                <div className="border-t border-neutral-100 pt-3">
+                  <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                    8. Warehouse / Specific Location <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={warehouseLocation}
+                    onChange={(e) => setWarehouseLocation(e.target.value)}
+                    placeholder="e.g. Bornem Warehouse - Loading Bay 2 / Rack A-14"
+                    required
+                    className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden min-h-[44px]"
+                  />
+                </div>
+
+                {/* Optional Shipment / Container Link */}
+                {relevantShipments.length > 0 ? (
+                  <div>
+                    <label className="block font-semibold text-neutral-700 uppercase tracking-wide">
+                      Link Container / Shipment (Optional)
                     </label>
                     <select
                       value={shipmentId}
                       onChange={(e) => setShipmentId(e.target.value)}
-                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden min-h-[44px]"
                     >
-                      <option value="">None / General warehouse request</option>
+                      <option value="">None / Standalone Operation</option>
                       {relevantShipments.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.label}
@@ -1131,190 +1213,183 @@ export function TaskBoard() {
                       ))}
                     </select>
                   </div>
-                </div>
+                ) : null}
 
-                {/* 11. Photos & 12. Supporting Documents Upload */}
-                <div className="space-y-2 border-t border-neutral-100 pt-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                      11. Photos & 12. Supporting Documents
-                    </label>
-                    <span className="text-[11px] text-neutral-500">Auto-compressed up to 1920px (max 10 MB)</span>
+                {/* 9. Photos & 10. Supporting Documents */}
+                <div className="border-t border-neutral-100 pt-3 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="font-semibold text-neutral-800 uppercase tracking-wide">
+                        9. Relevant Photos & Supporting Documents
+                      </span>
+                      <p className="text-[11px] text-neutral-500">
+                        Photos are automatically compressed client-side before upload to optimize upload time.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(e, "photo")}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-800 shadow-xs hover:bg-neutral-50 min-h-[36px]"
+                      >
+                        📷 + Add Photos
+                      </button>
+
+                      <input
+                        ref={docInputRef}
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(e, "document")}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => docInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-800 shadow-xs hover:bg-neutral-50 min-h-[36px]"
+                      >
+                        📄 + Add Documents
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {/* Camera / Photo Button */}
-                    <button
-                      type="button"
-                      onClick={() => photoInputRef.current?.click()}
-                      className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-neutral-950 px-3 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 active:scale-[0.99]"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <span>📷 Add Photos (Camera / Gallery)</span>
-                    </button>
-                    <input
-                      ref={photoInputRef}
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => void handleFileUpload(e, "photo")}
-                      className="hidden"
-                    />
-
-                    {/* Document Button */}
-                    <button
-                      type="button"
-                      onClick={() => docInputRef.current?.click()}
-                      className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-50 active:scale-[0.99]"
-                    >
-                      <svg className="h-4 w-4 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                      <span>📄 Attach Document (PDF / Office)</span>
-                    </button>
-                    <input
-                      ref={docInputRef}
-                      type="file"
-                      multiple
-                      accept=".pdf,.doc,.docx,.xlsx,.txt"
-                      onChange={(e) => void handleFileUpload(e, "document")}
-                      className="hidden"
-                    />
-                  </div>
-
-                  {/* Staged Files List */}
                   {stagedFiles.length > 0 ? (
-                    <ul className="mt-2 divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
-                      {stagedFiles.map((sf, idx) => (
-                        <li key={idx} className="flex items-center justify-between p-2.5">
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="text-base">{sf.kind === "photo" ? "📷" : "📄"}</span>
-                            <div className="truncate">
-                              <p className="font-medium text-neutral-900 truncate">{sf.name}</p>
-                              <p className="text-[10px] text-neutral-500">
-                                {sf.wasCompressed && sf.originalSize > sf.size
-                                  ? `${formatFileSize(sf.originalSize)} → ${formatFileSize(sf.size)} (-${Math.round((1 - sf.size / sf.originalSize) * 100)}% optimized)`
-                                  : formatFileSize(sf.size)}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeStagedFile(idx)}
-                            className="text-xs font-semibold text-rose-600 hover:underline shrink-0 ml-2"
+                    <div className="space-y-1.5 rounded-xl border border-neutral-200 bg-neutral-50 p-2.5">
+                      <div className="text-[11px] font-semibold text-neutral-600 mb-1">
+                        Files ready for upload ({stagedFiles.length}):
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {stagedFiles.map((staged, idx) => (
+                          <div
+                            key={`${staged.name}-${idx}`}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white p-2 text-xs"
                           >
-                            Remove
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span>{staged.kind === "photo" ? "🖼️" : "📄"}</span>
+                              <div className="min-w-0">
+                                <p className="font-medium text-neutral-900 truncate">{staged.name}</p>
+                                <p className="text-[10px] text-neutral-500">
+                                  {formatBytes(staged.size)}
+                                  {staged.wasCompressed ? (
+                                    <span className="text-emerald-700 ml-1 font-semibold">
+                                      (-{Math.round(((staged.originalSize - staged.size) / staged.originalSize) * 100)}% compressed)
+                                    </span>
+                                  ) : null}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeStagedFile(idx)}
+                              className="text-neutral-400 hover:text-rose-600 p-1 text-base font-bold"
+                              title="Remove file"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
 
-                {/* Additional Notes */}
+                {/* 11. Additional Notes */}
                 <div className="border-t border-neutral-100 pt-3">
                   <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
-                    Additional Notes & Instructions <span className="text-neutral-400 font-normal">(Optional)</span>
+                    10. Additional Notes / Instructions
                   </label>
                   <textarea
                     rows={2}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Provide any additional handling instructions, defect notes, or operational details..."
+                    placeholder="Specific handling notes, damage observations, or truck driver notes…"
                     className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-base sm:text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
                   />
                 </div>
 
-                {/* Modal Footer */}
+                {/* Actions */}
                 <div className="flex items-center justify-end gap-2 border-t border-neutral-100 pt-4">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="min-h-[40px] rounded-lg border border-neutral-300 px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                    className="rounded-lg border border-neutral-300 px-4 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 min-h-[44px]"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={!isNetWeightValid}
-                    className="min-h-[40px] rounded-lg bg-neutral-950 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 disabled:opacity-50"
+                    className="rounded-lg bg-neutral-950 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 transition min-h-[44px]"
                   >
-                    Review Request Summary →
+                    Review Request &rarr;
                   </button>
                 </div>
               </form>
             ) : (
-              /* Step 2: Review Operational Summary */
+              /* Review Summary Step 2 */
               <div className="mt-4 space-y-4 text-xs">
                 <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-3">
-                  <h4 className="font-bold text-neutral-950 text-sm border-b border-neutral-200 pb-2">
-                    Operational Request Review Summary
-                  </h4>
+                  <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+                    <span className="font-semibold text-neutral-700">Operation Type</span>
+                    <span className={`inline-flex items-center gap-1 font-bold text-xs px-2.5 py-0.5 rounded ${
+                      requestType === "loading"
+                        ? "bg-blue-100 text-blue-900"
+                        : "bg-emerald-100 text-emerald-900"
+                    }`}>
+                      {requestType === "loading" ? "📤 Loading (Dispatch)" : "📥 Unloading (Receipt)"}
+                    </span>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Request Category</span>
-                      <p className="font-semibold text-neutral-900">{CATEGORY_OPTIONS.find((c) => c.id === category)?.label}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Priority</span>
-                      <p className="font-semibold text-neutral-900 capitalize">{priority}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Material / Product</span>
-                      <p className="font-bold text-neutral-900">{materialType}</p>
+                      <span className="text-neutral-500 font-medium">Material:</span>
+                      <p className="font-bold text-neutral-950">{materialType}</p>
                       {materialDescription ? <p className="text-[11px] text-neutral-600">{materialDescription}</p> : null}
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Packaging</span>
-                      <p className="font-bold text-neutral-900">{parsedPackageCount} × {packagingType}</p>
-                      <p className="text-[11px] text-neutral-600">Unit Tare: {parsedUnitTareKg} kg</p>
+                      <span className="text-neutral-500 font-medium">Packaging:</span>
+                      <p className="font-bold text-neutral-950">{packageCount} × {packagingType}</p>
+                      <p className="text-[11px] text-neutral-600">Unit Tare: {tarePerPackageKg} kg | Total: {totalTareWeightKg} kg</p>
                     </div>
                   </div>
 
-                  {/* Weights Breakdown Card */}
-                  <div className="rounded-lg border border-neutral-200 bg-white p-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-white p-3 border border-neutral-200 grid grid-cols-3 gap-2 text-center">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Gross Weight</span>
-                      <p className="text-sm font-bold text-neutral-900">{parsedGrossKg.toLocaleString()} kg</p>
+                      <span className="text-[10px] text-neutral-500 uppercase font-semibold">Gross Weight</span>
+                      <p className="font-bold text-sm text-neutral-900">{parsedGrossKg.toLocaleString()} kg</p>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Total Packaging Tare</span>
-                      <p className="text-sm font-bold text-neutral-700">{totalTareWeightKg.toLocaleString()} kg</p>
+                      <span className="text-[10px] text-neutral-500 uppercase font-semibold">Total Packaging Tare</span>
+                      <p className="font-bold text-sm text-neutral-600">− {totalTareWeightKg.toLocaleString()} kg</p>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-emerald-700">Calculated Net Weight</span>
-                      <p className="text-sm font-bold text-emerald-800">{netWeightKg.toLocaleString()} kg</p>
+                      <span className="text-[10px] text-emerald-700 uppercase font-bold">Net Material Weight</span>
+                      <p className="font-bold text-base text-emerald-800">{netWeightKg.toLocaleString()} kg</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 border-t border-neutral-200 pt-2">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Location</span>
-                      <p className="font-semibold text-neutral-900">{warehouseLocation}</p>
+                      <span className="text-neutral-500 font-medium">Location:</span>
+                      <p className="font-medium text-neutral-900">{warehouseLocation}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Linked Shipment</span>
-                      <p className="font-semibold text-neutral-900">{shipmentId || "None / General"}</p>
+                      <span className="text-neutral-500 font-medium">Attachments:</span>
+                      <p className="font-medium text-neutral-900">{stagedFiles.length} file(s) attached</p>
                     </div>
                   </div>
 
                   {notes ? (
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">Notes & Instructions</span>
-                      <p className="text-neutral-800 whitespace-pre-wrap">{notes}</p>
-                    </div>
-                  ) : null}
-
-                  {stagedFiles.length > 0 ? (
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500">
-                        Attachments ({stagedFiles.length} file{stagedFiles.length > 1 ? "s" : ""})
-                      </span>
-                      <p className="text-neutral-700">{stagedFiles.map((f) => f.name).join(", ")}</p>
+                    <div className="border-t border-neutral-200 pt-2">
+                      <span className="text-neutral-500 font-medium">Notes:</span>
+                      <p className="text-neutral-800 whitespace-pre-line">{notes}</p>
                     </div>
                   ) : null}
                 </div>
@@ -1324,17 +1399,17 @@ export function TaskBoard() {
                     type="button"
                     onClick={() => setModalStep("edit")}
                     disabled={createSubmitting}
-                    className="min-h-[40px] rounded-lg border border-neutral-300 px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                    className="rounded-lg border border-neutral-300 px-4 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 min-h-[44px]"
                   >
-                    ← Back to Edit
+                    &larr; Back to Edit
                   </button>
                   <button
                     type="button"
-                    onClick={() => void handleCreateSubmit()}
+                    onClick={handleCreateSubmit}
                     disabled={createSubmitting}
-                    className="min-h-[40px] rounded-lg bg-neutral-950 px-6 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition min-h-[44px] disabled:opacity-50"
                   >
-                    {createSubmitting ? "Submitting Request..." : "Confirm & Submit Request"}
+                    {createSubmitting ? "Submitting Request…" : "✓ Confirm & Submit Request"}
                   </button>
                 </div>
               </div>
@@ -1344,71 +1419,157 @@ export function TaskBoard() {
       ) : null}
 
       {/* ========================================================================= */}
-      {/* Decision / Action Dialog (Approve, Reject, Under Review, Sent Back, Complete, Delete) */}
+      {/* Staff PO/SO Assignment Modal (Stage 3) */}
+      {/* ========================================================================= */}
+      {assignTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-2xl bg-white p-5 sm:p-6 shadow-2xl transition-all my-auto max-sm:rounded-none max-sm:h-full max-sm:max-h-full">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-neutral-950">
+                  Assign PO/SO Reference
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Request {assignTarget.number} · {assignTarget.warehouse}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignTarget(null)}
+                className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                &times;
+              </button>
+            </div>
+
+            {assignError ? (
+              <div role="alert" className="mt-3 rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 font-medium">
+                {assignError}
+              </div>
+            ) : null}
+
+            <form onSubmit={handleAssignPoSoSubmit} className="mt-4 space-y-4 text-xs">
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-500 font-medium">Operation Type</span>
+                  <span className="font-bold text-neutral-900">
+                    {parseOperationalRequestDescription(assignTarget.description).operationalDetails?.requestType === "loading"
+                      ? "📤 Loading (Dispatch / Outbound)"
+                      : "📥 Unloading (Receipt / Inbound)"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-500 font-medium">Material & Net Weight</span>
+                  <span className="font-semibold text-neutral-900">
+                    {parseOperationalRequestDescription(assignTarget.description).operationalDetails?.materialType} (
+                    {parseOperationalRequestDescription(assignTarget.description).operationalDetails?.netWeightKg.toLocaleString()} kg)
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-neutral-800 uppercase tracking-wide">
+                  {parseOperationalRequestDescription(assignTarget.description).operationalDetails?.requestType === "loading"
+                    ? "Sales Order (SO) Number"
+                    : "Purchase Order (PO) Number"}{" "}
+                  <span className="text-rose-500">*</span>
+                </label>
+                <p className="text-[11px] text-neutral-500 mb-1.5">
+                  {parseOperationalRequestDescription(assignTarget.description).operationalDetails?.requestType === "loading"
+                    ? "Must start with SO- (e.g. SO-2026-0001). Stock will be deducted upon completion."
+                    : "Must start with PO- (e.g. PO-2026-0001). Stock will be increased upon completion."}
+                </p>
+                <input
+                  type="text"
+                  value={assignPoSoNumber}
+                  onChange={(e) => setAssignPoSoNumber(e.target.value)}
+                  placeholder={
+                    parseOperationalRequestDescription(assignTarget.description).operationalDetails?.requestType === "loading"
+                      ? "SO-2026-0001"
+                      : "PO-2026-0001"
+                  }
+                  required
+                  className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-base sm:text-xs font-mono font-bold text-neutral-900 focus:border-neutral-950 focus:outline-hidden uppercase min-h-[44px]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-neutral-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setAssignTarget(null)}
+                  className="rounded-lg border border-neutral-300 px-4 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 min-h-[44px]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assignSubmitting}
+                  className="rounded-lg bg-neutral-950 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 transition min-h-[44px] disabled:opacity-50"
+                >
+                  {assignSubmitting ? "Assigning Reference…" : "Confirm Assignment"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ========================================================================= */}
+      {/* Decision Modal (Admin Decision or Worker/Staff Completion) */}
       {/* ========================================================================= */}
       {actionTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-base font-bold text-neutral-950">
               {actionTarget.decision === "approved"
-                ? `Approve ${actionTarget.request.number}`
+                ? `Approve Request ${actionTarget.request.number}`
                 : actionTarget.decision === "declined"
-                  ? `Reject ${actionTarget.request.number}`
-                  : actionTarget.decision === "under_review"
-                    ? `Mark ${actionTarget.request.number} Under Review`
-                    : actionTarget.decision === "sent_back"
-                      ? `Request Information on ${actionTarget.request.number}`
-                      : actionTarget.decision === "completed"
-                        ? `Complete ${actionTarget.request.number}`
-                        : `Delete ${actionTarget.request.number}`}
+                  ? `Reject Request ${actionTarget.request.number}`
+                  : actionTarget.decision === "sent_back"
+                    ? `Request Info for ${actionTarget.request.number}`
+                    : actionTarget.decision === "completed"
+                      ? `Complete Operation ${actionTarget.request.number}`
+                      : `Delete Request ${actionTarget.request.number}`}
             </h3>
 
             <p className="mt-1 text-xs text-neutral-500">
-              {actionTarget.decision === "declined"
-                ? "Enter the reason for rejection. This feedback will be visible to the worker."
-                : actionTarget.decision === "sent_back"
-                  ? "Explain what information, documents or corrections are needed from the worker."
-                  : actionTarget.decision === "approved"
-                    ? "Confirm approval for this operational request. You may optionally include guidance."
+              {actionTarget.decision === "approved"
+                ? "Approving this request authorizes Staff to assign PO/SO numbers and proceed with operations."
+                : actionTarget.decision === "declined"
+                  ? "Rejection prevents this request from entering operations. An explanation is mandatory."
+                  : actionTarget.decision === "sent_back"
+                    ? "Send back to the worker to provide additional documents, weights, or corrections."
                     : actionTarget.decision === "completed"
-                      ? "Confirm that the work requested has been processed and completed."
-                      : "Are you sure you want to delete this request?"}
+                      ? "Completing this operation will move the net material stock in the warehouse inventory and append to transaction history."
+                      : "Permanently delete this request draft."}
             </p>
 
             {actionError ? (
-              <div className="mt-3 rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-800">
+              <div role="alert" className="mt-3 rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-800 font-medium">
                 {actionError}
               </div>
             ) : null}
 
-            {/* Note/Reason Input */}
-            {["declined", "sent_back", "approved"].includes(actionTarget.decision) ? (
-              <div className="mt-3">
-                <label className="block text-xs font-semibold text-neutral-800 uppercase tracking-wide">
+            {actionTarget.decision !== "delete" && actionTarget.decision !== "completed" ? (
+              <div className="mt-4">
+                <label className="block text-xs font-medium text-neutral-700">
                   {actionTarget.decision === "declined"
-                    ? "Rejection Reason *"
+                    ? "Mandatory Rejection Reason"
                     : actionTarget.decision === "sent_back"
-                      ? "Information Needed *"
-                      : "Optional Feedback / Note"}
+                      ? "Information Requested"
+                      : "Optional Decision Note"}
                 </label>
                 <textarea
                   rows={3}
                   value={actionNote}
                   onChange={(e) => setActionNote(e.target.value)}
-                  placeholder={
-                    actionTarget.decision === "declined"
-                      ? "Specify why this request is declined..."
-                      : actionTarget.decision === "sent_back"
-                        ? "Specify what details or photos the worker needs to provide..."
-                        : "Optional approval note..."
-                  }
-                  className="mt-1 block w-full rounded-lg border border-neutral-300 p-2.5 text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
-                  required={actionTarget.decision === "declined" || actionTarget.decision === "sent_back"}
+                  placeholder="Provide detailed feedback or instructions for the worker…"
+                  className="mt-1 block w-full rounded-lg border border-neutral-300 p-2 text-xs focus:border-neutral-950 focus:outline-hidden"
                 />
               </div>
             ) : null}
 
-            <div className="mt-5 flex items-center justify-end gap-2">
+            <div className="mt-6 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -1417,7 +1578,7 @@ export function TaskBoard() {
                   setActionError(null);
                 }}
                 disabled={actionSubmitting}
-                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                className="rounded-lg border border-neutral-300 px-4 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 min-h-[44px]"
               >
                 Cancel
               </button>
@@ -1425,97 +1586,32 @@ export function TaskBoard() {
                 type="button"
                 onClick={handleExecuteAction}
                 disabled={actionSubmitting}
-                className={`rounded-lg px-4 py-1.5 text-xs font-semibold text-white shadow-xs disabled:opacity-50 ${
+                className={`rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs transition min-h-[44px] disabled:opacity-50 ${
                   actionTarget.decision === "declined" || actionTarget.decision === "delete"
                     ? "bg-rose-600 hover:bg-rose-700"
-                    : actionTarget.decision === "approved"
+                    : actionTarget.decision === "approved" || actionTarget.decision === "completed"
                       ? "bg-emerald-600 hover:bg-emerald-700"
                       : "bg-neutral-950 hover:bg-neutral-800"
                 }`}
               >
                 {actionSubmitting
-                  ? "Processing..."
-                  : actionTarget.decision === "approved"
-                    ? "Confirm Approval"
-                    : actionTarget.decision === "declined"
-                      ? "Confirm Rejection"
-                      : actionTarget.decision === "delete"
-                        ? "Delete Request"
-                        : "Confirm"}
+                  ? "Processing…"
+                  : actionTarget.decision === "delete"
+                    ? "Confirm Delete"
+                    : actionTarget.decision === "completed"
+                      ? "Confirm Completion & Move Stock"
+                      : "Confirm Decision"}
               </button>
             </div>
           </div>
         </div>
       ) : null}
 
-      {/* ========================================================================= */}
-      {/* Attachment Preview Modal */}
-      {/* ========================================================================= */}
-      {previewAttachment ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className="relative max-h-[90vh] max-w-2xl w-full rounded-2xl bg-white p-6 shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
-              <div>
-                <h4 className="text-sm font-bold text-neutral-950 truncate max-w-md">
-                  {previewAttachment.name}
-                </h4>
-                <p className="text-xs text-neutral-500">
-                  {previewAttachment.mime} · {formatBytes(previewAttachment.byteSize)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewAttachment(null)}
-                className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="my-4 flex flex-1 items-center justify-center overflow-auto rounded-lg bg-neutral-100 p-4">
-              {previewAttachment.mime.startsWith("image/") && previewAttachment.url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={previewAttachment.url}
-                  alt={previewAttachment.name}
-                  className="max-h-[60vh] max-w-full rounded-md object-contain"
-                />
-              ) : (
-                <div className="p-8 text-center text-xs text-neutral-600">
-                  <svg className="mx-auto h-12 w-12 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  <p className="mt-2 font-medium">{previewAttachment.name}</p>
-                  <p className="mt-0.5 text-neutral-400">Preview not directly supported in-line for this document format.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 border-t border-neutral-100 pt-3">
-              {previewAttachment.url ? (
-                <a
-                  href={previewAttachment.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download={previewAttachment.name}
-                  className="rounded-lg bg-neutral-950 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800"
-                >
-                  Download / Open File
-                </a>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setPreviewAttachment(null)}
-                className="rounded-lg border border-neutral-300 px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* Dedicated Attachment Preview Modal */}
+      <AttachmentPreviewModal
+        item={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
+      />
     </>
   );
 }

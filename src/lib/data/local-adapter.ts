@@ -162,10 +162,35 @@ export class LocalAdapter {
   }
 
   async openFile(key: string, exp: string, sig: string, nowMs: number, sessionId?: string | null) {
-    void sessionId;
     const store = await this.snapshot();
-    if (!fileSignatureMatches(store.fileSecret, key, exp, sig, nowMs)) return null;
-    const blob = store.blobs.find((item) => item.key === key);
+    const sigValid = exp && sig && fileSignatureMatches(store.fileSecret, key, exp, sig, nowMs);
+    let sessionValid = false;
+    if (sessionId) {
+      const u = sessionProfile(store, sessionId, this.now());
+      if (u && u.active) sessionValid = true;
+    }
+
+    if (!sigValid && !sessionValid) return null;
+
+    // Search direct blob match
+    let blob = store.blobs.find((item) => item.key === key || item.name === key);
+
+    // If not found, search via documents
+    if (!blob) {
+      const doc = store.documents.find((d) => d.id === key || d.storageKey === key);
+      if (doc) {
+        blob = store.blobs.find((b) => b.key === doc.storageKey || b.key === doc.id || b.name === doc.name);
+      }
+    }
+
+    // If not found, search via offer attachments
+    if (!blob) {
+      const att = (store.offerAttachments || []).find((a) => a.id === key || a.storageKey === key);
+      if (att) {
+        blob = store.blobs.find((b) => b.key === att.storageKey || b.key === att.id || b.name === att.name);
+      }
+    }
+
     if (!blob) return null;
     return { name: blob.name, mime: blob.mime || "application/octet-stream", bytes: Buffer.from(blob.bytesBase64, "base64") };
   }
