@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loadWorkspace, runCommand, signOutAction } from "@/domain/actions";
 import { emptyWorkspace, type Actor, type DemoDocument, type DemoState } from "@/domain/view";
 import type { Role } from "@/lib/permissions";
@@ -15,8 +15,8 @@ export type WorkspaceApi = {
   signOut: () => Promise<void>;
   approve: (number: string) => Text;
   reject: (number: string) => Text;
-  editPurchase: (number: string, draft: { supplier: string; material: string; quantityKg: number; valueEur: number }) => Text;
-  createPurchase: (draft: { supplier: string; material: string; quantityKg: number; valueEur: number }) => Text;
+  editPurchase: (number: string, draft: { supplier: string; material: string; quantityKg: number; valueEur: number; title?: string; notes?: string }) => Text;
+  createPurchase: (draft: { supplier: string; material: string; quantityKg: number; valueEur: number; title?: string; number?: string; notes?: string }) => Text;
   unload: (number: string) => Text;
   dispatch: (number: string) => Text;
   saveCustoms: (draft: { number: string; reference: string; procedureNote: string; goodsDescription: string; declarantReference: string }) => Text;
@@ -79,9 +79,23 @@ export type WorkspaceApi = {
     note?: string;
   }) => Text;
   deleteGeneralRequest: (requestId: string) => Text;
+  createOffer: (draft: Record<string, unknown>) => Text;
+  editOffer: (draft: Record<string, unknown>) => Text;
+  deleteOffer: (id: string) => Text;
+  submitOffer: (id: string) => Text;
+  decideOffer: (draft: { id: string; decision: "approved" | "rejected"; note: string }) => Text;
+  updateOfferStatus: (draft: { id: string; status: string }) => Text;
+  toggleOfferFavourite: (id: string) => Text;
+  addOfferComment: (draft: { id: string; comment: string }) => Text;
+  addOfferAttachment: (draft: { id: string; name: string; mime?: string; bytesBase64?: string; kind?: "image" | "document" }) => Text;
+  deleteOfferAttachment: (draft: { id: string; attachmentId: string }) => Text;
+  markNotificationRead: (id: string) => Text;
+  markAllNotificationsRead: () => Text;
   refresh: () => Promise<void>;
   reset: () => Text;
   notice: string | null;
+  isSyncing: boolean;
+  lastSyncedAt: Date | null;
 };
 
 const WorkspaceContext = createContext<WorkspaceApi | null>(null);
@@ -91,6 +105,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [actor, setActor] = useState<Actor | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const lastRevisionRef = useRef<string>("");
+  const channelRef = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -99,23 +117,87 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setState(result.state);
       setActor(result.actor);
       setReady(true);
+      setLastSyncedAt(new Date());
     });
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("stockflow-sync");
+      channelRef.current = bc;
+      bc.onmessage = (event) => {
+        if (event?.data?.type === "store_updated") {
+          void loadWorkspace().then((result) => {
+            if (!active) return;
+            setState(result.state);
+            if (result.actor) setActor(result.actor);
+            setLastSyncedAt(new Date());
+          });
+        }
+      };
+    } catch {}
+
+    const checkSync = async () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      try {
+        const res = await fetch("/api/inventory/sync", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.ok && data.revision) {
+          if (lastRevisionRef.current && lastRevisionRef.current !== data.revision) {
+            setIsSyncing(true);
+            const result = await loadWorkspace();
+            if (active) {
+              setState(result.state);
+              if (result.actor) setActor(result.actor);
+              setLastSyncedAt(new Date());
+            }
+            setIsSyncing(false);
+          }
+          lastRevisionRef.current = data.revision;
+        }
+      } catch {}
+    };
+
+    const interval = setInterval(checkSync, 4000);
+    const onFocus = () => {
+      void checkSync();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", onFocus);
+    }
+
     return () => {
       active = false;
+      clearInterval(interval);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", onFocus);
+      }
+      try {
+        bc?.close();
+      } catch {}
     };
   }, []);
 
   const api = useMemo<WorkspaceApi>(() => {
     const run = async (name: string, payload: unknown = {}): Promise<string | undefined> => {
-      const result = await runCommand(name, payload);
-      setState(result.state);
-      if (result.actor) setActor(result.actor);
-      if (result.error) {
-        setNotice(result.error);
-        return result.error;
+      setIsSyncing(true);
+      try {
+        const result = await runCommand(name, payload);
+        setState(result.state);
+        if (result.actor) setActor(result.actor);
+        setLastSyncedAt(new Date());
+        try {
+          channelRef.current?.postMessage({ type: "store_updated", command: name });
+        } catch {}
+        if (result.error) {
+          setNotice(result.error);
+          return result.error;
+        }
+        setNotice(result.notice ?? null);
+        return undefined;
+      } finally {
+        setIsSyncing(false);
       }
-      setNotice(result.notice ?? null);
-      return undefined;
     };
     return {
       state,
@@ -123,6 +205,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       ready,
       setActor,
       notice,
+      isSyncing,
+      lastSyncedAt,
       signOut: async () => {
         await signOutAction();
         setActor(null);
@@ -170,14 +254,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       createGeneralRequest: (draft) => run("createGeneralRequest", draft),
       decideGeneralRequest: (draft) => run("decideGeneralRequest", draft),
       deleteGeneralRequest: (requestId) => run("deleteGeneralRequest", { requestId }),
+      createOffer: (draft) => run("createOffer", draft),
+      editOffer: (draft) => run("editOffer", draft),
+      deleteOffer: (id) => run("deleteOffer", { id }),
+      submitOffer: (id) => run("submitOffer", { id }),
+      decideOffer: (draft) => run("decideOffer", draft),
+      updateOfferStatus: (draft) => run("updateOfferStatus", draft),
+      toggleOfferFavourite: (id) => run("toggleOfferFavourite", { id }),
+      addOfferComment: (draft) => run("addOfferComment", draft),
+      addOfferAttachment: (draft) => run("addOfferAttachment", draft),
+      deleteOfferAttachment: (draft) => run("deleteOfferAttachment", draft),
+      markNotificationRead: (id) => run("markNotificationRead", { id }),
+      markAllNotificationsRead: () => run("markAllNotificationsRead", {}),
       refresh: async () => {
-        const result = await loadWorkspace();
-        setState(result.state);
-        if (result.actor) setActor(result.actor);
+        setIsSyncing(true);
+        try {
+          const result = await loadWorkspace();
+          setState(result.state);
+          if (result.actor) setActor(result.actor);
+          setLastSyncedAt(new Date());
+        } finally {
+          setIsSyncing(false);
+        }
       },
       reset: () => run("reset"),
     };
-  }, [actor, notice, ready, state]);
+  }, [actor, notice, ready, state, isSyncing, lastSyncedAt]);
 
   return <WorkspaceContext.Provider value={api}>{children}</WorkspaceContext.Provider>;
 }

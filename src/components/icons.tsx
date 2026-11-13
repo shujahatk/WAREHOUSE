@@ -19,7 +19,9 @@ export type IconName =
   | "documents"
   | "chat"
   | "users"
-  | "bell";
+  | "bell"
+  | "offers"
+  | "star";
 
 type IconProps = {
   name: IconName;
@@ -122,6 +124,17 @@ function iconShape(name: IconName): ReactNode {
       );
     case "bell":
       return <path d="M8 2.75a3.25 3.25 0 0 1 3.25 3.25v2.1l.9 1.65H3.85l.9-1.65v-2.1A3.25 3.25 0 0 1 8 2.75Z M6.6 12.4a1.4 1.4 0 0 0 2.8 0" />;
+    case "offers":
+      return (
+        <>
+          <path d="M2.5 4.5A1.5 1.5 0 0 1 4 3h8a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 11.5v-7Z" />
+          <path d="M5.5 3v2 M10.5 3v2 M5.5 8.5h5" />
+        </>
+      );
+    case "star":
+      return (
+        <path d="M8 2l1.8 3.65 4 .58-2.9 2.83.68 4L8 11.17l-3.58 1.89.68-4-2.9-2.83 4-.58L8 2Z" />
+      );
     default: {
       const exhaustive: never = name;
       throw new Error(`Unknown icon ${exhaustive}`);

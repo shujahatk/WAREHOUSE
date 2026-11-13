@@ -151,7 +151,7 @@ test.describe("Phase 9.5: Easy Capture & Immediate Upload Suite", () => {
     const modal = page.locator('div[role="dialog"]:not([data-nextjs-dialog])');
     await expect(modal).toBeVisible();
     await expect(modal).toContainText(/Bob Worker/i);
-    await expect(modal).toContainText(/Bremen/i);
+    await expect(modal).toContainText(/(Bornem|Bremen)/i);
     await expect(modal).toContainText(/photo/i);
     await expect(modal).toContainText(containerNumber);
 

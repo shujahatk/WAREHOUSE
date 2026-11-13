@@ -23,6 +23,16 @@ import {
   createGeneralRequest,
   decideGeneralRequest,
   softDeleteGeneralRequest,
+  createOffer,
+  editOffer,
+  softDeleteOffer,
+  submitOfferForReview,
+  decideOffer,
+  updateOfferStatus,
+  toggleOfferFavourite,
+  addOfferComment,
+  addOfferAttachment,
+  deleteOfferAttachment,
   deactivateByEmail,
   transferStock,
   postCorrection,
@@ -37,7 +47,7 @@ import { projectStore } from "../../domain/project.ts";
 import { seedStore } from "../../domain/seed.ts";
 import type { StoreData, UserProfile, UserRecord } from "../../domain/schemas.ts";
 import { storePath, withStore } from "../../domain/store.ts";
-import { emptyWorkspace, type Actor, type WorkspaceState } from "../../domain/view.ts";
+import { emptyWorkspace, visibleOffers, type Actor, type WorkspaceState } from "../../domain/view.ts";
 import { isActiveRole } from "../permissions.ts";
 import type { Services } from "./interfaces.ts";
 import { can, type Action, type Resource } from "./permissions.ts";
@@ -99,6 +109,7 @@ export class LocalAdapter {
         (r) => (currentUserId ? r.createdBy === currentUserId : r.createdByName === (actor as Actor).name),
       );
     }
+    state.offers = visibleOffers(state, actor);
     return { state, actor };
   }
 
@@ -367,6 +378,129 @@ export class LocalAdapter {
         softDelete: async (input) =>
           this.withActor(input.actorId, (store, actor) => {
             return softDeleteGeneralRequest(store, actor, input.requestId, now());
+          }),
+      },
+      offers: {
+        list: async (filter, actorId) => {
+          const snapshot = await this.snapshot();
+          if (actorId) {
+            const user = snapshot.users.find((u) => u.id === actorId);
+            if (user && user.role !== "owner" && user.role !== "moderator") {
+              return { items: [], total: 0, page: 1, pageSize: filter?.pageSize || 25, totalPages: 0 };
+            }
+          }
+
+          let items = (snapshot.offers || []).filter((o) => !o.deletedAt);
+          if (filter?.kind) items = items.filter((o) => o.kind === filter.kind);
+          if (filter?.status) items = items.filter((o) => o.status === filter.status);
+          if (filter?.priority) items = items.filter((o) => o.priority === filter.priority);
+          if (filter?.country) items = items.filter((o) => o.country.toLowerCase() === filter.country!.toLowerCase());
+          if (filter?.team) items = items.filter((o) => o.team.toLowerCase() === filter.team!.toLowerCase());
+          if (filter?.isFavourite !== undefined) items = items.filter((o) => o.isFavourite === filter.isFavourite);
+          if (filter?.search) {
+            const q = filter.search.toLowerCase().trim();
+            items = items.filter(
+              (o) =>
+                o.number.toLowerCase().includes(q) ||
+                o.material.toLowerCase().includes(q) ||
+                o.materialGrade.toLowerCase().includes(q) ||
+                o.country.toLowerCase().includes(q) ||
+                o.team.toLowerCase().includes(q) ||
+                o.description.toLowerCase().includes(q)
+            );
+          }
+
+          items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+          const page = Math.max(1, filter?.page || 1);
+          const pageSize = Math.max(1, filter?.pageSize || 25);
+          const total = items.length;
+          const totalPages = Math.ceil(total / pageSize) || 1;
+          const paginated = items.slice((page - 1) * pageSize, page * pageSize);
+
+          return { items: paginated, total, page, pageSize, totalPages };
+        },
+        get: async (id, actorId) => {
+          const snapshot = await this.snapshot();
+          if (actorId) {
+            const user = snapshot.users.find((u) => u.id === actorId);
+            if (user && user.role !== "owner" && user.role !== "moderator") return null;
+          }
+          return (snapshot.offers || []).find((o) => (o.id === id || o.number === id) && !o.deletedAt) ?? null;
+        },
+        attachments: async (offerId, actorId) => {
+          const snapshot = await this.snapshot();
+          if (actorId) {
+            const user = snapshot.users.find((u) => u.id === actorId);
+            if (user && user.role !== "owner" && user.role !== "moderator") return [];
+          }
+          return (snapshot.offerAttachments || []).filter((att) => att.offerId === offerId);
+        },
+        comments: async (offerId, actorId) => {
+          const snapshot = await this.snapshot();
+          if (actorId) {
+            const user = snapshot.users.find((u) => u.id === actorId);
+            if (user && user.role !== "owner" && user.role !== "moderator") return [];
+          }
+          return (snapshot.offerComments || []).filter((c) => c.offerId === offerId);
+        },
+        activities: async (offerId, actorId) => {
+          const snapshot = await this.snapshot();
+          if (actorId) {
+            const user = snapshot.users.find((u) => u.id === actorId);
+            if (user && user.role !== "owner" && user.role !== "moderator") return [];
+          }
+          return (snapshot.offerActivities || []).filter((act) => act.offerId === offerId);
+        },
+        create: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            authorize(actor, "offer:create");
+            return createOffer(store, actor, input, now());
+          }),
+        edit: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            authorize(actor, "offer:edit");
+            return editOffer(store, actor, input, now());
+          }),
+        delete: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            authorize(actor, "offer:delete");
+            return softDeleteOffer(store, actor, input.id, now());
+          }),
+        submitReview: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            authorize(actor, "offer:submit");
+            return submitOfferForReview(store, actor, input.id, now());
+          }),
+        decide: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            if (input.decision === "approved") authorize(actor, "offer:approve");
+            else authorize(actor, "offer:reject");
+            return decideOffer(store, actor, input.id, input.decision, input.decisionNote, now());
+          }),
+        updateStatus: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            authorize(actor, "offer:status");
+            return updateOfferStatus(store, actor, input.id, input.status, now());
+          }),
+        toggleFavourite: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            return toggleOfferFavourite(store, actor, input.id, now());
+          }),
+        addComment: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            authorize(actor, "offer:comment");
+            return addOfferComment(store, actor, input.id, input.comment, now());
+          }),
+        addAttachment: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            authorize(actor, "offer:attach");
+            return addOfferAttachment(store, actor, input.id, input, now());
+          }),
+        deleteAttachment: async (input) =>
+          this.withActor(input.actorId, (store, actor) => {
+            authorize(actor, "offer:attach");
+            return deleteOfferAttachment(store, actor, input.id, input.attachmentId, now());
           }),
       },
       inventory: {

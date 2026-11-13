@@ -60,7 +60,18 @@ export type Action =
   | "stock:move"
   | "stock:view"
   | "audit:view"
-  | "report:view";
+  | "report:view"
+  | "offer:create"
+  | "offer:edit"
+  | "offer:delete"
+  | "offer:view"
+  | "offer:submit"
+  | "offer:approve"
+  | "offer:reject"
+  | "offer:negotiate"
+  | "offer:status"
+  | "offer:comment"
+  | "offer:attach";
 
 export type Resource = {
   warehouseId?: string | null;
@@ -126,7 +137,19 @@ export function can(
       case "material:manage":
       case "packaging:manage":
       case "threshold:set":
+      case "offer:view":
+      case "offer:approve":
+      case "offer:reject":
+      case "offer:comment":
         return true;
+      case "offer:create":
+      case "offer:edit":
+      case "offer:delete":
+      case "offer:submit":
+      case "offer:negotiate":
+      case "offer:status":
+      case "offer:attach":
+        return false;
       case "order:create":
       case "order:submit":
       case "order:edit":
@@ -289,6 +312,33 @@ export function can(
       case "customer:manage":
       case "threshold:set":
       case "audit:view":
+      default:
+        return false;
+    }
+  }
+
+  // 4. Sales & Purchasing Offer Moderator:
+  // - Creates, edits, deletes (soft-delete), reviews, negotiates, and manages purchasing & selling offers
+  // - Submits offers for Admin review
+  // - Updates permitted offer statuses (negotiating, won, lost)
+  // - Manages offer attachments (images & documents) and adds comments/notes
+  // - Views offer activity and history
+  // - CANNOT approve or reject offers (Admin only)
+  // - CANNOT access warehouse operations, inventory, shipments, requests, or administrative settings
+  if (user.role === "moderator") {
+    switch (action) {
+      case "offer:create":
+      case "offer:edit":
+      case "offer:delete":
+      case "offer:view":
+      case "offer:submit":
+      case "offer:negotiate":
+      case "offer:status":
+      case "offer:comment":
+      case "offer:attach":
+        return true;
+      case "offer:approve":
+      case "offer:reject":
       default:
         return false;
     }

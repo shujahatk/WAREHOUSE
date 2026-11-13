@@ -59,5 +59,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
     [identity, ready, router, signOut],
   );
 
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <p className="text-sm text-neutral-600">Loading workspace…</p>
+      </div>
+    );
+  }
+
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

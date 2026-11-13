@@ -1,13 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { PageTitle, Surface } from "@/components/ref/chrome";
 import { PackagingEditor } from "@/components/settings/packaging-editor";
 import { useWorkspaceSearch } from "@/components/shell/search-context";
 import { formatKg } from "@/domain/view";
+import { CsvImportModal } from "@/components/import/csv-import-modal";
+import { Icon } from "@/components/icons";
 
 export default function MaterialsPage() {
   const { state } = useDemo();
+  const [importOpen, setImportOpen] = useState(false);
   const query = useWorkspaceSearch().trim().toLowerCase();
 
   const materialGroups = new Map<
@@ -36,9 +40,35 @@ export default function MaterialsPage() {
 
   return (
     <>
-      <PageTitle
-        title="Materials & Packaging"
-        subtitle="Master catalog of tracked materials and packaging tare weights."
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <PageTitle
+          title="Materials & Packaging"
+          subtitle="Master catalog of tracked materials and packaging tare weights."
+        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-medium text-neutral-800 shadow-xs hover:bg-neutral-50"
+          >
+            <Icon name="documents" className="h-3.5 w-3.5" />
+            Import CSV
+          </button>
+          <a
+            href="/api/reports/export?type=materials"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-medium text-neutral-800 shadow-xs hover:bg-neutral-50"
+          >
+            <Icon name="reports" className="h-3.5 w-3.5" />
+            Export CSV
+          </a>
+        </div>
+      </div>
+      <CsvImportModal
+        isOpen={importOpen}
+        onClose={() => setImportOpen(false)}
+        defaultEntity="materials"
       />
       <div className="grid gap-6 lg:grid-cols-2">
         <Surface className="overflow-x-auto">

@@ -43,6 +43,16 @@ const legacyCustomer: AuthUser = {
   active: true,
 };
 
+const moderator: AuthUser = {
+  id: "u-mod-1",
+  email: "moderator@example.com",
+  name: "Morgan Moderator",
+  role: "moderator",
+  warehouseId: null,
+  companyId: null,
+  active: true,
+};
+
 const inactiveOwner: AuthUser = {
   ...owner,
   id: "u-owner-inactive",
@@ -109,6 +119,19 @@ test("Admin (owner) views all operational data/documents/images and approves/rej
   assert.equal(can(owner, "stock:adjust"), false);
   assert.equal(can(owner, "stock:transfer"), false);
   assert.equal(can(owner, "transfer:create"), false);
+
+  // Offers: Admin can view, approve, reject, comment; CANNOT create, edit, delete, submit, negotiate, status, or attach
+  assert.equal(can(owner, "offer:view"), true);
+  assert.equal(can(owner, "offer:approve"), true);
+  assert.equal(can(owner, "offer:reject"), true);
+  assert.equal(can(owner, "offer:comment"), true);
+  assert.equal(can(owner, "offer:create"), false);
+  assert.equal(can(owner, "offer:edit"), false);
+  assert.equal(can(owner, "offer:delete"), false);
+  assert.equal(can(owner, "offer:submit"), false);
+  assert.equal(can(owner, "offer:negotiate"), false);
+  assert.equal(can(owner, "offer:status"), false);
+  assert.equal(can(owner, "offer:attach"), false);
 });
 
 test("Staff (manager) can create/edit PO/SO even after start, manage suppliers/customers, and view all operations, but cannot delete, approve, assign workers, or adjust/transfer stock", () => {
@@ -147,9 +170,22 @@ test("Staff (manager) can create/edit PO/SO even after start, manage suppliers/c
   assert.equal(can(manager, "warehouse:manage"), false);
   assert.equal(can(manager, "material:manage"), false);
   assert.equal(can(manager, "packaging:manage"), false);
+
+  // Staff is denied all offer actions
+  assert.equal(can(manager, "offer:view"), false);
+  assert.equal(can(manager, "offer:create"), false);
+  assert.equal(can(manager, "offer:edit"), false);
+  assert.equal(can(manager, "offer:delete"), false);
+  assert.equal(can(manager, "offer:submit"), false);
+  assert.equal(can(manager, "offer:approve"), false);
+  assert.equal(can(manager, "offer:reject"), false);
+  assert.equal(can(manager, "offer:negotiate"), false);
+  assert.equal(can(manager, "offer:status"), false);
+  assert.equal(can(manager, "offer:comment"), false);
+  assert.equal(can(manager, "offer:attach"), false);
 });
 
-test("Worker permissions: scoped to assigned warehouse, can complete approved operations and upload CMR/Annex VII/photos, cannot approve or adjust/transfer stock", () => {
+test("Worker permissions: scoped to assigned warehouse, can complete approved operations and upload CMR/Annex VII/photos, cannot approve or adjust/transfer stock, cannot access offers", () => {
   // Allowed at assigned warehouse
   assert.equal(can(workerBremen, "request:create", { warehouseId: "wh-bremen" }), true);
   assert.equal(can(workerBremen, "request:view", { warehouseId: "wh-bremen" }), true);
@@ -190,4 +226,53 @@ test("Worker permissions: scoped to assigned warehouse, can complete approved op
   assert.equal(can(workerBremen, "request:delete", { createdBy: "u-worker-1", status: "approved" }), false);
   assert.equal(can(workerBremen, "request:delete", { createdBy: "u-worker-1", status: "completed" }), false);
   assert.equal(can(workerBremen, "request:delete", { createdBy: "u-worker-other", status: "submitted" }), false);
+
+  // Worker is denied all offer actions
+  assert.equal(can(workerBremen, "offer:view"), false);
+  assert.equal(can(workerBremen, "offer:create"), false);
+  assert.equal(can(workerBremen, "offer:edit"), false);
+  assert.equal(can(workerBremen, "offer:delete"), false);
+  assert.equal(can(workerBremen, "offer:submit"), false);
+  assert.equal(can(workerBremen, "offer:approve"), false);
+  assert.equal(can(workerBremen, "offer:reject"), false);
+  assert.equal(can(workerBremen, "offer:negotiate"), false);
+  assert.equal(can(workerBremen, "offer:status"), false);
+  assert.equal(can(workerBremen, "offer:comment"), false);
+  assert.equal(can(workerBremen, "offer:attach"), false);
+});
+
+test("Sales & Purchasing Offer Moderator permissions: full offer CRUD, review submission, status update, attachments, comments, but CANNOT approve/reject offers or access warehouse operations", () => {
+  // Allowed for Moderator: full offer lifecycle except approve/reject
+  assert.equal(can(moderator, "offer:view"), true);
+  assert.equal(can(moderator, "offer:create"), true);
+  assert.equal(can(moderator, "offer:edit"), true);
+  assert.equal(can(moderator, "offer:delete"), true);
+  assert.equal(can(moderator, "offer:submit"), true);
+  assert.equal(can(moderator, "offer:negotiate"), true);
+  assert.equal(can(moderator, "offer:status"), true);
+  assert.equal(can(moderator, "offer:comment"), true);
+  assert.equal(can(moderator, "offer:attach"), true);
+
+  // Prohibited for Moderator: Admin approval/rejection authority
+  assert.equal(can(moderator, "offer:approve"), false);
+  assert.equal(can(moderator, "offer:reject"), false);
+
+  // Prohibited for Moderator: operational warehouse actions
+  assert.equal(can(moderator, "order:create"), false);
+  assert.equal(can(moderator, "order:edit"), false);
+  assert.equal(can(moderator, "order:delete"), false);
+  assert.equal(can(moderator, "order:approve"), false);
+  assert.equal(can(moderator, "request:create"), false);
+  assert.equal(can(moderator, "request:approve"), false);
+  assert.equal(can(moderator, "request:complete"), false);
+  assert.equal(can(moderator, "shipment:create"), false);
+  assert.equal(can(moderator, "shipment:edit"), false);
+  assert.equal(can(moderator, "stock:move"), false);
+  assert.equal(can(moderator, "stock:adjust"), false);
+  assert.equal(can(moderator, "stock:transfer"), false);
+  assert.equal(can(moderator, "transfer:create"), false);
+  assert.equal(can(moderator, "user:manage"), false);
+  assert.equal(can(moderator, "warehouse:manage"), false);
+  assert.equal(can(moderator, "audit:view"), false);
+  assert.equal(can(moderator, "report:view"), false);
 });

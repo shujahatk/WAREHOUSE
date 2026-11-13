@@ -23,6 +23,10 @@ import type {
   GeneralRequestPriority,
   WorkerGeneralRequest,
   WorkerGeneralRequestAttachment,
+  Offer,
+  OfferAttachment,
+  OfferComment,
+  OfferActivity,
 } from "@/domain/schemas";
 import type { Result } from "@/domain/result";
 
@@ -169,6 +173,80 @@ export interface GeneralRequestRepository {
     actorId: string;
   }): Promise<Result<WorkerGeneralRequest>>;
   softDelete(input: { requestId: string; actorId: string }): Promise<Result<WorkerGeneralRequest>>;
+}
+
+export type OfferFilter = {
+  kind?: "purchasing" | "selling";
+  status?: string;
+  priority?: string;
+  country?: string;
+  team?: string;
+  isFavourite?: boolean;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type PaginatedOffers = {
+  items: Offer[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export interface OfferRepository {
+  list(filter?: OfferFilter, actorId?: string): Promise<PaginatedOffers>;
+  get(id: string, actorId?: string): Promise<Offer | null>;
+  attachments(offerId: string, actorId?: string): Promise<OfferAttachment[]>;
+  comments(offerId: string, actorId?: string): Promise<OfferComment[]>;
+  activities(offerId: string, actorId?: string): Promise<OfferActivity[]>;
+  create(input: {
+    kind: "purchasing" | "selling";
+    material: string;
+    materialType?: string;
+    materialGrade?: string;
+    quantity: number;
+    unit?: string;
+    pricePerUnit: number;
+    currency?: string;
+    country: string;
+    location?: string;
+    truckLoads?: number;
+    description?: string;
+    priority?: "low" | "medium" | "high" | "urgent";
+    offerType?: string;
+    team?: string;
+    status?: "draft" | "received";
+    attachments?: { name: string; mime?: string; bytesBase64?: string }[];
+    actorId: string;
+  }): Promise<Result<Offer>>;
+  edit(input: {
+    id: string;
+    material?: string;
+    materialType?: string;
+    materialGrade?: string;
+    quantity?: number;
+    unit?: string;
+    pricePerUnit?: number;
+    currency?: string;
+    country?: string;
+    location?: string;
+    truckLoads?: number;
+    description?: string;
+    priority?: "low" | "medium" | "high" | "urgent";
+    offerType?: string;
+    team?: string;
+    actorId: string;
+  }): Promise<Result<Offer>>;
+  delete(input: { id: string; actorId: string }): Promise<Result<Offer>>;
+  submitReview(input: { id: string; actorId: string }): Promise<Result<Offer>>;
+  decide(input: { id: string; decision: "approved" | "rejected"; decisionNote: string; actorId: string }): Promise<Result<Offer>>;
+  updateStatus(input: { id: string; status: string; actorId: string }): Promise<Result<Offer>>;
+  toggleFavourite(input: { id: string; actorId: string }): Promise<Result<Offer>>;
+  addComment(input: { id: string; comment: string; actorId: string }): Promise<Result<OfferComment>>;
+  addAttachment(input: { id: string; name: string; mime?: string; bytesBase64?: string; byteSize?: number; kind?: "image" | "document"; actorId: string }): Promise<Result<OfferAttachment>>;
+  deleteAttachment(input: { id: string; attachmentId: string; actorId: string }): Promise<Result<void>>;
 }
 
 export interface InventoryRepository {
@@ -323,6 +401,7 @@ export type Services = {
   shipments: ShipmentRepository;
   requests: RequestRepository;
   generalRequests: GeneralRequestRepository;
+  offers: OfferRepository;
   inventory: InventoryRepository;
   documents: DocumentRepository;
   customs: CustomsRepository;

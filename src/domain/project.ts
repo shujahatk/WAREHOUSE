@@ -18,7 +18,19 @@ import {
   GENERAL_REQUEST_STATUS_LABELS,
   type GeneralRequestView,
   type GeneralRequestAttachmentView,
+  OFFER_STATUS_LABELS,
+  OFFER_PRIORITY_LABELS,
+  OFFER_APPROVAL_LABELS,
+  type OfferView,
+  type OfferAttachmentView,
+  type OfferCommentView,
+  type OfferActivityView,
+  type ContainerInventoryView,
+  type ContainerMaterialDetail,
+  type ContainerPackagingDetail,
+  type InventoryHistoryView,
 } from "./view.ts";
+import type { Role } from "@/lib/permissions";
 
 const orderStatus: Record<string, OrderStatus> = {
   draft: "Planned",
@@ -45,10 +57,14 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     const company = companyById.get(order.companyId);
     const lines = store.purchaseOrderLines.filter((line) => line.purchaseOrderId === order.id);
     const linked = store.shipments.find((item) => item.purchaseOrderId === order.id);
+    const warehouse = linked ? (warehouseName.get(linked.warehouseId) ?? "") : "";
+    const title = order.title || (company ? `${company.name} - ${lines[0]?.description || "Order"}` : order.number);
     return {
       number: order.number,
+      title,
       supplier: company?.kind === "supplier" ? company.name : "",
       material: lines.map((line) => line.description).filter(Boolean).join(", ") || "—",
+      warehouse: warehouse || "—",
       quantityKg: lines.reduce((sum, line) => sum + line.quantityKg, 0),
       valueEur: order.valueEur,
       unitPrice: "",
@@ -284,15 +300,47 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
 
   const activity = [...store.auditLog]
     .reverse()
-    .slice(0, 100)
-    .map((entry) => ({
-      id: entry.id,
-      text: entry.newValue || entry.action,
-      status: entry.action,
-      href: hrefFor(store, entry.targetType, entry.targetId),
-      actor: userById.get(entry.userId)?.name ?? "System",
-      createdAt: entry.createdAt,
-    }));
+    .slice(0, 500)
+    .map((entry) => {
+      const u = userById.get(entry.userId);
+      const w = entry.warehouseId ? store.warehouses.find((wh) => wh.id === entry.warehouseId) : undefined;
+      return {
+        id: entry.id,
+        text: entry.newValue || entry.action,
+        status: entry.action,
+        href: hrefFor(store, entry.targetType, entry.targetId),
+        actor: entry.actorName || u?.name || "System",
+        actorRole: entry.actorRole || u?.role,
+        module: entry.targetType,
+        recordId: entry.targetId,
+        warehouse: w?.name ?? null,
+        oldValue: entry.oldValue,
+        newValue: entry.newValue,
+        context: entry.context,
+        requestReference: entry.requestReference,
+        createdAt: entry.createdAt,
+      };
+    });
+
+  const notifications = (store.notifications ?? [])
+    .slice()
+    .reverse()
+    .map((n) => {
+      const w = n.warehouseId ? store.warehouses.find((wh) => wh.id === n.warehouseId) : undefined;
+      return {
+        id: n.id,
+        eventType: n.eventType,
+        title: n.title,
+        message: n.message,
+        targetType: n.targetType ?? undefined,
+        targetId: n.targetId ?? undefined,
+        link: n.link ?? undefined,
+        warehouse: w?.name ?? null,
+        read: n.read,
+        readAt: n.readAt ?? null,
+        createdAt: n.createdAt,
+      };
+    });
 
   const requests = store.requests.map((req) => {
     const shipment = store.shipments.find((item) => item.id === req.shipmentId);
@@ -399,6 +447,235 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       };
     });
 
+  const offers: OfferView[] = (store.offers || [])
+    .filter((o) => !o.deletedAt)
+    .map((o) => {
+      const creator = userById.get(o.createdBy);
+      const decider = o.decidedBy ? userById.get(o.decidedBy) : null;
+      const updater = o.updatedBy ? userById.get(o.updatedBy) : null;
+
+      const offerAttachments: OfferAttachmentView[] = (store.offerAttachments || [])
+        .filter((att) => att.offerId === o.id)
+        .map((att) => {
+          const uploader = userById.get(att.uploadedBy);
+          return {
+            id: att.id,
+            offerId: att.offerId,
+            name: att.name,
+            kind: att.kind,
+            mime: att.mime,
+            byteSize: att.byteSize,
+            url: att.storageKey ? sign(att.storageKey) : att.url ?? null,
+            storageKey: att.storageKey,
+            uploadedBy: att.uploadedBy,
+            uploadedByName: uploader?.name ?? "User",
+            createdAt: att.createdAt,
+          };
+        });
+
+      const comments: OfferCommentView[] = (store.offerComments || [])
+        .filter((c) => c.offerId === o.id)
+        .map((c) => {
+          const author = userById.get(c.authorId);
+          return {
+            id: c.id,
+            offerId: c.offerId,
+            authorId: c.authorId,
+            authorName: author?.name ?? "User",
+            authorRole: (author?.role ?? "moderator") as Role,
+            comment: c.comment,
+            createdAt: c.createdAt,
+          };
+        });
+
+      const activities: OfferActivityView[] = (store.offerActivities || [])
+        .filter((act) => act.offerId === o.id)
+        .map((act) => {
+          const actor = userById.get(act.actorId);
+          return {
+            id: act.id,
+            offerId: act.offerId,
+            actorId: act.actorId,
+            actorName: actor?.name ?? "User",
+            action: act.action,
+            details: act.details,
+            createdAt: act.createdAt,
+          };
+        });
+
+      return {
+        id: o.id,
+        number: o.number,
+        kind: o.kind,
+        kindLabel: o.kind === "purchasing" ? ("Purchasing Offer" as const) : ("Selling Offer" as const),
+        material: o.material,
+        materialType: o.materialType || "Plastics",
+        materialGrade: o.materialGrade || "Standard",
+        quantity: o.quantity,
+        unit: o.unit || "kg",
+        pricePerUnit: o.pricePerUnit,
+        currency: o.currency || "EUR",
+        totalValue: o.totalValue,
+        country: o.country,
+        location: o.location || "",
+        truckLoads: o.truckLoads || 1,
+        description: o.description || "",
+        priority: OFFER_PRIORITY_LABELS[o.priority] ?? "Medium",
+        priorityKey: o.priority,
+        offerType: o.offerType || "Spot",
+        team: o.team || "General",
+        status: OFFER_STATUS_LABELS[o.status] ?? "Draft",
+        statusKey: o.status,
+        approvalStatus: o.approvalStatus,
+        approvalLabel: OFFER_APPROVAL_LABELS[o.approvalStatus] ?? "Pending",
+        adminDecisionNote: o.adminDecisionNote,
+        decidedBy: o.decidedBy,
+        decidedByName: decider?.name ?? null,
+        decidedAt: o.decidedAt,
+        isFavourite: o.isFavourite || false,
+        createdBy: o.createdBy,
+        createdByName: creator?.name ?? "Moderator",
+        createdAt: o.createdAt,
+        updatedBy: o.updatedBy,
+        updatedByName: updater?.name ?? null,
+        updatedAt: o.updatedAt,
+        attachments: offerAttachments,
+        comments,
+        activities,
+      };
+    });
+
+  // --------------------------------------------------------------------------
+  // Container-Level Inventory Projection
+  // --------------------------------------------------------------------------
+  const STANDARD_CONTAINER_TARE_KG = 2200; // Standard 20ft container tare (kept separate)
+
+  const containerInventory: ContainerInventoryView[] = store.shipments.map((shipment) => {
+    const order = shipment.purchaseOrderId ? store.purchaseOrders.find((po) => po.id === shipment.purchaseOrderId) : undefined;
+    const warehouse = warehouseName.get(shipment.warehouseId) ?? "—";
+    const linkedRequests = store.requests.filter((req) => req.shipmentId === shipment.id && req.status !== "deleted");
+    const lines = linkedRequests.flatMap((req) => store.requestLines.filter((line) => line.requestId === req.id));
+
+    // Group lines by material
+    const materialMap = new Map<string, { materialName: string; netWeightKg: number; grossWeightKg: number; packagings: ContainerPackagingDetail[] }>();
+
+    for (const line of lines) {
+      const mat = materialById.get(line.materialId);
+      const pkg = packagingById.get(line.packagingTypeId);
+      const matId = line.materialId;
+      const matName = mat?.description ?? "Material";
+      const pkgName = pkg?.name ?? "Standard Pallet";
+      const emptyUnitTareKg = pkg?.tareKg ?? (line.packageCount > 0 ? line.tareTotalKg / line.packageCount : 0);
+
+      let matEntry = materialMap.get(matId);
+      if (!matEntry) {
+        matEntry = { materialName: matName, netWeightKg: 0, grossWeightKg: 0, packagings: [] };
+        materialMap.set(matId, matEntry);
+      }
+      matEntry.netWeightKg += line.netKg;
+      matEntry.grossWeightKg += line.grossKg;
+
+      matEntry.packagings.push({
+        packagingTypeId: line.packagingTypeId,
+        packagingTypeName: pkgName,
+        packageCount: line.packageCount,
+        emptyUnitTareKg: Math.round(emptyUnitTareKg * 100) / 100,
+        totalPackagingWeightKg: Math.round(line.tareTotalKg * 100) / 100,
+      });
+    }
+
+    const materials: ContainerMaterialDetail[] = Array.from(materialMap.entries()).map(([materialId, data]) => ({
+      materialId,
+      materialName: data.materialName,
+      netWeightKg: Math.round(data.netWeightKg * 100) / 100,
+      grossWeightKg: Math.round(data.grossWeightKg * 100) / 100,
+      packagings: data.packagings,
+    }));
+
+    const totalPackagingCount = lines.reduce((sum, l) => sum + l.packageCount, 0);
+    const totalPackagingWeightKg = Math.round(lines.reduce((sum, l) => sum + l.tareTotalKg, 0) * 100) / 100;
+    const totalNetWeightKg = Math.round(lines.reduce((sum, l) => sum + l.netKg, 0) * 100) / 100;
+    // Gross packed cargo weight = Net material weight + Total packaging weight
+    const grossPackedCargoWeightKg = Math.round((totalNetWeightKg + totalPackagingWeightKg) * 100) / 100;
+    const totalGrossCargoAndContainerKg = Math.round((grossPackedCargoWeightKg + STANDARD_CONTAINER_TARE_KG) * 100) / 100;
+
+    return {
+      id: shipment.id,
+      containerNumber: shipment.containerNumber || shipment.reference,
+      shipmentReference: shipment.reference,
+      poNumber: order?.number ?? null,
+      warehouse,
+      status: shipment.status,
+      direction: shipment.direction,
+      materials,
+      totalPackagingCount,
+      totalPackagingWeightKg,
+      totalNetWeightKg,
+      grossPackedCargoWeightKg,
+      containerTareKg: STANDARD_CONTAINER_TARE_KG,
+      totalGrossCargoAndContainerKg,
+      updatedAt: shipment.handedOverAt || shipment.overrideAt || now,
+    };
+  });
+
+  // --------------------------------------------------------------------------
+  // Complete Inventory History Projection (Append-Only)
+  // --------------------------------------------------------------------------
+  const inventoryHistory: InventoryHistoryView[] = (store.inventoryHistory || []).map((entry) => ({
+    id: entry.id,
+    materialName: entry.materialName,
+    warehouseName: entry.warehouseName,
+    containerNumber: entry.containerNumber,
+    quantityBefore: entry.quantityBefore,
+    quantityChange: entry.quantityChange,
+    quantityAfter: entry.quantityAfter,
+    packagingTypeName: entry.packagingTypeName,
+    packagingCount: entry.packagingCount,
+    packagingUnitTareKg: entry.packagingUnitTareKg,
+    totalPackagingWeightKg: entry.totalPackagingWeightKg,
+    grossWeightKg: entry.grossWeightKg,
+    operationType: entry.operationType,
+    operationReason: entry.operationReason,
+    reference: entry.reference,
+    poNumber: entry.poNumber,
+    soNumber: entry.soNumber,
+    performedByName: entry.performedByName,
+    createdAt: entry.createdAt,
+  }));
+
+  // Backfill from existing stockMovements if store.inventoryHistory is empty
+  if (inventoryHistory.length === 0 && store.stockMovements.length > 0) {
+    for (const mov of store.stockMovements) {
+      const mat = materialById.get(mov.materialId);
+      const wh = store.warehouses.find((w) => w.id === mov.warehouseId);
+      const req = store.requests.find((r) => r.id === mov.requestId);
+      const line = store.requestLines.find((l) => l.id === mov.requestLineId);
+      const pkg = line ? packagingById.get(line.packagingTypeId) : undefined;
+      const user = userById.get(mov.createdBy);
+      inventoryHistory.push({
+        id: mov.id,
+        materialName: mat?.description ?? "Material",
+        warehouseName: wh?.name ?? "Warehouse",
+        containerNumber: req?.containerNumber ?? null,
+        quantityBefore: mov.weightKg,
+        quantityChange: mov.direction === "in" ? mov.weightKg : -mov.weightKg,
+        quantityAfter: mov.weightKg,
+        packagingTypeName: pkg?.name ?? null,
+        packagingCount: line?.packageCount ?? null,
+        packagingUnitTareKg: pkg?.tareKg ?? null,
+        totalPackagingWeightKg: line?.tareTotalKg ?? null,
+        grossWeightKg: line?.grossKg ?? null,
+        operationType: mov.direction === "in" ? "unloading" : "loading",
+        operationReason: `${mov.direction === "in" ? "Inbound receipt" : "Outbound dispatch"} for ${req?.number || mov.id}`,
+        reference: req?.number ?? mov.id,
+        poNumber: null,
+        soNumber: null,
+        performedByName: user?.name ?? "System",
+        createdAt: mov.createdAt,
+      });
+    }
+  }
+
   return {
     orders,
     containers,
@@ -435,6 +712,10 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     postedMovements,
     requests,
     generalRequests,
+    offers,
+    containerInventory,
+    inventoryHistory,
+    notifications,
     directory: {
       warehouses: store.warehouses.map((item) => ({ id: item.id, name: item.name, country: item.country })),
       companies: store.companies.map((item) => ({ id: item.id, name: item.name, kind: item.kind })),

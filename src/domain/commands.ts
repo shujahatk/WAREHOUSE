@@ -27,6 +27,9 @@ import {
   type UserProfile,
   type UserRecord,
   type WorkerGeneralRequest,
+  type Offer,
+  type OfferAttachment,
+  type OfferComment,
 } from "./schemas.ts";
 
 export type CommandResult = { error?: string; notice?: string };
@@ -57,7 +60,24 @@ export function profile(user: UserRecord): UserProfile {
   };
 }
 
-function audit(store: StoreData, userId: string, action: string, targetType: string, targetId: string, detail: string, now: string, oldValue: string | null = null) {
+function audit(
+  store: StoreData,
+  userId: string,
+  action: string,
+  targetType: string,
+  targetId: string,
+  detail: string,
+  now: string,
+  oldValue: string | null = null,
+  options?: {
+    actorRole?: string | null;
+    actorName?: string | null;
+    warehouseId?: string | null;
+    context?: string | null;
+    requestReference?: string | null;
+  }
+) {
+  const user = store.users.find((u) => u.id === userId);
   store.auditLog.push({
     id: randomUUID(),
     userId,
@@ -67,7 +87,63 @@ function audit(store: StoreData, userId: string, action: string, targetType: str
     oldValue,
     newValue: detail,
     createdAt: now,
+    actorRole: options?.actorRole ?? user?.role ?? null,
+    actorName: options?.actorName ?? user?.name ?? null,
+    warehouseId: options?.warehouseId ?? user?.warehouseId ?? null,
+    context: options?.context ?? null,
+    requestReference: options?.requestReference ?? null,
   });
+}
+
+function notify(
+  store: StoreData,
+  recipientId: string,
+  eventType: string,
+  title: string,
+  message: string,
+  now: string,
+  options?: {
+    targetType?: string | null;
+    targetId?: string | null;
+    link?: string | null;
+    warehouseId?: string | null;
+  }
+) {
+  if (!store.notifications) store.notifications = [];
+  store.notifications.push({
+    id: randomUUID(),
+    recipientId,
+    eventType,
+    title,
+    message,
+    targetType: options?.targetType ?? null,
+    targetId: options?.targetId ?? null,
+    link: options?.link ?? null,
+    warehouseId: options?.warehouseId ?? null,
+    read: false,
+    readAt: null,
+    createdAt: now,
+  });
+}
+
+export function notifyRole(
+  store: StoreData,
+  role: Role,
+  eventType: string,
+  title: string,
+  message: string,
+  now: string,
+  options?: {
+    targetType?: string | null;
+    targetId?: string | null;
+    link?: string | null;
+    warehouseId?: string | null;
+  }
+) {
+  const recipients = store.users.filter((u) => u.active && u.role === role && (!options?.warehouseId || !u.warehouseId || u.warehouseId === options.warehouseId));
+  for (const r of recipients) {
+    notify(store, r.id, eventType, title, message, now, options);
+  }
 }
 
 function same(left: string, right: string): boolean {
@@ -98,6 +174,7 @@ function ensureOrder(store: StoreData, number: string, companyId: string, actorI
   const created: PurchaseOrder = {
     id: randomUUID(),
     number,
+    title: `Order ${number}`,
     companyId,
     status: "draft",
     valueEur: 0,
@@ -121,6 +198,35 @@ function commitRequestNumber(store: StoreData, now: string) {
   const row = store.requestSequence.find((item) => item.year === year);
   if (row) row.next += 1;
   else store.requestSequence.push({ year, next: 1 });
+}
+
+export function nextPurchaseOrderNumber(store: StoreData, now: string): string {
+  const currentYear = new Date(now).getUTCFullYear() || new Date().getUTCFullYear();
+  if (!store.poSequence) {
+    store.poSequence = [];
+  }
+  let seq = store.poSequence.find((item) => item.year === currentYear);
+  if (!seq) {
+    let highest = 0;
+    const regex = new RegExp(`^PO-${currentYear}-(\\d{4,})$`, "i");
+    for (const po of store.purchaseOrders) {
+      const match = po.number.match(regex);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        if (val > highest) highest = val;
+      }
+    }
+    seq = { year: currentYear, next: highest + 1 };
+    store.poSequence.push(seq);
+  }
+
+  while (store.purchaseOrders.some((po) => same(po.number, `PO-${currentYear}-${String(seq!.next).padStart(4, "0")}`))) {
+    seq.next += 1;
+  }
+
+  const numStr = `PO-${currentYear}-${String(seq.next).padStart(4, "0")}`;
+  seq.next += 1;
+  return numStr;
 }
 
 export function cleanupExpiredPendingUploads(store: StoreData, now: string): number {
@@ -554,6 +660,570 @@ export function softDeleteGeneralRequest(
   return ok(request);
 }
 
+export function nextOfferNumber(store: StoreData, kind: "purchasing" | "selling", now: string): string {
+  const year = new Date(now).getUTCFullYear();
+  const prefix = kind === "purchasing" ? "POF" : "SOF";
+  if (!store.offerSequence) store.offerSequence = [];
+  let seq = store.offerSequence.find((s) => s.kind === kind && s.year === year);
+  if (!seq) {
+    seq = { kind, year, next: 1 };
+    store.offerSequence.push(seq);
+  }
+  const current = seq.next;
+  seq.next += 1;
+  return `${prefix}-${year}-${String(current).padStart(4, "0")}`;
+}
+
+export function createOffer(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<Offer> {
+  if (actor.role !== "moderator") {
+    return fail("Only a Sales & Purchasing Offer Moderator can create offers.");
+  }
+
+  const kind = text(payload.kind).toLowerCase() as "purchasing" | "selling";
+  if (kind !== "purchasing" && kind !== "selling") {
+    return fail("Offer kind must be either purchasing or selling.");
+  }
+
+  const material = text(payload.material);
+  if (!material) return fail("Material name/specification is required.");
+
+  const materialType = text(payload.materialType) || "Plastics";
+  const materialGrade = text(payload.materialGrade) || "Standard";
+
+  const quantity = typeof payload.quantity === "number" ? payload.quantity : parseFloat(String(payload.quantity || 0));
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return fail("Quantity must be a positive number.");
+  }
+
+  const unit = text(payload.unit) || "kg";
+  const pricePerUnit = typeof payload.pricePerUnit === "number" ? payload.pricePerUnit : parseFloat(String(payload.pricePerUnit || 0));
+  if (!Number.isFinite(pricePerUnit) || pricePerUnit < 0) {
+    return fail("Price per unit must be zero or greater.");
+  }
+
+  const currency = (text(payload.currency) || "EUR").toUpperCase();
+  const totalValue = Math.round(quantity * pricePerUnit * 100) / 100;
+
+  const country = text(payload.country);
+  if (!country) return fail("Location/Country is required.");
+
+  const location = text(payload.location);
+  const truckLoads = typeof payload.truckLoads === "number" ? Math.max(0, Math.floor(payload.truckLoads)) : parseInt(String(payload.truckLoads || 1), 10) || 1;
+  const description = text(payload.description);
+  
+  const priorityRaw = text(payload.priority).toLowerCase();
+  const priority = (["low", "medium", "high", "urgent"].includes(priorityRaw) ? priorityRaw : "medium") as "low" | "medium" | "high" | "urgent";
+
+  const offerType = text(payload.offerType) || "Spot";
+  const team = text(payload.team) || "General";
+  const statusRaw = text(payload.status).toLowerCase();
+  const status = (statusRaw === "received" ? "received" : "draft") as "draft" | "received";
+
+  if (!store.offers) store.offers = [];
+  if (!store.offerAttachments) store.offerAttachments = [];
+  if (!store.offerComments) store.offerComments = [];
+  if (!store.offerActivities) store.offerActivities = [];
+
+  const offerId = randomUUID();
+  const number = nextOfferNumber(store, kind, now);
+
+  const offer: Offer = {
+    id: offerId,
+    number,
+    kind,
+    material,
+    materialType,
+    materialGrade,
+    quantity,
+    unit,
+    pricePerUnit,
+    currency,
+    totalValue,
+    country,
+    location,
+    truckLoads,
+    description,
+    priority,
+    offerType,
+    team,
+    status,
+    approvalStatus: "pending",
+    adminDecisionNote: null,
+    decidedBy: null,
+    decidedAt: null,
+    isFavourite: false,
+    createdBy: actor.id,
+    createdAt: now,
+    updatedBy: null,
+    updatedAt: now,
+    deletedAt: null,
+    deletedBy: null,
+  };
+
+  store.offers.push(offer);
+
+  // Handle attachments if provided
+  const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+  for (const rawAtt of attachments) {
+    const attRec = record(rawAtt);
+    const attName = text(attRec.name) || "attachment";
+    const attMime = text(attRec.mime) || "application/octet-stream";
+    const isImage = attRec.kind === "image" || attMime.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(attName);
+    const attId = randomUUID();
+    const storageKey = `offers/${offerId}/${attId}-${attName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    
+    let byteSize = 0;
+    if (typeof attRec.bytesBase64 === "string" && attRec.bytesBase64) {
+      const buffer = Buffer.from(attRec.bytesBase64, "base64");
+      byteSize = buffer.byteLength;
+      store.blobs.push({
+        key: storageKey,
+        name: attName,
+        mime: attMime,
+        bytesBase64: attRec.bytesBase64,
+      });
+    }
+
+    store.offerAttachments.push({
+      id: attId,
+      offerId,
+      name: attName,
+      kind: isImage ? "image" : "document",
+      mime: attMime,
+      byteSize: byteSize || (typeof attRec.byteSize === "number" ? attRec.byteSize : 0),
+      storageKey,
+      url: null,
+      uploadedBy: actor.id,
+      createdAt: now,
+    });
+  }
+
+  // Record activity
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId,
+    actorId: actor.id,
+    action: "created",
+    details: `Created ${kind} offer ${number} (${material}, ${quantity} ${unit} @ ${currency} ${pricePerUnit})`,
+    createdAt: now,
+  });
+
+  audit(store, actor.id, "offer-created", "offer", offerId, `Created ${kind} offer ${number}`, now);
+
+  return ok(offer);
+}
+
+export function editOffer(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<Offer> {
+  if (actor.role === "owner") {
+    return fail("Admin cannot directly edit offer operational records.");
+  }
+  if (actor.role !== "moderator") {
+    return fail("Only a Sales & Purchasing Offer Moderator can edit offers.");
+  }
+
+  const offerId = text(payload.id || payload.offerId);
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  if (payload.material !== undefined) {
+    const material = text(payload.material);
+    if (!material) return fail("Material specification cannot be empty.");
+    offer.material = material;
+  }
+  if (payload.materialType !== undefined) offer.materialType = text(payload.materialType) || "Plastics";
+  if (payload.materialGrade !== undefined) offer.materialGrade = text(payload.materialGrade) || "Standard";
+
+  if (payload.quantity !== undefined) {
+    const quantity = typeof payload.quantity === "number" ? payload.quantity : parseFloat(String(payload.quantity || 0));
+    if (!Number.isFinite(quantity) || quantity <= 0) return fail("Quantity must be a positive number.");
+    offer.quantity = quantity;
+  }
+  if (payload.unit !== undefined) offer.unit = text(payload.unit) || "kg";
+
+  if (payload.pricePerUnit !== undefined) {
+    const price = typeof payload.pricePerUnit === "number" ? payload.pricePerUnit : parseFloat(String(payload.pricePerUnit || 0));
+    if (!Number.isFinite(price) || price < 0) return fail("Price per unit must be zero or greater.");
+    offer.pricePerUnit = price;
+  }
+  if (payload.currency !== undefined) offer.currency = (text(payload.currency) || "EUR").toUpperCase();
+
+  offer.totalValue = Math.round(offer.quantity * offer.pricePerUnit * 100) / 100;
+
+  if (payload.country !== undefined) {
+    const country = text(payload.country);
+    if (!country) return fail("Location/Country is required.");
+    offer.country = country;
+  }
+  if (payload.location !== undefined) offer.location = text(payload.location);
+  if (payload.truckLoads !== undefined) {
+    offer.truckLoads = typeof payload.truckLoads === "number" ? Math.max(0, Math.floor(payload.truckLoads)) : parseInt(String(payload.truckLoads || 1), 10) || 1;
+  }
+  if (payload.description !== undefined) offer.description = text(payload.description);
+  if (payload.priority !== undefined) {
+    const priorityRaw = text(payload.priority).toLowerCase();
+    if (["low", "medium", "high", "urgent"].includes(priorityRaw)) {
+      offer.priority = priorityRaw as "low" | "medium" | "high" | "urgent";
+    }
+  }
+  if (payload.offerType !== undefined) offer.offerType = text(payload.offerType) || "Spot";
+  if (payload.team !== undefined) offer.team = text(payload.team) || "General";
+
+  offer.updatedBy = actor.id;
+  offer.updatedAt = now;
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "edited",
+    details: "Updated offer details",
+    createdAt: now,
+  });
+
+  audit(store, actor.id, "offer-edited", "offer", offer.id, `Edited offer ${offer.number}`, now);
+
+  return ok(offer);
+}
+
+export function softDeleteOffer(
+  store: StoreData,
+  actor: UserRecord,
+  offerId: string,
+  now: string
+): Result<Offer> {
+  if (actor.role === "owner") {
+    return fail("Admin cannot directly delete offer records.");
+  }
+  if (actor.role !== "moderator") {
+    return fail("Only a Sales & Purchasing Offer Moderator can delete offers.");
+  }
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  offer.deletedAt = now;
+  offer.deletedBy = actor.id;
+  offer.updatedAt = now;
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "deleted",
+    details: "Offer deleted by moderator",
+    createdAt: now,
+  });
+
+  audit(store, actor.id, "offer-deleted", "offer", offer.id, `Deleted offer ${offer.number}`, now);
+
+  return ok(offer);
+}
+
+export function submitOfferForReview(
+  store: StoreData,
+  actor: UserRecord,
+  offerId: string,
+  now: string
+): Result<Offer> {
+  if (actor.role !== "moderator") {
+    return fail("Only a Sales & Purchasing Offer Moderator can submit offers for review.");
+  }
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  if (offer.status !== "draft" && offer.status !== "received") {
+    return fail("Only draft or received offers can be submitted for review.");
+  }
+
+  offer.status = "under_review";
+  offer.approvalStatus = "pending";
+  offer.updatedBy = actor.id;
+  offer.updatedAt = now;
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "submitted_for_review",
+    details: "Submitted offer for Admin review",
+    createdAt: now,
+  });
+
+  audit(store, actor.id, "offer-submitted", "offer", offer.id, `Submitted offer ${offer.number} for review`, now);
+
+  return ok(offer);
+}
+
+export function decideOffer(
+  store: StoreData,
+  actor: UserRecord,
+  offerId: string,
+  decision: "approved" | "rejected",
+  decisionNote: string,
+  now: string
+): Result<Offer> {
+  if (actor.role !== "owner") {
+    return fail("Only Admin can approve or reject offers.");
+  }
+
+  const note = decisionNote ? decisionNote.trim() : "";
+  if (!note) {
+    return fail("A decision note is mandatory when approving or rejecting an offer.");
+  }
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  if (decision === "approved") {
+    offer.approvalStatus = "approved";
+    offer.adminDecisionNote = note;
+    offer.decidedBy = actor.id;
+    offer.decidedAt = now;
+    offer.updatedAt = now;
+  } else if (decision === "rejected") {
+    offer.approvalStatus = "rejected";
+    offer.status = "lost";
+    offer.adminDecisionNote = note;
+    offer.decidedBy = actor.id;
+    offer.decidedAt = now;
+    offer.updatedAt = now;
+  } else {
+    return fail("Invalid decision: must be approved or rejected.");
+  }
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: decision,
+    details: `Admin decision: ${decision}. Note: ${note}`,
+    createdAt: now,
+  });
+
+  audit(store, actor.id, `offer-${decision}`, "offer", offer.id, `Admin ${decision} offer ${offer.number}: ${note}`, now);
+
+  return ok(offer);
+}
+
+export function updateOfferStatus(
+  store: StoreData,
+  actor: UserRecord,
+  offerId: string,
+  newStatus: string,
+  now: string
+): Result<Offer> {
+  if (actor.role !== "moderator") {
+    return fail("Only a Sales & Purchasing Offer Moderator can update offer statuses.");
+  }
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  const validStatuses = ["draft", "received", "under_review", "negotiating", "won", "lost"];
+  const statusKey = newStatus.trim().toLowerCase();
+  if (!validStatuses.includes(statusKey)) {
+    return fail(`Invalid offer status: ${newStatus}`);
+  }
+
+  const oldStatus = offer.status;
+  offer.status = statusKey as Offer["status"];
+  offer.updatedBy = actor.id;
+  offer.updatedAt = now;
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "status_changed",
+    details: `Status changed from ${oldStatus} to ${statusKey}`,
+    createdAt: now,
+  });
+
+  audit(store, actor.id, "offer-status-changed", "offer", offer.id, `Status of offer ${offer.number} changed to ${statusKey}`, now);
+
+  return ok(offer);
+}
+
+export function toggleOfferFavourite(
+  store: StoreData,
+  actor: UserRecord,
+  offerId: string,
+  now: string
+): Result<Offer> {
+  if (actor.role !== "moderator" && actor.role !== "owner") {
+    return fail("Unauthorized to toggle favourite status.");
+  }
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  offer.isFavourite = !offer.isFavourite;
+  offer.updatedAt = now;
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "favourite_toggled",
+    details: offer.isFavourite ? "Added to favourites" : "Removed from favourites",
+    createdAt: now,
+  });
+
+  return ok(offer);
+}
+
+export function addOfferComment(
+  store: StoreData,
+  actor: UserRecord,
+  offerId: string,
+  commentText: string,
+  now: string
+): Result<OfferComment> {
+  if (actor.role !== "moderator" && actor.role !== "owner") {
+    return fail("Unauthorized to add offer comments.");
+  }
+
+  const commentStr = commentText ? commentText.trim() : "";
+  if (!commentStr) return fail("Comment text cannot be empty.");
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  if (!store.offerComments) store.offerComments = [];
+  const comment: OfferComment = {
+    id: randomUUID(),
+    offerId: offer.id,
+    authorId: actor.id,
+    comment: commentStr,
+    createdAt: now,
+  };
+
+  store.offerComments.push(comment);
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "comment_added",
+    details: `Added note/comment: ${commentStr.slice(0, 80)}${commentStr.length > 80 ? "..." : ""}`,
+    createdAt: now,
+  });
+
+  return ok(comment);
+}
+
+export function addOfferAttachment(
+  store: StoreData,
+  actor: UserRecord,
+  offerId: string,
+  attachment: { name: string; mime?: string; bytesBase64?: string; byteSize?: number; kind?: "image" | "document" },
+  now: string
+): Result<OfferAttachment> {
+  if (actor.role !== "moderator") {
+    return fail("Only a Sales & Purchasing Offer Moderator can manage offer attachments.");
+  }
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  const name = text(attachment.name) || "attachment";
+  const mime = text(attachment.mime) || "application/octet-stream";
+  const isImage = attachment.kind === "image" || mime.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(name);
+  const attId = randomUUID();
+  const storageKey = `offers/${offer.id}/${attId}-${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+
+  let byteSize = 0;
+  if (typeof attachment.bytesBase64 === "string" && attachment.bytesBase64) {
+    const buf = Buffer.from(attachment.bytesBase64, "base64");
+    byteSize = buf.byteLength;
+    store.blobs.push({
+      key: storageKey,
+      name,
+      mime,
+      bytesBase64: attachment.bytesBase64,
+    });
+  }
+
+  if (!store.offerAttachments) store.offerAttachments = [];
+  const attRecord: OfferAttachment = {
+    id: attId,
+    offerId: offer.id,
+    name,
+    kind: isImage ? "image" : "document",
+    mime,
+    byteSize: byteSize || (typeof attachment.byteSize === "number" ? attachment.byteSize : 0),
+    storageKey,
+    url: null,
+    uploadedBy: actor.id,
+    createdAt: now,
+  };
+
+  store.offerAttachments.push(attRecord);
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "attachment_added",
+    details: `Added ${attRecord.kind}: ${name}`,
+    createdAt: now,
+  });
+
+  return ok(attRecord);
+}
+
+export function deleteOfferAttachment(
+  store: StoreData,
+  actor: UserRecord,
+  offerId: string,
+  attachmentId: string,
+  now: string
+): Result<void> {
+  if (actor.role !== "moderator") {
+    return fail("Only a Sales & Purchasing Offer Moderator can manage offer attachments.");
+  }
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  const index = (store.offerAttachments || []).findIndex((att) => att.id === attachmentId && att.offerId === offer.id);
+  if (index === -1) return fail("Attachment not found.");
+
+  const removed = store.offerAttachments[index];
+  store.offerAttachments.splice(index, 1);
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "attachment_deleted",
+    details: `Removed attachment: ${removed.name}`,
+    createdAt: now,
+  });
+
+  return ok(undefined);
+}
+
 export function assignRequestWorker(
   store: StoreData,
   requestId: string,
@@ -628,6 +1298,47 @@ export function applyStockMovement(
     createdBy: input.actorId,
   };
   store.stockMovements.push(movement);
+
+  const request = store.requests.find((r) => r.id === input.requestId);
+  const line = store.requestLines.find((l) => l.id === input.requestLineId);
+  const shipment = request ? store.shipments.find((s) => s.id === request.shipmentId) : null;
+  const order = shipment ? store.purchaseOrders.find((po) => po.id === shipment.purchaseOrderId) : null;
+  const warehouse = store.warehouses.find((w) => w.id === input.warehouseId);
+  const material = store.materials.find((m) => m.id === input.materialId);
+  const packaging = line?.packagingTypeId ? store.packagingTypes.find((p) => p.id === line.packagingTypeId) : null;
+  const performer = store.users.find((u) => u.id === input.actorId);
+  const pkgCount = line?.packageCount ?? null;
+  const pkgUnitTare = packaging?.tareKg ?? (line && line.packageCount > 0 ? roundKg(line.tareTotalKg / line.packageCount) : null);
+  const totalPkgWeight = line ? line.tareTotalKg : null;
+  const grossWeight = line?.grossKg ?? (totalPkgWeight != null ? roundKg(input.weightKg + totalPkgWeight) : input.weightKg);
+
+  if (!store.inventoryHistory) store.inventoryHistory = [];
+  store.inventoryHistory.push({
+    id: randomUUID(),
+    materialId: input.materialId,
+    materialName: material?.description ?? "Material",
+    warehouseId: input.warehouseId,
+    warehouseName: warehouse?.name ?? "Warehouse",
+    containerNumber: shipment?.containerNumber || shipment?.reference || null,
+    quantityBefore: current,
+    quantityChange: input.direction === "in" ? input.weightKg : -input.weightKg,
+    quantityAfter: next,
+    packagingTypeId: packaging?.id ?? null,
+    packagingTypeName: packaging?.name ?? null,
+    packagingCount: pkgCount,
+    packagingUnitTareKg: pkgUnitTare,
+    totalPackagingWeightKg: totalPkgWeight,
+    grossWeightKg: grossWeight,
+    operationType: input.direction === "in" ? "receipt" : "dispatch",
+    operationReason: request?.type === "unloading" ? "Container unloading receipt" : "Container loading dispatch",
+    reference: request?.number ?? input.requestId,
+    poNumber: order?.number ?? null,
+    soNumber: null,
+    performedBy: input.actorId,
+    performedByName: performer?.name ?? "Worker",
+    createdAt: now,
+  });
+
   return ok(movement);
 }
 
@@ -752,6 +1463,58 @@ export function transferStock(
   };
   store.stockMovements.push(outMovement, inMovement);
 
+  if (!store.inventoryHistory) store.inventoryHistory = [];
+  store.inventoryHistory.push({
+    id: randomUUID(),
+    materialId: input.materialId,
+    materialName: mat.description,
+    warehouseId: input.fromWarehouseId,
+    warehouseName: fromWh.name,
+    containerNumber: null,
+    quantityBefore: currentFrom,
+    quantityChange: -input.weightKg,
+    quantityAfter: nextFrom,
+    packagingTypeId: null,
+    packagingTypeName: null,
+    packagingCount: null,
+    packagingUnitTareKg: null,
+    totalPackagingWeightKg: null,
+    grossWeightKg: input.weightKg,
+    operationType: "transfer_out",
+    operationReason: `Transfer to ${toWh.name}`,
+    reference: transferRequestId,
+    poNumber: null,
+    soNumber: null,
+    performedBy: input.actor.id,
+    performedByName: input.actor.name,
+    createdAt: now,
+  });
+  store.inventoryHistory.push({
+    id: randomUUID(),
+    materialId: input.materialId,
+    materialName: mat.description,
+    warehouseId: input.toWarehouseId,
+    warehouseName: toWh.name,
+    containerNumber: null,
+    quantityBefore: roundKg(nextTo - input.weightKg),
+    quantityChange: input.weightKg,
+    quantityAfter: nextTo,
+    packagingTypeId: null,
+    packagingTypeName: null,
+    packagingCount: null,
+    packagingUnitTareKg: null,
+    totalPackagingWeightKg: null,
+    grossWeightKg: input.weightKg,
+    operationType: "transfer_in",
+    operationReason: `Transfer from ${fromWh.name}`,
+    reference: transferRequestId,
+    poNumber: null,
+    soNumber: null,
+    performedBy: input.actor.id,
+    performedByName: input.actor.name,
+    createdAt: now,
+  });
+
   audit(
     store,
     input.actor.id,
@@ -820,6 +1583,33 @@ export function postCorrection(
     createdBy: input.actor.id,
   };
   store.stockMovements.push(movement);
+
+  if (!store.inventoryHistory) store.inventoryHistory = [];
+  store.inventoryHistory.push({
+    id: randomUUID(),
+    materialId: input.materialId,
+    materialName: mat.description,
+    warehouseId: request.warehouseId,
+    warehouseName: store.warehouses.find((w) => w.id === request.warehouseId)?.name ?? "Warehouse",
+    containerNumber: null,
+    quantityBefore: current,
+    quantityChange: input.deltaKg,
+    quantityAfter: next,
+    packagingTypeId: null,
+    packagingTypeName: null,
+    packagingCount: null,
+    packagingUnitTareKg: null,
+    totalPackagingWeightKg: null,
+    grossWeightKg: Math.abs(input.deltaKg),
+    operationType: "adjustment",
+    operationReason: input.reason.trim(),
+    reference: request.number,
+    poNumber: null,
+    soNumber: null,
+    performedBy: input.actor.id,
+    performedByName: input.actor.name,
+    createdAt: now,
+  });
 
   audit(
     store,
@@ -1207,6 +1997,58 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
       return asCommand(decideGeneralRequest(store, actor, record(body), now), "Request updated.");
     case "deleteGeneralRequest":
       return asCommand(softDeleteGeneralRequest(store, actor, text(body.requestId || body.id), now), "Request was deleted.");
+    case "createOffer":
+      return asCommand(createOffer(store, actor, record(body), now), "Offer created.");
+    case "editOffer":
+      return asCommand(editOffer(store, actor, record(body), now), "Offer updated.");
+    case "deleteOffer":
+      return asCommand(softDeleteOffer(store, actor, text(body.offerId || body.id), now), "Offer deleted.");
+    case "submitOffer":
+    case "submitOfferForReview":
+      return asCommand(submitOfferForReview(store, actor, text(body.offerId || body.id), now), "Offer submitted for review.");
+    case "decideOffer":
+      return asCommand(
+        decideOffer(
+          store,
+          actor,
+          text(body.offerId || body.id),
+          (text(body.decision) === "rejected" ? "rejected" : "approved") as "approved" | "rejected",
+          text(body.note || body.decisionNote),
+          now,
+        ),
+        "Decision recorded.",
+      );
+    case "updateOfferStatus":
+      return asCommand(updateOfferStatus(store, actor, text(body.offerId || body.id), text(body.status), now), "Status updated.");
+    case "toggleOfferFavourite":
+      return asCommand(toggleOfferFavourite(store, actor, text(body.offerId || body.id), now), "Favourite updated.");
+    case "addOfferComment":
+      return asCommand(addOfferComment(store, actor, text(body.offerId || body.id), text(body.comment), now), "Comment added.");
+    case "addOfferAttachment": {
+      const attRecord = record(body.attachment || body);
+      return asCommand(
+        addOfferAttachment(
+          store,
+          actor,
+          text(body.offerId || body.id),
+          {
+            name: text(attRecord.name) || "attachment",
+            mime: typeof attRecord.mime === "string" ? attRecord.mime : undefined,
+            bytesBase64: typeof attRecord.bytesBase64 === "string" ? attRecord.bytesBase64 : undefined,
+            byteSize: typeof attRecord.byteSize === "number" ? attRecord.byteSize : undefined,
+            kind: attRecord.kind === "image" ? "image" : attRecord.kind === "document" ? "document" : undefined,
+          },
+          now,
+        ),
+        "Attachment added.",
+      );
+    }
+    case "deleteOfferAttachment":
+      return asCommand(deleteOfferAttachment(store, actor, text(body.offerId || body.id), text(body.attachmentId || body.id), now), "Attachment removed.");
+    case "markNotificationRead":
+      return asCommand(markNotificationRead(store, actor, text(body.id || body.notificationId), now), "Notification marked as read.");
+    case "markAllNotificationsRead":
+      return asCommand(markAllNotificationsRead(store, actor, now), "All notifications marked as read.");
     case "createRequest": {
       if (actor.role !== "worker") {
         return { error: "Only a Worker can submit a loading or unloading request." };
@@ -1246,11 +2088,13 @@ function createPurchase(store: StoreData, actor: UserRecord, body: Record<string
   if (requestedNumber && orderByNumber(store, requestedNumber)) {
     return { error: "That purchase order number already exists." };
   }
-  const number = requestedNumber || `PO-${store.purchaseOrders.length + 1}`;
+  const number = requestedNumber || nextPurchaseOrderNumber(store, now);
+  const title = text(body.title) || `${supplier} - ${material}`;
   const company = upsertCompany(store, supplier, "supplier", randomUUID);
   const order: PurchaseOrder = {
     id: randomUUID(),
     number,
+    title,
     companyId: company.id,
     status: "submitted",
     valueEur,
@@ -1267,7 +2111,7 @@ function createPurchase(store: StoreData, actor: UserRecord, body: Record<string
     description: material,
     quantityKg,
   });
-  audit(store, actor.id, "order-created", "purchase-order", order.id, `${order.number} was submitted for approval.`, now);
+  audit(store, actor.id, "order-created", "purchase-order", order.id, `${order.number} (${order.title}) was submitted for approval.`, now);
   return { notice: `${order.number} was submitted for approval.` };
 }
 
@@ -1279,9 +2123,11 @@ function submitOrder(store: StoreData, actor: UserRecord, body: Record<string, u
   if (!number) return { error: "Enter the purchase order number." };
   if (!actor.companyId) return { error: "This customer is not linked to a company." };
   if (orderByNumber(store, number)) return { error: "That purchase order number already exists." };
+  const title = text(body.title) || `Order ${number}`;
   const order: PurchaseOrder = {
     id: randomUUID(),
     number,
+    title,
     companyId: actor.companyId,
     status: "submitted",
     valueEur: 0,
@@ -1327,6 +2173,9 @@ function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, 
   const company = upsertCompany(store, supplier, "supplier", randomUUID);
   order.companyId = company.id;
   order.valueEur = valueEur;
+  if (body.title !== undefined) {
+    order.title = text(body.title) || order.title;
+  }
   if (body.notes !== undefined) {
     order.notes = text(body.notes);
   }
@@ -2260,4 +3109,26 @@ export function deactivateByEmail(store: StoreData, actor: UserRecord, email: st
   store.sessions = store.sessions.filter((item) => item.userId !== user.id);
   audit(store, actor.id, "user-deactivated", "user", user.id, `${user.email} was deactivated.`, now);
   return ok(profile(user));
+}
+
+export function markNotificationRead(store: StoreData, actor: UserRecord, notificationId: string, now: string): Result<boolean> {
+  if (!store.notifications) store.notifications = [];
+  const target = store.notifications.find((n) => n.id === notificationId && n.recipientId === actor.id);
+  if (!target) return fail("Notification not found.");
+  target.read = true;
+  target.readAt = now;
+  return ok(true);
+}
+
+export function markAllNotificationsRead(store: StoreData, actor: UserRecord, now: string): Result<number> {
+  if (!store.notifications) store.notifications = [];
+  let count = 0;
+  for (const n of store.notifications) {
+    if (n.recipientId === actor.id && !n.read) {
+      n.read = true;
+      n.readAt = now;
+      count++;
+    }
+  }
+  return ok(count);
 }

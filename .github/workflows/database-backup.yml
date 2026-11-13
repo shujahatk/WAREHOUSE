@@ -1,0 +1,50 @@
+name: StockFlow Daily Automated Backup & Disaster Recovery
+
+on:
+  schedule:
+    # Runs daily at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Manual backup trigger reason'
+        required: false
+        default: 'Manual maintenance'
+
+jobs:
+  backup:
+    name: Execute Full Logical Database & Storage Backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Execute Backup & Verification Pipeline
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.STOCKFLOW_ADMIN_PASSWORD }}
+          STOCKFLOW_DATA_ADAPTER: supabase
+        run: |
+          node scripts/backup-disaster-recovery.mjs
+          node scripts/test-restore-isolation.mjs
+
+      - name: Archive Backup Artifacts with 30-Day Retention
+        uses: actions/upload-artifact@v4
+        with:
+          name: stockflow-production-backup-${{ github.run_id }}
+          path: backups/stockflow-backup-*.json
+          retention-days: 30
+          if-no-files-found: error
+

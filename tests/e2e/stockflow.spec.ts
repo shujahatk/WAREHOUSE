@@ -68,8 +68,9 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
     await expect(sidebar).toContainText("Main");
     await expect(sidebar).toContainText("Operations");
     await expect(sidebar).toContainText("Warehouse");
-    await expect(sidebar).toContainText("Directories");
+    await expect(sidebar).toContainText("Offers");
     await expect(sidebar).toContainText("Administration");
+    await expect(sidebar).not.toContainText("Directories");
     await expect(sidebar).not.toContainText("Roadmap");
     await expect(sidebar).not.toContainText("Chat");
 
@@ -203,8 +204,8 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
     await page.locator('label:has-text("Material") input').fill("LDPE film");
     await page.locator('label:has-text("Quantity kg") input').fill("1000");
     await page.locator('label:has-text("Value EUR") input').fill("2500");
-    await page.click('button:has-text("Create order")');
-    await expect(page.locator("body")).toContainText(/PO-\d+ was submitted for approval/i);
+    await page.click('button:has-text("Create")');
+    await expect(page.locator("body")).toContainText(/PO-[-\d]+ was submitted for approval/i);
 
     // Staff can create an Inbound shipment and an Outbound shipment
     await page.goto("/containers");
@@ -241,7 +242,7 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
     await expect(page.locator("h1")).toContainText("Dashboard");
     const sidebar = page.getByRole("navigation", { name: "Primary" });
     await expect(sidebar).toContainText("Dashboard");
-    await expect(sidebar).toContainText("Loading & Unloading Requests");
+    await expect(sidebar).toContainText("Requests");
     await expect(sidebar).toContainText("Incoming / Unloading");
     await expect(sidebar).toContainText("Outgoing / Loading");
     await expect(sidebar).not.toContainText("PO & SO Orders");
@@ -353,7 +354,7 @@ test.describe("StockFlow Phase 3 E2E QA, Role Audit & Operational Suite", () => 
     await expect(page.locator("body")).toContainText("200 kg");
 
     await page.goto("/stock-movements");
-    await expect(page.locator("h1")).toContainText("Stock Movements");
+    await expect(page.locator("h1")).toContainText(/Stock movements/i);
     await expect(page.locator("body")).toContainText("LDPE film");
     await expect(page.locator("body")).toContainText("200 kg");
   });

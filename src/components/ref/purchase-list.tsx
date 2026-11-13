@@ -16,10 +16,12 @@ export function PurchaseList() {
   const { identity } = useSession();
   const query = useWorkspaceSearch().trim().toLowerCase();
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
+  const [title, setTitle] = useState("");
   const [supplier, setSupplier] = useState("");
   const [material, setMaterial] = useState("");
   const [quantity, setQuantity] = useState("1000");
   const [value, setValue] = useState("10000");
+  const [customNumber, setCustomNumber] = useState("");
   const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
   const owned = visibleOrders(state, actor);
   const canCreate = canPerform(identity.role, "create-order");
@@ -27,7 +29,7 @@ export function PurchaseList() {
     () =>
       owned.filter((order) => {
         const matchesFilter = filter === "All" || order.status === filter;
-        const haystack = `${order.number} ${order.supplier} ${order.material} ${order.customerCompany} ${order.notes}`.toLowerCase();
+        const haystack = `${order.number} ${order.title} ${order.supplier} ${order.material} ${order.customerCompany} ${order.warehouse} ${order.notes}`.toLowerCase();
         return matchesFilter && (query.length === 0 || haystack.includes(query));
       }),
     [filter, owned, query],
@@ -37,7 +39,7 @@ export function PurchaseList() {
     <>
       <PageTitle
         title="PO & SO Orders"
-        subtitle="Operational Purchase Orders (unloading) and Sales Orders (loading)."
+        subtitle="Operational Purchase Orders (unloading) and Sales Orders (loading) with unique sequential numbering."
         action={
           <div className="flex flex-wrap items-center gap-2">
             {filters
@@ -58,41 +60,66 @@ export function PurchaseList() {
       {notice ? <p className="mb-3 text-sm text-neutral-700">{notice}</p> : null}
       {canCreate ? (
         <Surface className="mb-4 p-4">
-          <h2 className="text-sm font-semibold">New PO / SO order</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">New PO / SO Order</h2>
+            <span className="text-xs text-neutral-500">Auto-sequences PO-YYYY-XXXX if number left blank</span>
+          </div>
           <form
-            className="mt-3 grid gap-3 sm:grid-cols-4"
+            className="mt-3 grid gap-3 sm:grid-cols-6"
             onSubmit={(event) => void (async () => {
               event.preventDefault();
               const error = await createPurchase({
-                supplier,
-                material,
+                title: title.trim(),
+                number: customNumber.trim() || undefined,
+                supplier: supplier.trim(),
+                material: material.trim(),
                 quantityKg: Number(quantity),
                 valueEur: Number(value),
               });
               if (!error) {
+                setTitle("");
+                setCustomNumber("");
                 setSupplier("");
                 setMaterial("");
               }
             })()}
           >
-            <label className="text-xs text-neutral-500">
+            <label className="text-xs text-neutral-500 sm:col-span-3">
+              Custom PO Name / Title
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="e.g. Q3 Polymer Raw Material Import - Supplier X"
+                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+              />
+            </label>
+            <label className="text-xs text-neutral-500 sm:col-span-3">
+              Custom PO # (optional, auto-generated if empty)
+              <input
+                value={customNumber}
+                onChange={(event) => setCustomNumber(event.target.value)}
+                placeholder="Leave blank for sequential PO-YYYY-XXXX"
+                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+              />
+            </label>
+            <label className="text-xs text-neutral-500 sm:col-span-2">
               Supplier / Customer
-              <input value={supplier} onChange={(event) => setSupplier(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" />
+              <input value={supplier} onChange={(event) => setSupplier(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" required />
             </label>
-            <label className="text-xs text-neutral-500">
+            <label className="text-xs text-neutral-500 sm:col-span-2">
               Material
-              <input value={material} onChange={(event) => setMaterial(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" />
+              <input value={material} onChange={(event) => setMaterial(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" required />
             </label>
-            <label className="text-xs text-neutral-500">
+            <label className="text-xs text-neutral-500 sm:col-span-1">
               Quantity kg
-              <input value={quantity} onChange={(event) => setQuantity(event.target.value)} inputMode="decimal" className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" />
+              <input value={quantity} onChange={(event) => setQuantity(event.target.value)} inputMode="decimal" className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" required />
             </label>
-            <label className="text-xs text-neutral-500">
+            <label className="text-xs text-neutral-500 sm:col-span-1">
               Value EUR
-              <input value={value} onChange={(event) => setValue(event.target.value)} inputMode="decimal" className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" />
+              <input value={value} onChange={(event) => setValue(event.target.value)} inputMode="decimal" className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" required />
             </label>
-            <button type="submit" className="h-10 rounded-lg bg-neutral-950 px-3 text-sm font-medium text-white sm:col-span-4 sm:justify-self-start">
-              Create order
+            <button type="submit" className="h-10 rounded-lg bg-neutral-950 px-4 text-sm font-medium text-white sm:col-span-6 sm:justify-self-start">
+              Create Sequential Order
             </button>
           </form>
         </Surface>
@@ -109,25 +136,27 @@ export function PurchaseList() {
                 <Link href={`/purchases/${order.number}`} className="block rounded-xl border border-neutral-200 bg-white p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold">{order.number}</p>
+                      <p className="text-sm font-semibold text-neutral-950">{order.title || order.number}</p>
+                      <p className="font-mono text-xs text-neutral-500">{order.number}</p>
                       <p className="mt-0.5 text-xs text-neutral-500">
                         {order.customerCompany || order.supplier} · {order.material === "—" ? "Material not recorded" : order.material}
                       </p>
                     </div>
                     <StatusPill label={order.status} />
                   </div>
-                  <p className="mt-2 text-sm">
-                    {order.quantityKg > 0 ? formatKg(order.quantityKg) : "Quantity not recorded"} · {order.valueEur > 0 ? formatEuro(order.valueEur) : "Value not recorded"}
-                  </p>
+                  <div className="mt-2 flex items-center justify-between text-xs text-neutral-600">
+                    <span>{order.quantityKg > 0 ? formatKg(order.quantityKg) : "Quantity not recorded"} · {order.valueEur > 0 ? formatEuro(order.valueEur) : "Value not recorded"}</span>
+                    <span>{order.warehouse || "Warehouse"}</span>
+                  </div>
                 </Link>
               </li>
             ))}
           </ul>
           <Surface className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
                 <tr>
-                  {["Order Number", "Supplier / Customer", "Material", "Quantity", "Value", "Status", "Date"].map((header) => (
+                  {["PO Name & Number", "Supplier / Customer", "Material", "Quantity", "Value", "Warehouse", "Status", "Date"].map((header) => (
                     <th key={header} scope="col" className="px-4 py-3 font-medium">
                       {header}
                     </th>
@@ -136,16 +165,18 @@ export function PurchaseList() {
               </thead>
               <tbody>
                 {rows.map((order) => (
-                  <tr key={order.number} className="border-t border-neutral-100">
-                    <td className="px-4 py-3 font-medium">
-                      <Link href={`/purchases/${order.number}`} className="underline-offset-4 hover:underline">
-                        {order.number}
+                  <tr key={order.number} className="border-t border-neutral-100 hover:bg-neutral-50/50">
+                    <td className="px-4 py-3">
+                      <Link href={`/purchases/${order.number}`} className="font-semibold text-neutral-950 underline-offset-4 hover:underline">
+                        {order.title || order.number}
                       </Link>
+                      <div className="mt-0.5 font-mono text-xs text-neutral-500">{order.number}</div>
                     </td>
                     <td className="px-4 py-3">{order.customerCompany || order.supplier}</td>
                     <td className="px-4 py-3">{order.material === "—" ? "Not recorded" : order.material}</td>
                     <td className="px-4 py-3 tabular-nums">{order.quantityKg > 0 ? formatKg(order.quantityKg) : "Not recorded"}</td>
                     <td className="px-4 py-3 tabular-nums">{order.valueEur > 0 ? formatEuro(order.valueEur) : "Not recorded"}</td>
+                    <td className="px-4 py-3 text-neutral-700">{order.warehouse || "Bornem"}</td>
                     <td className="px-4 py-3">
                       <StatusPill label={order.status} />
                     </td>

@@ -1,7 +1,138 @@
 import type { Role } from "@/lib/permissions";
 import type { SectionMode } from "@/lib/packaging";
-import type { GeneralRequestCategory, GeneralRequestPriority, GeneralRequestStatus } from "./schemas";
-export type { GeneralRequestCategory, GeneralRequestPriority, GeneralRequestStatus };
+import type {
+  GeneralRequestCategory,
+  GeneralRequestPriority,
+  GeneralRequestStatus,
+  OfferKind,
+  OfferStatus as DomainOfferStatus,
+  OfferApprovalStatus as DomainOfferApprovalStatus,
+  OfferPriority as DomainOfferPriority,
+  OfferAttachmentKind,
+} from "./schemas";
+export type {
+  GeneralRequestCategory,
+  GeneralRequestPriority,
+  GeneralRequestStatus,
+  OfferKind,
+  DomainOfferStatus,
+  DomainOfferApprovalStatus,
+  DomainOfferPriority,
+  OfferAttachmentKind,
+};
+
+export type OfferStatusView = "Draft" | "Received" | "Under Review" | "Negotiating" | "Won" | "Lost";
+export type OfferPriorityView = "Low" | "Medium" | "High" | "Urgent";
+export type OfferApprovalView = "Pending" | "Approved" | "Rejected";
+
+export const OFFER_STATUS_LABELS: Record<string, OfferStatusView> = {
+  draft: "Draft",
+  received: "Received",
+  under_review: "Under Review",
+  negotiating: "Negotiating",
+  won: "Won",
+  lost: "Lost",
+};
+
+export const OFFER_PRIORITY_LABELS: Record<string, OfferPriorityView> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
+export const OFFER_APPROVAL_LABELS: Record<string, OfferApprovalView> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
+export type OfferAttachmentView = {
+  id: string;
+  offerId: string;
+  name: string;
+  kind: "image" | "document";
+  mime: string;
+  byteSize: number;
+  url: string | null;
+  storageKey: string;
+  uploadedBy: string;
+  uploadedByName: string;
+  createdAt: string;
+};
+
+export type OfferCommentView = {
+  id: string;
+  offerId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: Role;
+  comment: string;
+  createdAt: string;
+};
+
+export type OfferActivityView = {
+  id: string;
+  offerId: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  details: string;
+  createdAt: string;
+};
+
+export type OfferView = {
+  id: string;
+  number: string;
+  kind: "purchasing" | "selling";
+  kindLabel: "Purchasing Offer" | "Selling Offer";
+  material: string;
+  materialType: string;
+  materialGrade: string;
+  quantity: number;
+  unit: string;
+  pricePerUnit: number;
+  currency: string;
+  totalValue: number;
+  country: string;
+  location: string;
+  truckLoads: number;
+  description: string;
+  priority: OfferPriorityView;
+  priorityKey: "low" | "medium" | "high" | "urgent";
+  offerType: string;
+  team: string;
+  status: OfferStatusView;
+  statusKey: "draft" | "received" | "under_review" | "negotiating" | "won" | "lost";
+  approvalStatus: "pending" | "approved" | "rejected";
+  approvalLabel: OfferApprovalView;
+  adminDecisionNote: string | null;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  isFavourite: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedBy: string | null;
+  updatedByName: string | null;
+  updatedAt: string;
+  attachments: OfferAttachmentView[];
+  comments: OfferCommentView[];
+  activities: OfferActivityView[];
+};
+
+export type OfferDashboardStats = {
+  totalOffers: number;
+  pending: number;
+  underReview: number;
+  negotiating: number;
+  won: number;
+  lost: number;
+  truckLoads: number;
+  purchasingCount: number;
+  sellingCount: number;
+};
 
 export type OrderStatus = "Approved" | "Pending" | "Planned" | "Rejected" | "Received";
 export type ContainerStatus = "Planned" | "Registered" | "Unloading" | "In transit" | "Arrived" | "Loaded" | "Completed";
@@ -10,8 +141,10 @@ export type TransferStatus = "Submitted" | "Completed";
 
 export type DemoOrder = {
   number: string;
+  title: string;
   supplier: string;
   material: string;
+  warehouse: string;
   quantityKg: number;
   valueEur: number;
   unitPrice: string;
@@ -118,6 +251,62 @@ export type DemoStock = {
   reorder: number;
   warehouse: string;
   location: string;
+};
+
+export type ContainerPackagingDetail = {
+  packagingTypeId: string;
+  packagingTypeName: string;
+  packageCount: number;
+  emptyUnitTareKg: number;
+  totalPackagingWeightKg: number;
+};
+
+export type ContainerMaterialDetail = {
+  materialId: string;
+  materialName: string;
+  netWeightKg: number;
+  grossWeightKg: number;
+  packagings: ContainerPackagingDetail[];
+};
+
+export type ContainerInventoryView = {
+  id: string;
+  containerNumber: string;
+  shipmentReference: string;
+  poNumber: string | null;
+  warehouse: string;
+  status: string;
+  direction: "inbound" | "outbound";
+  materials: ContainerMaterialDetail[];
+  totalPackagingCount: number;
+  totalPackagingWeightKg: number;
+  totalNetWeightKg: number;
+  grossPackedCargoWeightKg: number; // Net material weight + Total packaging weight
+  containerTareKg: number; // Shipping container tare weight (kept separate)
+  totalGrossCargoAndContainerKg: number;
+  updatedAt: string;
+};
+
+export type InventoryHistoryView = {
+  id: string;
+  materialName: string;
+  warehouseName: string;
+  containerNumber: string | null;
+  quantityBefore: number;
+  quantityChange: number;
+  quantityAfter: number;
+  packagingTypeName: string | null;
+  packagingCount: number | null;
+  packagingUnitTareKg: number | null;
+  totalPackagingWeightKg: number | null;
+  grossWeightKg: number | null;
+  operationType: string;
+  operationReason: string;
+  reference: string;
+  poNumber: string | null;
+  soNumber: string | null;
+  performedByName: string;
+  createdAt: string;
 };
 
 export type SwissCustoms = {
@@ -261,7 +450,29 @@ export type DemoActivity = {
   status: string;
   href: string;
   actor?: string;
+  actorRole?: string;
+  module?: string;
+  recordId?: string;
+  warehouse?: string | null;
+  oldValue?: string | null;
+  newValue?: string | null;
+  context?: string | null;
+  requestReference?: string | null;
   createdAt?: string;
+};
+
+export type DemoNotification = {
+  id: string;
+  eventType: string;
+  title: string;
+  message: string;
+  targetType?: string;
+  targetId?: string;
+  link?: string;
+  warehouse?: string | null;
+  read: boolean;
+  readAt?: string | null;
+  createdAt: string;
 };
 
 export type PublicUser = {
@@ -401,6 +612,10 @@ export type WorkspaceState = {
   postedMovements: PostedMovement[];
   requests: RequestView[];
   generalRequests: GeneralRequestView[];
+  offers: OfferView[];
+  containerInventory: ContainerInventoryView[];
+  inventoryHistory: InventoryHistoryView[];
+  notifications: DemoNotification[];
   directory: {
     warehouses: { id: string; name: string; country: string }[];
     companies: { id: string; name: string; kind: "supplier" | "customer" }[];
@@ -433,8 +648,56 @@ export function emptyWorkspace(): WorkspaceState {
     postedMovements: [],
     requests: [],
     generalRequests: [],
+    offers: [],
+    containerInventory: [],
+    inventoryHistory: [],
+    notifications: [],
     directory: { warehouses: [], companies: [] },
   };
+}
+
+export function visibleOffers(
+  state: WorkspaceState,
+  actor: { role: Role; name?: string; email?: string },
+): OfferView[] {
+  if (actor.role !== "owner" && actor.role !== "moderator") {
+    return [];
+  }
+  return state.offers || [];
+}
+
+export function calculateOfferStats(offers: OfferView[]): OfferDashboardStats {
+  const stats: OfferDashboardStats = {
+    totalOffers: offers.length,
+    pending: 0,
+    underReview: 0,
+    negotiating: 0,
+    won: 0,
+    lost: 0,
+    truckLoads: 0,
+    purchasingCount: 0,
+    sellingCount: 0,
+  };
+
+  for (const offer of offers) {
+    if (offer.statusKey === "draft" || offer.statusKey === "received") {
+      stats.pending += 1;
+    } else if (offer.statusKey === "under_review") {
+      stats.underReview += 1;
+    } else if (offer.statusKey === "negotiating") {
+      stats.negotiating += 1;
+    } else if (offer.statusKey === "won") {
+      stats.won += 1;
+    } else if (offer.statusKey === "lost") {
+      stats.lost += 1;
+    }
+
+    stats.truckLoads += offer.truckLoads || 0;
+    if (offer.kind === "purchasing") stats.purchasingCount += 1;
+    if (offer.kind === "selling") stats.sellingCount += 1;
+  }
+
+  return stats;
 }
 
 export function visibleGeneralRequests(

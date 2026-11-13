@@ -11,14 +11,15 @@ import {
   roleLabel,
 } from "./permissions.ts";
 
-test("exactly three active roles and correct Staff role normalization", () => {
-  assert.deepEqual(ACTIVE_ROLES, ["owner", "manager", "worker"]);
-  assert.equal(ACTIVE_ROLES.length, 3);
+test("four active roles and correct role normalization", () => {
+  assert.deepEqual(ACTIVE_ROLES, ["owner", "manager", "worker", "moderator"]);
+  assert.equal(ACTIVE_ROLES.length, 4);
 
   // Active roles
   assert.equal(isActiveRole("owner"), true);
   assert.equal(isActiveRole("manager"), true);
   assert.equal(isActiveRole("worker"), true);
+  assert.equal(isActiveRole("moderator"), true);
 
   // Removed roles are not active
   assert.equal(isActiveRole("customer"), false);
@@ -34,6 +35,9 @@ test("exactly three active roles and correct Staff role normalization", () => {
   assert.equal(normalizeRole("Staff"), "manager");
   assert.equal(normalizeRole("worker"), "worker");
   assert.equal(normalizeRole("Worker"), "worker");
+  assert.equal(normalizeRole("moderator"), "moderator");
+  assert.equal(normalizeRole("offer-moderator"), "moderator");
+  assert.equal(normalizeRole("Moderator"), "moderator");
 
   // Removed / unknown roles normalize to null
   assert.equal(normalizeRole("customer"), null);
@@ -41,17 +45,18 @@ test("exactly three active roles and correct Staff role normalization", () => {
   assert.equal(normalizeRole("data-entry"), null);
   assert.equal(normalizeRole("unknown"), null);
 
-  // Labels match Admin / Staff / Worker
+  // Labels match Admin / Staff / Worker / Sales & Purchasing Offer Moderator
   assert.equal(roleLabel("owner"), "Admin");
   assert.equal(roleLabel("manager"), "Staff");
   assert.equal(roleLabel("worker"), "Worker");
+  assert.equal(roleLabel("moderator"), "Sales & Purchasing Offer Moderator");
 });
 
-test("navigation sections and direct URL rules for Admin, Staff, and Worker", () => {
-  // Verify 5 structured sidebar sections
+test("navigation sections and direct URL rules for Admin, Staff, Worker, and Moderator", () => {
+  // Verify 6 structured sidebar sections
   assert.deepEqual(
     navSections.map((s) => s.title),
-    ["Main", "Operations", "Warehouse", "Directories", "Administration"],
+    ["Main", "Operations", "Warehouse", "Offers", "Directories", "Administration"],
   );
 
   // Verify no removed modules appear in navigation
@@ -61,15 +66,18 @@ test("navigation sections and direct URL rules for Admin, Staff, and Worker", ()
   assert.equal(allNavHrefs.includes("/sales"), false);
 
   // Verify removed modules cannot be accessed by direct URL for ANY role
-  for (const role of ["owner", "manager", "worker", "customer", "management", "data-entry"] as const) {
+  for (const role of ["owner", "manager", "worker", "moderator", "customer", "management", "data-entry"] as const) {
     assert.equal(canAccess(role, "/roadmap"), false);
     assert.equal(canAccess(role, "/chat"), false);
     assert.equal(canAccess(role, "/chat/PO213344"), false);
     assert.equal(canAccess(role, "/sales"), false);
   }
 
-  // Admin (owner) has full route access across all active modules & Administration
+  // Admin (owner) has full route access across all active modules & Administration, including Offers
   assert.equal(canAccess("owner", "/dashboard"), true);
+  assert.equal(canAccess("owner", "/offers"), true);
+  assert.equal(canAccess("owner", "/offers/purchasing"), true);
+  assert.equal(canAccess("owner", "/offers/selling"), true);
   assert.equal(canAccess("owner", "/tasks"), true);
   assert.equal(canAccess("owner", "/purchases"), true);
   assert.equal(canAccess("owner", "/purchases/PO213344"), true);
@@ -87,8 +95,11 @@ test("navigation sections and direct URL rules for Admin, Staff, and Worker", ()
   assert.equal(canAccess("owner", "/audit"), true);
   assert.equal(canAccess("owner", "/settings"), true);
 
-  // Staff (manager) can access Main, Operations, Warehouse, Directories, but NOT Administration
+  // Staff (manager) can access Main, Operations, Warehouse, Directories, but NOT Administration and NOT Offers
   assert.equal(canAccess("manager", "/dashboard"), true);
+  assert.equal(canAccess("manager", "/offers"), false);
+  assert.equal(canAccess("manager", "/offers/purchasing"), false);
+  assert.equal(canAccess("manager", "/offers/selling"), false);
   assert.equal(canAccess("manager", "/tasks"), true);
   assert.equal(canAccess("manager", "/purchases"), true);
   assert.equal(canAccess("manager", "/purchases/PO213344"), true);
@@ -106,8 +117,11 @@ test("navigation sections and direct URL rules for Admin, Staff, and Worker", ()
   assert.equal(canAccess("manager", "/audit"), false);
   assert.equal(canAccess("manager", "/settings"), false);
 
-  // Worker can access only their operational workspace, requests, and history
+  // Worker can access only their operational workspace, requests, and history (NOT Offers)
   assert.equal(canAccess("worker", "/dashboard"), true);
+  assert.equal(canAccess("worker", "/offers"), false);
+  assert.equal(canAccess("worker", "/offers/purchasing"), false);
+  assert.equal(canAccess("worker", "/offers/selling"), false);
   assert.equal(canAccess("worker", "/tasks"), true);
   assert.equal(canAccess("worker", "/containers/CNTR-4587"), true);
   assert.equal(canAccess("worker", "/outbound/OUT-1184"), true);
@@ -124,6 +138,28 @@ test("navigation sections and direct URL rules for Admin, Staff, and Worker", ()
   assert.equal(canAccess("worker", "/reports"), false);
   assert.equal(canAccess("worker", "/audit"), false);
   assert.equal(canAccess("worker", "/settings"), false);
+
+  // Moderator can access Dashboard and Offers routes only
+  assert.equal(canAccess("moderator", "/dashboard"), true);
+  assert.equal(canAccess("moderator", "/offers"), true);
+  assert.equal(canAccess("moderator", "/offers/purchasing"), true);
+  assert.equal(canAccess("moderator", "/offers/selling"), true);
+  assert.equal(canAccess("moderator", "/offers/OFF-2026-0001"), true);
+  assert.equal(canAccess("moderator", "/tasks"), false);
+  assert.equal(canAccess("moderator", "/purchases"), false);
+  assert.equal(canAccess("moderator", "/containers"), false);
+  assert.equal(canAccess("moderator", "/outbound"), false);
+  assert.equal(canAccess("moderator", "/inventory"), false);
+  assert.equal(canAccess("moderator", "/stock-movements"), false);
+  assert.equal(canAccess("moderator", "/transfers"), false);
+  assert.equal(canAccess("moderator", "/warehouses"), false);
+  assert.equal(canAccess("moderator", "/suppliers"), false);
+  assert.equal(canAccess("moderator", "/customers"), false);
+  assert.equal(canAccess("moderator", "/materials"), false);
+  assert.equal(canAccess("moderator", "/users"), false);
+  assert.equal(canAccess("moderator", "/reports"), false);
+  assert.equal(canAccess("moderator", "/audit"), false);
+  assert.equal(canAccess("moderator", "/settings"), false);
 
   // Removed roles are denied all routes
   for (const removedRole of ["customer", "management", "data-entry"] as const) {
@@ -213,6 +249,56 @@ test("action permissions strictly enforce Admin, Staff, and Worker boundaries", 
   assert.equal(canPerform("worker", "manage-users"), false);
   assert.equal(canPerform("worker", "manage-suppliers"), false);
   assert.equal(canPerform("worker", "manage-customers"), false);
+
+  // Sales & Purchasing Offer Moderator permissions
+  assert.equal(canPerform("moderator", "create-offer"), true);
+  assert.equal(canPerform("moderator", "edit-offer"), true);
+  assert.equal(canPerform("moderator", "delete-offer"), true);
+  assert.equal(canPerform("moderator", "view-offer"), true);
+  assert.equal(canPerform("moderator", "submit-offer"), true);
+  assert.equal(canPerform("moderator", "negotiate-offer"), true);
+  assert.equal(canPerform("moderator", "status-offer"), true);
+  assert.equal(canPerform("moderator", "comment-offer"), true);
+  assert.equal(canPerform("moderator", "attach-offer"), true);
+  // Moderator CANNOT approve or reject offers (Admin only) or perform warehouse operations
+  assert.equal(canPerform("moderator", "approve-offer"), false);
+  assert.equal(canPerform("moderator", "reject-offer"), false);
+  assert.equal(canPerform("moderator", "create-order"), false);
+  assert.equal(canPerform("moderator", "unload"), false);
+  assert.equal(canPerform("moderator", "dispatch"), false);
+  assert.equal(canPerform("moderator", "manage-users"), false);
+
+  // Admin offer permissions: view, approve, reject, comment only; CANNOT create, edit, delete, negotiate, status, or attach
+  assert.equal(canPerform("owner", "view-offer"), true);
+  assert.equal(canPerform("owner", "approve-offer"), true);
+  assert.equal(canPerform("owner", "reject-offer"), true);
+  assert.equal(canPerform("owner", "comment-offer"), true);
+  assert.equal(canPerform("owner", "create-offer"), false);
+  assert.equal(canPerform("owner", "edit-offer"), false);
+  assert.equal(canPerform("owner", "delete-offer"), false);
+  assert.equal(canPerform("owner", "submit-offer"), false);
+  assert.equal(canPerform("owner", "negotiate-offer"), false);
+  assert.equal(canPerform("owner", "status-offer"), false);
+  assert.equal(canPerform("owner", "attach-offer"), false);
+
+  // Staff and Worker have NO offer permissions
+  const offerActions = [
+    "create-offer",
+    "edit-offer",
+    "delete-offer",
+    "view-offer",
+    "submit-offer",
+    "approve-offer",
+    "reject-offer",
+    "negotiate-offer",
+    "status-offer",
+    "comment-offer",
+    "attach-offer",
+  ] as const;
+  for (const act of offerActions) {
+    assert.equal(canPerform("manager", act), false, `Staff should not perform ${act}`);
+    assert.equal(canPerform("worker", act), false, `Worker should not perform ${act}`);
+  }
 });
 
 test("warehouse operation scoping", () => {

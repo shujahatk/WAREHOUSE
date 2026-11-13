@@ -201,19 +201,19 @@ function ShipmentForm({ direction, record }: { direction: Direction; record: Dem
                 </ul>
               </div>
             ) : null}
-            {nextLabel ? (
+            {canAdvance && nextLabel ? (
               <button
                 type="button"
-                disabled={!canAdvance}
                 onClick={() => (inbound ? demo.unload(record.number) : demo.dispatch(record.number))}
-                className="mt-4 h-11 rounded-lg bg-neutral-950 px-4 text-sm font-medium text-white disabled:opacity-40"
+                className="mt-4 h-11 rounded-lg bg-neutral-950 px-4 text-sm font-medium text-white"
               >
                 {nextLabel}
               </button>
+            ) : nextLabel ? (
+              <p className="mt-3 text-xs text-neutral-500">This role cannot take operational status steps.</p>
             ) : (
               <p className="mt-3 text-sm text-neutral-600">This shipment is {record.status}.</p>
             )}
-            {!canAdvance && nextLabel ? <p className="mt-2 text-xs text-neutral-500">This role cannot take that status step.</p> : null}
           </Surface>
           <RequestWorkflowPanel shipmentNumber={record.number} direction={direction} warehouse={record.warehouse} />
           <SectionEditor direction={direction} shipment={record.number} sections={record.sections} packaging={demo.state.packaging} canEdit={canEditSections} onSave={demo.saveMaterial} onRemove={demo.deleteMaterial} />

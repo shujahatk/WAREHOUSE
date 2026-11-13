@@ -28,6 +28,7 @@ import {
   type Shipment,
   type StockBalance,
   type StockMovement,
+  type InventoryHistoryRecord,
   type StoreData,
   type UserProfile,
   type UserRecord,
@@ -37,6 +38,11 @@ import {
   type GeneralRequestStatus,
   type WorkerGeneralRequest,
   type WorkerGeneralRequestAttachment,
+  type Offer,
+  type OfferAttachment,
+  type OfferComment,
+  type OfferActivity,
+  type NotificationRecord,
 } from "../../domain/schemas.ts";
 import { emptyWorkspace, type Actor, type WorkspaceState } from "../../domain/view.ts";
 import { isActiveRole } from "../permissions.ts";
@@ -112,6 +118,7 @@ function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
   return {
     id: String(row.id),
     number: String(row.number),
+    title: String(row.title ?? (row.number ? `Order ${row.number}` : "")),
     companyId: String(row.company_id),
     status: (row.status as PurchaseOrder["status"]) ?? "submitted",
     valueEur: Number(row.value_eur ?? 0),
@@ -337,6 +344,122 @@ function mapWorkerGeneralRequestAttachment(row: Record<string, unknown>): Worker
   };
 }
 
+function mapOffer(row: Record<string, unknown>): Offer {
+  return {
+    id: String(row.id),
+    number: String(row.number),
+    kind: row.kind as "purchasing" | "selling",
+    material: String(row.material ?? ""),
+    materialType: String(row.material_type ?? "Plastics"),
+    materialGrade: String(row.material_grade ?? "Standard"),
+    quantity: Number(row.quantity ?? 0),
+    unit: String(row.unit ?? "kg"),
+    pricePerUnit: Number(row.price_per_unit ?? 0),
+    currency: String(row.currency ?? "EUR"),
+    totalValue: Number(row.total_value ?? 0),
+    country: String(row.country ?? ""),
+    location: String(row.location ?? ""),
+    truckLoads: Number(row.truck_loads ?? 1),
+    description: String(row.description ?? ""),
+    priority: (row.priority as "low" | "medium" | "high" | "urgent") || "medium",
+    offerType: String(row.offer_type ?? "Spot"),
+    team: String(row.team ?? "General"),
+    status: (row.status as Offer["status"]) || "draft",
+    approvalStatus: (row.approval_status as Offer["approvalStatus"]) || "pending",
+    adminDecisionNote: typeof row.admin_decision_note === "string" ? row.admin_decision_note : null,
+    decidedBy: typeof row.decided_by === "string" ? row.decided_by : null,
+    decidedAt: typeof row.decided_at === "string" ? row.decided_at : null,
+    isFavourite: Boolean(row.is_favourite),
+    createdBy: String(row.created_by),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+    updatedBy: typeof row.updated_by === "string" ? row.updated_by : null,
+    updatedAt: String(row.updated_at ?? new Date().toISOString()),
+    deletedAt: typeof row.deleted_at === "string" ? row.deleted_at : null,
+    deletedBy: typeof row.deleted_by === "string" ? row.deleted_by : null,
+  };
+}
+
+function mapOfferAttachment(row: Record<string, unknown>): OfferAttachment {
+  return {
+    id: String(row.id),
+    offerId: String(row.offer_id),
+    name: String(row.name ?? ""),
+    kind: (row.kind as "image" | "document") || "document",
+    mime: String(row.mime ?? "application/octet-stream"),
+    byteSize: Number(row.byte_size ?? 0),
+    storageKey: String(row.storage_key ?? ""),
+    url: typeof row.url === "string" ? row.url : null,
+    uploadedBy: String(row.uploaded_by),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
+}
+
+function mapOfferComment(row: Record<string, unknown>): OfferComment {
+  return {
+    id: String(row.id),
+    offerId: String(row.offer_id),
+    authorId: String(row.author_id),
+    comment: String(row.comment ?? ""),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
+}
+
+function mapOfferActivity(row: Record<string, unknown>): OfferActivity {
+  return {
+    id: String(row.id),
+    offerId: String(row.offer_id),
+    actorId: String(row.actor_id),
+    action: String(row.action ?? ""),
+    details: String(row.details ?? ""),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
+}
+
+function mapInventoryHistory(row: Record<string, unknown>): InventoryHistoryRecord {
+  return {
+    id: String(row.id ?? ""),
+    materialId: String(row.material_id ?? ""),
+    materialName: String(row.material_name ?? ""),
+    warehouseId: String(row.warehouse_id ?? ""),
+    warehouseName: String(row.warehouse_name ?? ""),
+    containerNumber: row.container_number ? String(row.container_number) : null,
+    quantityBefore: Number(row.quantity_before ?? 0),
+    quantityChange: Number(row.quantity_change ?? 0),
+    quantityAfter: Number(row.quantity_after ?? 0),
+    packagingTypeId: row.packaging_type_id ? String(row.packaging_type_id) : null,
+    packagingTypeName: row.packaging_type_name ? String(row.packaging_type_name) : null,
+    packagingCount: row.packaging_count != null ? Number(row.packaging_count) : null,
+    packagingUnitTareKg: row.packaging_unit_tare_kg != null ? Number(row.packaging_unit_tare_kg) : null,
+    totalPackagingWeightKg: row.total_packaging_weight_kg != null ? Number(row.total_packaging_weight_kg) : null,
+    grossWeightKg: row.gross_weight_kg != null ? Number(row.gross_weight_kg) : null,
+    operationType: String(row.operation_type ?? ""),
+    operationReason: String(row.operation_reason ?? ""),
+    reference: String(row.reference ?? ""),
+    poNumber: row.po_number ? String(row.po_number) : null,
+    soNumber: row.so_number ? String(row.so_number) : null,
+    performedBy: String(row.performed_by ?? ""),
+    performedByName: String(row.performed_by_name ?? ""),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
+}
+
+function mapNotification(row: Record<string, unknown>): NotificationRecord {
+  return {
+    id: String(row.id),
+    recipientId: String(row.recipient_id),
+    eventType: String(row.event_type),
+    title: String(row.title),
+    message: String(row.message),
+    targetType: typeof row.target_type === "string" ? row.target_type : null,
+    targetId: typeof row.target_id === "string" ? row.target_id : null,
+    link: typeof row.link === "string" ? row.link : null,
+    warehouseId: typeof row.warehouse_id === "string" ? row.warehouse_id : null,
+    read: Boolean(row.read ?? false),
+    readAt: typeof row.read_at === "string" ? row.read_at : null,
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
+}
+
 // ----------------------------------------------------------------------------
 // SupabaseAdapter Implementation
 // ----------------------------------------------------------------------------
@@ -426,12 +549,18 @@ export class SupabaseAdapter {
       documentsRes,
       balancesRes,
       movementsRes,
+      inventoryHistoryRes,
       customsRes,
       demurrageRes,
       annex7Res,
       auditRes,
       generalRequestsRes,
       generalRequestAttachmentsRes,
+      offersRes,
+      offerAttachmentsRes,
+      offerCommentsRes,
+      offerActivitiesRes,
+      notificationsRes,
     ] = await Promise.all([
       this.client.select<Record<string, unknown>>("warehouses", "select=*&order=name.asc", token),
       this.client.select<Record<string, unknown>>("companies", "select=*&order=name.asc", token),
@@ -447,12 +576,18 @@ export class SupabaseAdapter {
       this.client.select<Record<string, unknown>>("documents", "select=*&order=created_at.asc", token),
       this.client.select<Record<string, unknown>>("stock_balances", "select=*", token),
       this.client.select<Record<string, unknown>>("stock_movements", "select=*&order=created_at.asc", token),
+      this.client.select<Record<string, unknown>>("inventory_history", "select=*&order=created_at.desc", token),
       this.client.select<Record<string, unknown>>("customs_records", "select=*", token),
       this.client.select<Record<string, unknown>>("demurrage_records", "select=*", token),
       this.client.select<Record<string, unknown>>("annex7_records", "select=*&order=uploaded_at.asc", token),
       this.client.select<Record<string, unknown>>("audit_log", "select=*&order=created_at.asc", token),
       this.client.select<Record<string, unknown>>("worker_general_requests", "select=*&order=created_at.asc", token),
       this.client.select<Record<string, unknown>>("worker_general_request_attachments", "select=*", token),
+      this.client.select<Record<string, unknown>>("offers", "select=*&order=created_at.desc", token),
+      this.client.select<Record<string, unknown>>("offer_attachments", "select=*", token),
+      this.client.select<Record<string, unknown>>("offer_comments", "select=*&order=created_at.asc", token),
+      this.client.select<Record<string, unknown>>("offer_activities", "select=*&order=created_at.desc", token),
+      this.client.select<Record<string, unknown>>("notifications", "select=*&order=created_at.desc", token),
     ]);
 
     if (warehousesRes.ok) store.warehouses = warehousesRes.value.map(mapWarehouse);
@@ -469,12 +604,115 @@ export class SupabaseAdapter {
     if (documentsRes.ok) store.documents = documentsRes.value.map(mapDocument);
     if (balancesRes.ok) store.stockBalances = balancesRes.value.map(mapStockBalance);
     if (movementsRes.ok) store.stockMovements = movementsRes.value.map(mapStockMovement);
+    if (inventoryHistoryRes.ok) store.inventoryHistory = inventoryHistoryRes.value.map(mapInventoryHistory);
     if (customsRes.ok) store.customsRecords = customsRes.value.map(mapCustomsRecord);
     if (demurrageRes.ok) store.demurrageRecords = demurrageRes.value.map(mapDemurrageRecord);
     if (annex7Res.ok) store.annex7Records = annex7Res.value.map(mapAnnex7Record);
     if (auditRes.ok) store.auditLog = auditRes.value.map(mapAuditLogEntry);
     if (generalRequestsRes.ok) store.workerGeneralRequests = generalRequestsRes.value.map(mapWorkerGeneralRequest);
     if (generalRequestAttachmentsRes.ok) store.workerGeneralRequestAttachments = generalRequestAttachmentsRes.value.map(mapWorkerGeneralRequestAttachment);
+    if (offersRes.ok) store.offers = offersRes.value.map(mapOffer);
+    if (offerAttachmentsRes.ok) store.offerAttachments = offerAttachmentsRes.value.map(mapOfferAttachment);
+    if (offerCommentsRes.ok) store.offerComments = offerCommentsRes.value.map(mapOfferComment);
+    if (offerActivitiesRes.ok) store.offerActivities = offerActivitiesRes.value.map(mapOfferActivity);
+    const persistentNotifs: NotificationRecord[] = notificationsRes.ok ? notificationsRes.value.map(mapNotification) : [];
+    const existingTargetKeys = new Set(
+      persistentNotifs.map((n) => `${n.eventType}:${n.targetType || ""}:${n.targetId || ""}`)
+    );
+
+    // Dynamic operational notification synthesis with strict deduplication against persistent records
+    const synNotifs: NotificationRecord[] = [];
+    const now = this.now();
+
+    for (const b of store.stockBalances) {
+      const mat = store.materials.find((m) => m.id === b.materialId);
+      const wh = store.warehouses.find((w) => w.id === b.warehouseId);
+      if (mat && b.weightKg <= mat.lowStockThresholdKg && mat.lowStockThresholdKg > 0) {
+        const key = `low_stock:material:${mat.id}`;
+        if (!existingTargetKeys.has(key)) {
+          synNotifs.push({
+            id: `low-stock-${b.id}`,
+            recipientId: "",
+            eventType: "low_stock",
+            title: `Low Stock: ${mat.description}`,
+            message: `${mat.description} at ${wh?.name || "warehouse"} has ${b.weightKg.toLocaleString()} kg remaining (threshold: ${mat.lowStockThresholdKg.toLocaleString()} kg).`,
+            targetType: "material",
+            targetId: mat.id,
+            link: "/inventory",
+            warehouseId: b.warehouseId,
+            read: false,
+            readAt: null,
+            createdAt: now,
+          });
+        }
+      }
+    }
+    for (const order of store.purchaseOrders.filter((o) => o.status === "submitted")) {
+      const key = `order_pending:purchase_order:${order.id}`;
+      if (!existingTargetKeys.has(key)) {
+        synNotifs.push({
+          id: `order-pending-${order.id}`,
+          recipientId: "",
+          eventType: "order_pending",
+          title: `Pending Approval: ${order.number}`,
+          message: `Purchase order ${order.number} is awaiting approval. Value: €${order.valueEur.toLocaleString()}.`,
+          targetType: "purchase_order",
+          targetId: order.id,
+          link: "/purchases",
+          warehouseId: null,
+          read: false,
+          readAt: null,
+          createdAt: order.createdAt,
+        });
+      }
+    }
+    for (const req of store.requests.filter((r) => r.status === "submitted")) {
+      const key = `request_pending:request:${req.id}`;
+      if (!existingTargetKeys.has(key)) {
+        const wh = store.warehouses.find((w) => w.id === req.warehouseId);
+        synNotifs.push({
+          id: `req-pending-${req.id}`,
+          recipientId: "",
+          eventType: "request_pending",
+          title: `Request Pending: ${req.number}`,
+          message: `Worker operation request ${req.number} at ${wh?.name || "warehouse"} is awaiting review.`,
+          targetType: "request",
+          targetId: req.id,
+          link: "/tasks",
+          warehouseId: req.warehouseId,
+          read: false,
+          readAt: null,
+          createdAt: req.createdAt,
+        });
+      }
+    }
+    for (const dem of store.demurrageRecords) {
+      if (dem.chargeEur && dem.chargeEur > 0) {
+        const key = `demurrage_alert:shipment:${dem.shipmentId}`;
+        if (!existingTargetKeys.has(key)) {
+          const sh = store.shipments.find((s) => s.id === dem.shipmentId);
+          synNotifs.push({
+            id: `demurrage-${dem.id}`,
+            recipientId: "",
+            eventType: "demurrage_alert",
+            title: `Demurrage Alert: €${dem.chargeEur.toLocaleString()}`,
+            message: `Accrued demurrage on shipment ${sh?.reference || "shipment"}: ${dem.freeMinutes} free minutes exceeded.`,
+            targetType: "shipment",
+            targetId: dem.shipmentId,
+            link: "/containers",
+            warehouseId: sh?.warehouseId ?? null,
+            read: false,
+            readAt: null,
+            createdAt: now,
+          });
+        }
+      }
+    }
+
+    // Merge persistent and non-duplicated synthesized notifications
+    store.notifications = [...persistentNotifs, ...synNotifs].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
     return store;
   }
@@ -1034,6 +1272,23 @@ export class SupabaseAdapter {
           error = "This role cannot transfer stock.";
           break;
         }
+        case "markNotificationRead": {
+          const notifId = text(body.id || body.notificationId);
+          if (notifId) {
+            const rpcRes = await this.client.rpc("rpc_mark_notification_read", { p_notification_id: notifId }, token);
+            if (!rpcRes.ok) {
+              await this.client.update("notifications", `id=eq.${notifId}`, { read: true, read_at: this.now() }, token);
+            }
+          }
+          break;
+        }
+        case "markAllNotificationsRead": {
+          const rpcRes = await this.client.rpc("rpc_mark_all_notifications_read", {}, token);
+          if (!rpcRes.ok && profile) {
+            await this.client.update("notifications", `recipient_id=eq.${profile.id}&read=eq.false`, { read: true, read_at: this.now() }, token);
+          }
+          break;
+        }
         case "postCorrection": {
           error = "Direct stock adjustments are disabled. Stock changes only through completed warehouse operations.";
           break;
@@ -1206,6 +1461,32 @@ export class SupabaseAdapter {
             { upsert: true, onConflict: "name,kind" },
           );
           if (!compRes.ok) return compRes;
+
+          // Try atomic rpc_create_purchase_order first
+          const rpcRes = await this.client.rpc<{ order_id: string; number: string; title: string; status: string }>(
+            "rpc_create_purchase_order",
+            {
+              p_title: "",
+              p_custom_number: "",
+              p_company_id: String(compRes.value.id),
+              p_material_description: input.material.trim(),
+              p_quantity_kg: input.quantityKg,
+              p_value_eur: input.valueEur,
+              p_notes: "",
+            },
+            token,
+          );
+
+          if (rpcRes.ok && rpcRes.value?.order_id) {
+            const fetched = await this.client.select<Record<string, unknown>>(
+              "purchase_orders",
+              `id=eq.${rpcRes.value.order_id}`,
+              token,
+            );
+            if (fetched.ok && fetched.value.length > 0) {
+              return ok(mapPurchaseOrder(fetched.value[0]));
+            }
+          }
 
           const existingOrders = await this.services().purchaseOrders.list(input.actorId);
           const number = `PO-${existingOrders.length + 1}`;
@@ -1586,6 +1867,243 @@ export class SupabaseAdapter {
           );
           if (!res.ok) return res;
           return ok(mapWorkerGeneralRequest(res.value));
+        },
+      },
+
+      offers: {
+        list: async (filter, actorId) => {
+          const token = this.resolveToken(actorId);
+          let query = "select=*&deleted_at=is.null";
+          if (filter?.kind) query += `&kind=eq.${encodeURIComponent(filter.kind)}`;
+          if (filter?.status) query += `&status=eq.${encodeURIComponent(filter.status)}`;
+          if (filter?.priority) query += `&priority=eq.${encodeURIComponent(filter.priority)}`;
+          if (filter?.country) query += `&country=ilike.${encodeURIComponent(filter.country)}`;
+          if (filter?.team) query += `&team=ilike.${encodeURIComponent(filter.team)}`;
+          if (filter?.isFavourite !== undefined) query += `&is_favourite=eq.${filter.isFavourite}`;
+          query += "&order=created_at.desc";
+
+          const res = await this.client.select<Record<string, unknown>>("offers", query, token);
+          let items = res.ok ? res.value.map(mapOffer) : [];
+          if (filter?.search) {
+            const q = filter.search.toLowerCase().trim();
+            items = items.filter(
+              (o) =>
+                o.number.toLowerCase().includes(q) ||
+                o.material.toLowerCase().includes(q) ||
+                o.materialGrade.toLowerCase().includes(q) ||
+                o.country.toLowerCase().includes(q) ||
+                o.team.toLowerCase().includes(q) ||
+                o.description.toLowerCase().includes(q)
+            );
+          }
+
+          const page = Math.max(1, filter?.page || 1);
+          const pageSize = Math.max(1, filter?.pageSize || 25);
+          const total = items.length;
+          const totalPages = Math.ceil(total / pageSize) || 1;
+          const paginated = items.slice((page - 1) * pageSize, page * pageSize);
+
+          return { items: paginated, total, page, pageSize, totalPages };
+        },
+        get: async (id, actorId) => {
+          const token = this.resolveToken(actorId);
+          const res = await this.client.select<Record<string, unknown>>(
+            "offers",
+            `select=*&or=(id.eq.${encodeURIComponent(id)},number.eq.${encodeURIComponent(id)})&deleted_at=is.null`,
+            token
+          );
+          return res.ok && res.value.length > 0 ? mapOffer(res.value[0]) : null;
+        },
+        attachments: async (offerId, actorId) => {
+          const token = this.resolveToken(actorId);
+          const res = await this.client.select<Record<string, unknown>>(
+            "offer_attachments",
+            `select=*&offer_id=eq.${encodeURIComponent(offerId)}&order=created_at.asc`,
+            token
+          );
+          return res.ok ? res.value.map(mapOfferAttachment) : [];
+        },
+        comments: async (offerId, actorId) => {
+          const token = this.resolveToken(actorId);
+          const res = await this.client.select<Record<string, unknown>>(
+            "offer_comments",
+            `select=*&offer_id=eq.${encodeURIComponent(offerId)}&order=created_at.asc`,
+            token
+          );
+          return res.ok ? res.value.map(mapOfferComment) : [];
+        },
+        activities: async (offerId, actorId) => {
+          const token = this.resolveToken(actorId);
+          const res = await this.client.select<Record<string, unknown>>(
+            "offer_activities",
+            `select=*&offer_id=eq.${encodeURIComponent(offerId)}&order=created_at.desc`,
+            token
+          );
+          return res.ok ? res.value.map(mapOfferActivity) : [];
+        },
+        create: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "offer:create");
+          const res = await this.client.rpc<Record<string, unknown>>(
+            "rpc_create_offer",
+            {
+              p_kind: input.kind,
+              p_material: input.material,
+              p_material_type: input.materialType ?? "Plastics",
+              p_material_grade: input.materialGrade ?? "Standard",
+              p_quantity: input.quantity,
+              p_unit: input.unit ?? "kg",
+              p_price_per_unit: input.pricePerUnit,
+              p_currency: input.currency ?? "EUR",
+              p_country: input.country,
+              p_location: input.location ?? "",
+              p_truck_loads: input.truckLoads ?? 1,
+              p_description: input.description ?? "",
+              p_priority: input.priority ?? "medium",
+              p_offer_type: input.offerType ?? "Spot",
+              p_team: input.team ?? "General",
+              p_status: input.status ?? "draft",
+            },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOffer(res.value));
+        },
+        edit: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "offer:edit");
+          const res = await this.client.rpc<Record<string, unknown>>(
+            "rpc_update_offer",
+            {
+              p_offer_id: input.id,
+              p_material: input.material ?? null,
+              p_material_type: input.materialType ?? null,
+              p_material_grade: input.materialGrade ?? null,
+              p_quantity: input.quantity ?? null,
+              p_unit: input.unit ?? null,
+              p_price_per_unit: input.pricePerUnit ?? null,
+              p_currency: input.currency ?? null,
+              p_country: input.country ?? null,
+              p_location: input.location ?? null,
+              p_truck_loads: input.truckLoads ?? null,
+              p_description: input.description ?? null,
+              p_priority: input.priority ?? null,
+              p_offer_type: input.offerType ?? null,
+              p_team: input.team ?? null,
+            },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOffer(res.value));
+        },
+        delete: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "offer:delete");
+          const res = await this.client.rpc<Record<string, unknown>>(
+            "rpc_delete_offer",
+            { p_offer_id: input.id },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOffer(res.value));
+        },
+        submitReview: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "offer:submit");
+          const res = await this.client.rpc<Record<string, unknown>>(
+            "rpc_submit_offer_for_review",
+            { p_offer_id: input.id },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOffer(res.value));
+        },
+        decide: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          if (input.decision === "approved") this.authorize(actor, "offer:approve");
+          else this.authorize(actor, "offer:reject");
+          const res = await this.client.rpc<Record<string, unknown>>(
+            "rpc_decide_offer",
+            {
+              p_offer_id: input.id,
+              p_decision: input.decision,
+              p_decision_note: input.decisionNote,
+            },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOffer(res.value));
+        },
+        updateStatus: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "offer:status");
+          const res = await this.client.rpc<Record<string, unknown>>(
+            "rpc_update_offer_status",
+            {
+              p_offer_id: input.id,
+              p_status: input.status,
+            },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOffer(res.value));
+        },
+        toggleFavourite: async (input) => {
+          const { token } = await this.resolveActor(input.actorId);
+          const res = await this.client.rpc<Record<string, unknown>>(
+            "rpc_toggle_offer_favourite",
+            { p_offer_id: input.id },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOffer(res.value));
+        },
+        addComment: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "offer:comment");
+          const res = await this.client.rpc<Record<string, unknown>>(
+            "rpc_add_offer_comment",
+            {
+              p_offer_id: input.id,
+              p_comment: input.comment,
+            },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOfferComment(res.value));
+        },
+        addAttachment: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "offer:attach");
+          const attId = randomUUID();
+          const storageKey = `offers/${input.id}/${attId}-${input.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+          const res = await this.client.insert<Record<string, unknown>>(
+            "offer_attachments",
+            {
+              id: attId,
+              offer_id: input.id,
+              name: input.name,
+              kind: input.kind ?? "document",
+              mime: input.mime ?? "application/octet-stream",
+              byte_size: input.byteSize ?? 0,
+              storage_key: storageKey,
+              uploaded_by: actor.id,
+            },
+            token
+          );
+          if (!res.ok) return res;
+          return ok(mapOfferAttachment(res.value));
+        },
+        deleteAttachment: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "offer:attach");
+          const res = await this.client.delete(
+            "offer_attachments",
+            `id=eq.${encodeURIComponent(input.attachmentId)}&offer_id=eq.${encodeURIComponent(input.id)}`,
+            token
+          );
+          if (!res.ok) return res;
+          return ok(undefined);
         },
       },
 

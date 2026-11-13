@@ -14,6 +14,7 @@ export function PurchaseDetail({ number }: { number: string }) {
   const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
   const found = state.orders.find((item) => item.number.toLowerCase() === number.toLowerCase());
   const order = found && canReadOrder(actor, found) ? found : undefined;
+  const [title, setTitle] = useState(order?.title ?? "");
   const [supplier, setSupplier] = useState(order?.supplier ?? "");
   const [material, setMaterial] = useState(order?.material ?? "");
   const [quantity, setQuantity] = useState(order ? String(order.quantityKg) : "");
@@ -37,8 +38,8 @@ export function PurchaseDetail({ number }: { number: string }) {
     <>
       <BackLink href="/purchases" label="PO & SO Orders" />
       <PageTitle
-        title={order.number}
-        subtitle={`${order.customerCompany && order.customerCompany !== order.supplier ? `${order.customerCompany} · ` : ""}${order.supplier} · ${order.date} · ${order.number}`}
+        title={order.title || order.number}
+        subtitle={`${order.number} · ${order.customerCompany && order.customerCompany !== order.supplier ? `${order.customerCompany} · ` : ""}${order.supplier} · ${order.warehouse ? `${order.warehouse} · ` : ""}${order.date}`}
         action={<StatusPill label={order.status} />}
       />
       {notice ? <p className="mb-3 text-sm text-neutral-700">{notice}</p> : null}
@@ -62,21 +63,27 @@ export function PurchaseDetail({ number }: { number: string }) {
       )}
       {canEdit ? (
         <form
-          className="mb-4 grid gap-2 rounded-xl border border-neutral-200 bg-white p-4 sm:grid-cols-2"
+          className="mb-4 grid gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:grid-cols-2"
           onSubmit={(event) => void (async () => {
             event.preventDefault();
             const error = await editPurchase(order.number, {
-              supplier,
-              material,
+              title: title.trim(),
+              supplier: supplier.trim(),
+              material: material.trim(),
               quantityKg: Number(quantity),
               valueEur: Number(value),
             });
             if (!error) {
+              setTitle(title.trim());
               setSupplier(supplier.trim());
               setMaterial(material.trim());
             }
           })()}
         >
+          <label className="text-xs text-neutral-500 sm:col-span-2">
+            Custom PO Name / Title
+            <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" />
+          </label>
           <label className="text-xs text-neutral-500">
             Supplier / Customer
             <input value={supplier} onChange={(event) => setSupplier(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950" />
@@ -100,14 +107,17 @@ export function PurchaseDetail({ number }: { number: string }) {
       ) : null}
       <div className="grid gap-3 lg:grid-cols-3">
         <Surface className="p-4 lg:col-span-2">
-          <h2 className="text-sm font-semibold">Material</h2>
-          <dl className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          <h2 className="text-sm font-semibold">Order & Material Specifications</h2>
+          <dl className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+            <Field term="PO Number" value={order.number} />
+            <Field term="Warehouse" value={order.warehouse || "Bornem"} />
+            <Field term="Status" value={order.status} />
             <Field term="Customer" value={order.customerCompany.trim() ? order.customerCompany : "Internal order"} />
             <Field term="Material" value={order.material === "—" ? "Not recorded" : order.material} />
             <Field term="Quantity" value={order.quantityKg > 0 ? formatKg(order.quantityKg) : "Not recorded"} />
-            <Field term="Notes" value={order.notes.trim() ? order.notes : "None"} />
-            <Field term="Incoterms" value={order.incoterms} />
             <Field term="Value" value={order.valueEur > 0 ? formatEuro(order.valueEur) : "Not recorded"} />
+            <Field term="Incoterms" value={order.incoterms} />
+            <Field term="Notes" value={order.notes.trim() ? order.notes : "None"} />
           </dl>
         </Surface>
         <Surface className="flex items-center justify-center p-4">

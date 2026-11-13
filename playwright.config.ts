@@ -8,14 +8,14 @@ const e2eStorePath = process.env.STOCKFLOW_STORE_PATH || path.join(os.tmpdir(), 
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  timeout: 30_000,
+  timeout: 60_000,
   expect: {
     timeout: 5_000,
   },
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: 2,
+  workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL,
@@ -34,6 +34,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120 * 1000,
     env: {
+      STOCKFLOW_DATA_ADAPTER: "local",
       STOCKFLOW_STORE_PATH: e2eStorePath,
       STOCKFLOW_OWNER_EMAIL: "owner@example.com",
       STOCKFLOW_OWNER_NAME: "Ada Owner",

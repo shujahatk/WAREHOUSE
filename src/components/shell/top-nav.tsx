@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { Icon } from "@/components/icons";
-import { stockStatus, visibleContainers, visibleStock, type DemoIdentity } from "@/domain/view";
+import { formatInstant, type DemoIdentity } from "@/domain/view";
 import { roleLabel } from "@/lib/permissions";
 
 export function TopNav({
@@ -19,28 +19,12 @@ export function TopNav({
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const { state } = useDemo();
-  const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
-  const stock = visibleStock(state, identity.role, identity.warehouse);
-  const pendingRequests = state.requests.filter((req) => req.status === "submitted");
-  const approvedWorkerRequests = state.requests.filter(
-    (req) => req.status === "approved" && req.createdByName === identity.name,
-  );
-  const alerts = [
-    ...visibleContainers(state, actor)
-      .filter((row) => row.status === "In transit")
-      .map((row) => `${row.number} is in transit to ${row.warehouse}.`),
-    ...stock.filter((row) => row.quantity <= row.reorder).map((row) => `${row.material} at ${row.warehouse} is ${stockStatus(row).toLowerCase()}.`),
-    ...(identity.role === "owner" && pendingRequests.length > 0
-      ? [`${pendingRequests.length} loading/unloading request(s) are waiting for Admin approval.`]
-      : []),
-    ...(identity.role === "owner" && state.orders.some((order) => order.status === "Pending")
-      ? [`${state.orders.filter((order) => order.status === "Pending").length} PO/SO order(s) are waiting for approval.`]
-      : []),
-    ...(identity.role === "worker" && approvedWorkerRequests.length > 0
-      ? [`${approvedWorkerRequests.length} request(s) approved — ready to complete operation.`]
-      : []),
-  ];
+  const { state, markNotificationRead, markAllNotificationsRead } = useDemo();
+
+  const notifications = state.notifications || [];
+  const unreadNotifications = notifications.filter((n) => !n.read);
+  const unreadCount = unreadNotifications.length;
+  const recentNotifications = notifications.slice(0, 5);
 
   return (
     <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white px-4 py-3 sm:px-6">
@@ -74,21 +58,92 @@ export function TopNav({
               aria-expanded={open}
               aria-label="Notifications"
               onClick={() => setOpen((value) => !value)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-200 text-neutral-800"
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-200 text-neutral-800 hover:bg-neutral-50"
             >
               <Icon name="bell" />
+              {unreadCount > 0 ? (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white shadow-xs">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              ) : null}
             </button>
             {open ? (
-              <div className="absolute right-0 z-40 mt-2 w-72 rounded-xl border border-neutral-200 bg-white p-3 text-sm shadow-sm">
-                <p className="font-medium text-neutral-950">Alerts</p>
-                {alerts.length === 0 ? <p className="mt-2 text-xs text-neutral-500">No open alerts in the current records.</p> : null}
-                <ul className="mt-2 space-y-2">
-                  {alerts.map((alert) => (
-                    <li key={alert} className="text-xs leading-5 text-neutral-600">
-                      {alert}
-                    </li>
-                  ))}
-                </ul>
+              <div className="absolute right-0 z-40 mt-2 w-80 sm:w-96 rounded-2xl border border-neutral-200 bg-white shadow-lg overflow-hidden text-sm">
+                <div className="flex items-center justify-between border-b border-neutral-100 bg-neutral-50/70 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-neutral-950">Notifications</span>
+                    {unreadCount > 0 ? (
+                      <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[10px] font-medium text-white">
+                        {unreadCount} new
+                      </span>
+                    ) : null}
+                  </div>
+                  {unreadCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => markAllNotificationsRead()}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                    >
+                      Mark all as read
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="max-h-80 overflow-y-auto divide-y divide-neutral-100">
+                  {recentNotifications.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-neutral-500">
+                      No notifications at this time.
+                    </div>
+                  ) : (
+                    recentNotifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        className={`p-3 transition-colors hover:bg-neutral-50/80 ${!notif.read ? "bg-blue-50/20" : ""
+                          }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <Link
+                            href={notif.link || "/notifications"}
+                            onClick={() => {
+                              if (!notif.read) markNotificationRead(notif.id);
+                              setOpen(false);
+                            }}
+                            className="min-w-0 flex-1 group"
+                          >
+                            <p className="text-xs font-medium text-neutral-950 group-hover:text-blue-600">
+                              {notif.title}
+                            </p>
+                            <p className="mt-0.5 text-xs text-neutral-600 line-clamp-2">
+                              {notif.message}
+                            </p>
+                            <span className="mt-1 block text-[10px] text-neutral-400">
+                              {formatInstant(notif.createdAt)}
+                            </span>
+                          </Link>
+                          {!notif.read ? (
+                            <button
+                              type="button"
+                              title="Mark as read"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markNotificationRead(notif.id);
+                              }}
+                              className="mt-0.5 h-2 w-2 rounded-full bg-blue-600 shrink-0 hover:scale-125 transition-transform"
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <Link
+                  href="/notifications"
+                  onClick={() => setOpen(false)}
+                  className="block border-t border-neutral-100 bg-neutral-50/50 p-2.5 text-center text-xs font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
+                >
+                  View all notifications →
+                </Link>
               </div>
             ) : null}
           </div>

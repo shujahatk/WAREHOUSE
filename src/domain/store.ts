@@ -44,7 +44,7 @@ async function acquireLock(file: string, timeoutMs = 8000): Promise<() => Promis
   };
 }
 
-async function readStore(file: string, retries = 3): Promise<StoreData> {
+export async function readStore(file: string, retries = 3): Promise<StoreData> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const raw = await readFile(file, "utf8");

@@ -48,6 +48,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# backups & disaster recovery (sensitive production snapshots)
+/backups/
+*.sql.bak
+*.dump
+supabase/.temp/
+
 # local warehouse store
 /data
 

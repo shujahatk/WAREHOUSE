@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const domainRoleSchema = z.enum(["owner", "worker", "manager", "customer"]);
+export const domainRoleSchema = z.enum(["owner", "worker", "manager", "customer", "moderator"]);
 export const companyKindSchema = z.enum(["supplier", "customer"]);
 export const purchaseStatusSchema = z.enum(["draft", "submitted", "approved", "declined"]);
 export const shipmentDirectionSchema = z.enum(["inbound", "outbound"]);
@@ -99,6 +99,7 @@ export const packagingTypeSchema = z.object({
 export const purchaseOrderSchema = z.object({
   id,
   number: label,
+  title: z.string().default(""),
   companyId: id,
   status: purchaseStatusSchema,
   valueEur: z.number().refine((value) => Number.isFinite(value) && value >= 0, "Value must be zero or greater."),
@@ -242,6 +243,95 @@ export const workerGeneralRequestAttachmentSchema = z.object({
 });
 export type WorkerGeneralRequestAttachment = z.infer<typeof workerGeneralRequestAttachmentSchema>;
 
+export const offerKindSchema = z.enum(["purchasing", "selling"]);
+export type OfferKind = z.infer<typeof offerKindSchema>;
+
+export const offerStatusSchema = z.enum([
+  "draft",
+  "received",
+  "under_review",
+  "negotiating",
+  "won",
+  "lost",
+]);
+export type OfferStatus = z.infer<typeof offerStatusSchema>;
+
+export const offerApprovalStatusSchema = z.enum(["pending", "approved", "rejected"]);
+export type OfferApprovalStatus = z.infer<typeof offerApprovalStatusSchema>;
+
+export const offerPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
+export type OfferPriority = z.infer<typeof offerPrioritySchema>;
+
+export const offerAttachmentKindSchema = z.enum(["image", "document"]);
+export type OfferAttachmentKind = z.infer<typeof offerAttachmentKindSchema>;
+
+export const offerAttachmentSchema = z.object({
+  id,
+  offerId: id,
+  name: label,
+  kind: offerAttachmentKindSchema,
+  mime: z.string(),
+  byteSize: z.number().int().nonnegative(),
+  storageKey: z.string().min(1),
+  url: z.string().nullable().default(null),
+  uploadedBy: id,
+  createdAt: stamp,
+});
+export type OfferAttachment = z.infer<typeof offerAttachmentSchema>;
+
+export const offerCommentSchema = z.object({
+  id,
+  offerId: id,
+  authorId: id,
+  comment: label,
+  createdAt: stamp,
+});
+export type OfferComment = z.infer<typeof offerCommentSchema>;
+
+export const offerActivitySchema = z.object({
+  id,
+  offerId: id,
+  actorId: id,
+  action: label,
+  details: z.string().default(""),
+  createdAt: stamp,
+});
+export type OfferActivity = z.infer<typeof offerActivitySchema>;
+
+export const offerSchema = z.object({
+  id,
+  number: label,
+  kind: offerKindSchema,
+  material: label,
+  materialType: z.string().default("Plastics"),
+  materialGrade: z.string().default("Standard"),
+  quantity: z.number().positive("Quantity must be greater than zero."),
+  unit: z.string().default("kg"),
+  pricePerUnit: z.number().nonnegative("Price per unit cannot be negative."),
+  currency: z.string().default("EUR"),
+  totalValue: z.number().nonnegative("Total value cannot be negative."),
+  country: label,
+  location: z.string().default(""),
+  truckLoads: z.number().int().nonnegative().default(1),
+  description: z.string().default(""),
+  priority: offerPrioritySchema.default("medium"),
+  offerType: z.string().default("Spot"),
+  team: z.string().default("General"),
+  status: offerStatusSchema.default("draft"),
+  approvalStatus: offerApprovalStatusSchema.default("pending"),
+  adminDecisionNote: z.string().nullable().default(null),
+  decidedBy: id.nullable().default(null),
+  decidedAt: stamp.nullable().default(null),
+  isFavourite: z.boolean().default(false),
+  createdBy: id,
+  createdAt: stamp,
+  updatedBy: id.nullable().default(null),
+  updatedAt: stamp,
+  deletedAt: stamp.nullable().default(null),
+  deletedBy: id.nullable().default(null),
+});
+export type Offer = z.infer<typeof offerSchema>;
+
 export const documentStatusSchema = z.enum(["pending", "active", "deleted"]);
 export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 
@@ -291,6 +381,32 @@ export const stockMovementSchema = z.object({
   requestLineId: id,
   createdAt: stamp,
   createdBy: id,
+});
+
+export const inventoryHistoryRecordSchema = z.object({
+  id,
+  materialId: id,
+  materialName: z.string(),
+  warehouseId: id,
+  warehouseName: z.string(),
+  containerNumber: z.string().nullable().default(null),
+  quantityBefore: z.number(),
+  quantityChange: z.number(),
+  quantityAfter: z.number(),
+  packagingTypeId: id.nullable().default(null),
+  packagingTypeName: z.string().nullable().default(null),
+  packagingCount: z.number().nullable().default(null),
+  packagingUnitTareKg: z.number().nullable().default(null),
+  totalPackagingWeightKg: z.number().nullable().default(null),
+  grossWeightKg: z.number().nullable().default(null),
+  operationType: z.string(),
+  operationReason: z.string(),
+  reference: z.string(),
+  poNumber: z.string().nullable().default(null),
+  soNumber: z.string().nullable().default(null),
+  performedBy: id,
+  performedByName: z.string(),
+  createdAt: stamp,
 });
 
 export const customsRecordSchema = z.object({
@@ -346,6 +462,26 @@ export const auditLogEntrySchema = z.object({
   oldValue: z.string().nullable(),
   newValue: z.string().nullable(),
   createdAt: stamp,
+  actorRole: z.string().optional().nullable(),
+  actorName: z.string().optional().nullable(),
+  warehouseId: z.string().optional().nullable(),
+  context: z.string().optional().nullable(),
+  requestReference: z.string().optional().nullable(),
+});
+
+export const notificationRecordSchema = z.object({
+  id,
+  recipientId: id,
+  eventType: label,
+  title: label,
+  message: z.string(),
+  targetType: z.string().optional().nullable(),
+  targetId: z.string().optional().nullable(),
+  link: z.string().optional().nullable(),
+  warehouseId: z.string().optional().nullable(),
+  read: z.boolean().default(false),
+  readAt: stamp.optional().nullable(),
+  createdAt: stamp,
 });
 
 export const sessionSchema = z.object({
@@ -376,16 +512,24 @@ export const storeSchema = z.object({
   requestPhotos: z.array(requestPhotoSchema),
   workerGeneralRequests: z.array(workerGeneralRequestSchema).default([]),
   workerGeneralRequestAttachments: z.array(workerGeneralRequestAttachmentSchema).default([]),
+  offers: z.array(offerSchema).default([]),
+  offerAttachments: z.array(offerAttachmentSchema).default([]),
+  offerComments: z.array(offerCommentSchema).default([]),
+  offerActivities: z.array(offerActivitySchema).default([]),
+  offerSequence: z.array(z.object({ kind: z.string(), year: z.number().int(), next: z.number().int().nonnegative() })).default([]),
   documents: z.array(documentSchema),
   blobs: z.array(blobSchema),
   stockBalances: z.array(stockBalanceSchema),
   stockMovements: z.array(stockMovementSchema),
+  inventoryHistory: z.array(inventoryHistoryRecordSchema).default([]),
   customsRecords: z.array(customsRecordSchema),
   demurrageRecords: z.array(demurrageRecordSchema),
   annex7Records: z.array(annex7RecordSchema),
   poMessages: z.array(poMessageSchema),
   auditLog: z.array(auditLogEntrySchema),
+  notifications: z.array(notificationRecordSchema).default([]),
   requestSequence: z.array(z.object({ year: z.number().int(), next: z.number().int().nonnegative() })),
+  poSequence: z.array(z.object({ year: z.number().int(), next: z.number().int().nonnegative() })).default([]),
   fileSecret: z.string(),
 });
 
@@ -421,11 +565,13 @@ export type RequestPhoto = z.infer<typeof requestPhotoSchema>;
 export type DocumentRecord = z.infer<typeof documentSchema>;
 export type StockBalance = z.infer<typeof stockBalanceSchema>;
 export type StockMovement = z.infer<typeof stockMovementSchema>;
+export type InventoryHistoryRecord = z.infer<typeof inventoryHistoryRecordSchema>;
 export type CustomsRecord = z.infer<typeof customsRecordSchema>;
 export type DemurrageRecord = z.infer<typeof demurrageRecordSchema>;
 export type Annex7Record = z.infer<typeof annex7RecordSchema>;
 export type PoMessage = z.infer<typeof poMessageSchema>;
 export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
+export type NotificationRecord = z.infer<typeof notificationRecordSchema>;
 export type StoreData = z.infer<typeof storeSchema>;
 
 export function emptyStore(): StoreData {
@@ -444,16 +590,24 @@ export function emptyStore(): StoreData {
     requestPhotos: [],
     workerGeneralRequests: [],
     workerGeneralRequestAttachments: [],
+    offers: [],
+    offerAttachments: [],
+    offerComments: [],
+    offerActivities: [],
+    offerSequence: [],
     documents: [],
     blobs: [],
     stockBalances: [],
     stockMovements: [],
+    inventoryHistory: [],
     customsRecords: [],
     demurrageRecords: [],
     annex7Records: [],
     poMessages: [],
     auditLog: [],
+    notifications: [],
     requestSequence: [],
+    poSequence: [],
     fileSecret: "",
   };
 }
