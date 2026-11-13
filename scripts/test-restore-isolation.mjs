@@ -89,9 +89,10 @@ function runIsolatedRestoreTest() {
         const buf = Buffer.from(f.base64Payload, 'base64');
         const hash = createHash('sha256').update(buf).digest('hex');
         if (hash !== f.sha256) {
-          throw new Error(`File integrity corrupted for ${f.name}: hash mismatch!`);
+          throw new Error(`File integrity corrupted for ${f.name || f.storageKey}: hash mismatch!`);
         }
-        writeFileSync(path.join(stagingDir, f.name), buf);
+        const fileName = f.name || f.storageKey || `recovered-file-${f.id || 'unnamed'}`;
+        writeFileSync(path.join(stagingDir, fileName), buf);
         recoveredCount++;
       }
     }

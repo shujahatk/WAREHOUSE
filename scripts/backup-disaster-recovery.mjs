@@ -127,12 +127,13 @@ export async function createBackup() {
   manifest.storage.trackedFiles = [];
 
   for (const d of docs) {
+    const fileName = d.name || d.original_filename || d.file_name || d.storage_key || `document-${d.id}`;
     const fileMeta = {
       id: d.id,
       storageKey: d.storage_key,
-      name: d.file_name,
-      mimeType: d.mime_type,
-      fileSize: d.file_size,
+      name: fileName,
+      mimeType: d.mime || d.mime_type,
+      fileSize: d.byte_size || d.file_size,
       category: d.category,
       warehouse: d.warehouse,
       createdAt: d.created_at,
@@ -149,7 +150,7 @@ export async function createBackup() {
           const buf = Buffer.from(await fileRes.arrayBuffer());
           fileMeta.sha256 = createHash('sha256').update(buf).digest('hex');
           fileMeta.base64Payload = buf.toString('base64');
-          console.log(`  ✓ Captured file: ${d.file_name} (${buf.length} bytes, sha256:${fileMeta.sha256.slice(0, 10)}...)`);
+          console.log(`  ✓ Captured file: ${fileName} (${buf.length} bytes, sha256:${fileMeta.sha256.slice(0, 10)}...)`);
         }
       } catch (err) {
         console.warn(`  ! Could not download object ${d.storage_key}:`, err.message);
