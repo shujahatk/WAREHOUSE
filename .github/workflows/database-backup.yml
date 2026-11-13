@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node.js runtime
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       - name: Install dependencies
@@ -34,7 +34,7 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          TEST_ADMIN_PASSWORD: ${{ secrets.STOCKFLOW_ADMIN_PASSWORD }}
+          STOCKFLOW_BACKUP_CREDENTIAL: ${{ secrets.STOCKFLOW_BACKUP_CREDENTIAL }}
           STOCKFLOW_DATA_ADAPTER: supabase
         run: |
           node scripts/backup-disaster-recovery.mjs

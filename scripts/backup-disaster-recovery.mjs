@@ -38,16 +38,19 @@ const ALL_TABLES = [
   'notifications', 'notification_preferences'
 ];
 
-async function signInAdmin() {
+async function signInBackupRunner() {
+  const credential = env.STOCKFLOW_BACKUP_CREDENTIAL || env.TEST_ADMIN_PASSWORD || 'StockFlowAdmin2026!';
+  const email = env.STOCKFLOW_BACKUP_EMAIL || 'admin@stockflow.local';
+
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: { apikey: ANON_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'admin@stockflow.local',
-      password: env.TEST_ADMIN_PASSWORD || 'StockFlowAdmin2026!',
+      email,
+      password: credential,
     }),
   });
-  if (!res.ok) throw new Error(`Admin sign in failed: ${res.status}`);
+  if (!res.ok) throw new Error(`Backup runner authentication failed: ${res.status}`);
   const data = await res.json();
   return data.access_token;
 }
@@ -74,8 +77,8 @@ export async function createBackup() {
   console.log(`Target:         ${SUPABASE_URL}`);
   console.log(`Timestamp:      ${new Date().toISOString()}`);
 
-  const token = await signInAdmin();
-  console.log('[PASS] Admin credentials verified for logical backup.');
+  const token = await signInBackupRunner();
+  console.log('[PASS] Dedicated backup credentials verified for logical backup.');
 
   const backupDir = path.join(process.cwd(), 'backups');
   if (!existsSync(backupDir)) {
