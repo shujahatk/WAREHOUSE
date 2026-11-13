@@ -982,8 +982,7 @@ on conflict (id) do update set
 -- 2. STORAGE RLS POLICIES ON storage.objects
 -- ----------------------------------------------------------------------------
 
--- Enable RLS on storage.objects if not already enabled
-alter table storage.objects enable row level security;
+-- Note: RLS is already enabled by default on storage.objects by Supabase
 
 -- 2.1 Logistics / Warehouse Documents: SELECT
 drop policy if exists stockflow_storage_select on storage.objects;
