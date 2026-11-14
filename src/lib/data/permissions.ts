@@ -112,7 +112,7 @@ export function can(
   resource?: Resource,
 ): boolean {
   if (!user || !user.active) return false;
-  if (!isActiveRole(user.role)) return false;
+  if (!isActiveRole(user.role) && user.role !== "offers_user") return false;
 
   // 1. Admin (owner):
   // - Views all operational data, documents, images, reports, and audit logs across all warehouses

@@ -50,6 +50,154 @@ $$;
 revoke all on function public.current_app_user() from public, anon;
 grant execute on function public.current_app_user() to authenticated, service_role;
 
+create or replace function public.current_user_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select role from public.current_app_user();
+$$;
+
+revoke all on function public.current_user_role() from public, anon;
+grant execute on function public.current_user_role() to authenticated, service_role;
+
+create or replace function public.current_user_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select id from public.current_app_user();
+$$;
+
+revoke all on function public.current_user_id() from public, anon;
+grant execute on function public.current_user_id() to authenticated, service_role;
+
+-- Account status check for authenticated users (including pending or inactive)
+create or replace function public.rpc_get_auth_account_status()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user public.users;
+begin
+  if auth.uid() is null then
+    return jsonb_build_object('ok', false, 'error', 'Unauthenticated');
+  end if;
+
+  select * into v_user
+  from public.users
+  where auth_user_id = auth.uid()
+  limit 1;
+
+  if v_user is null then
+    return jsonb_build_object('ok', false, 'error', 'Profile not found');
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'id', v_user.id,
+    'email', v_user.email,
+    'name', v_user.name,
+    'role', v_user.role,
+    'active', v_user.active,
+    'approval_status', v_user.approval_status
+  );
+end;
+$$;
+
+revoke all on function public.rpc_get_auth_account_status() from public, anon;
+grant execute on function public.rpc_get_auth_account_status() to authenticated, service_role;
+
+-- Direct Offers User registration
+create or replace function public.rpc_register_offers_user(
+  p_auth_user_id uuid,
+  p_email text,
+  p_name text,
+  p_company text default null,
+  p_notes text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid;
+  v_notes text;
+  v_admin_id uuid;
+begin
+  if p_auth_user_id is null then
+    raise exception 'Auth user ID is required.';
+  end if;
+  if length(trim(coalesce(p_email, ''))) = 0 then
+    raise exception 'Email is required.';
+  end if;
+  if length(trim(coalesce(p_name, ''))) = 0 then
+    raise exception 'Name is required.';
+  end if;
+
+  v_notes := case 
+    when p_notes is not null and p_company is not null and length(trim(p_notes)) > 0 and length(trim(p_company)) > 0
+      then trim(p_notes) || ' (Company: ' || trim(p_company) || ')'
+    when p_company is not null and length(trim(p_company)) > 0
+      then 'Company: ' || trim(p_company)
+    else trim(p_notes)
+  end;
+
+  -- Ensure auth.users email is confirmed so password authentication can proceed to our status check
+  begin
+    update auth.users
+    set email_confirmed_at = coalesce(email_confirmed_at, now())
+    where id = p_auth_user_id;
+  exception when others then
+    null;
+  end;
+
+  insert into public.users (
+    id, auth_user_id, email, name, role, warehouse_id, company_id,
+    active, approval_status, registration_notes, created_at, updated_at
+  ) values (
+    gen_random_uuid(), p_auth_user_id, lower(trim(p_email)), trim(p_name), 'offers_user', null, null,
+    false, 'pending', v_notes, now(), now()
+  )
+  on conflict (email) do update set
+    auth_user_id = p_auth_user_id,
+    name = trim(p_name),
+    role = 'offers_user',
+    approval_status = 'pending',
+    active = false,
+    registration_notes = v_notes,
+    updated_at = now()
+  returning id into v_user_id;
+
+  -- Notify admins of the registration request
+  for v_admin_id in (select id from public.users where role = 'owner' and active = true) loop
+    begin
+      perform public.rpc_create_notification(
+        v_admin_id,
+        'user_registration',
+        'New Offers User Registration: ' || trim(p_name),
+        trim(p_name) || ' (' || lower(trim(p_email)) || ') requested an Offers User account.',
+        'user',
+        v_user_id::text
+      );
+    exception when others then
+      null;
+    end;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'userId', v_user_id);
+end;
+$$;
+
+grant execute on function public.rpc_register_offers_user(uuid, text, text, text, text) to anon, authenticated, service_role;
+
 -- ----------------------------------------------------------------------------
 -- 2. EXTEND PURCHASE_ORDERS FOR WORKER ASSIGNMENTS & SCHEDULING
 -- ----------------------------------------------------------------------------
@@ -144,6 +292,16 @@ create policy po_worker_select on public.purchase_orders
 
 -- NEVER grant DELETE on purchase_orders to authenticated users
 revoke delete on public.purchase_orders from authenticated;
+
+-- Ensure users table RLS allows authenticated users to read their own profile (including pending offers_user)
+drop policy if exists users_select on public.users;
+create policy users_select on public.users
+  for select to authenticated
+  using (
+    (select public.current_user_role()) in ('owner', 'manager')
+    or ((select public.current_user_role()) = 'worker' and id = (select public.current_user_id()))
+    or (auth.uid() is not null and auth_user_id = auth.uid())
+  );
 
 -- Offers RLS policies
 alter table public.offers enable row level security;
@@ -540,18 +698,33 @@ begin
       updated_at = now()
   where id = v_target.id;
 
+  -- Ensure auth.users email is marked confirmed if approved
+  if p_decision = 'approved' and v_target.auth_user_id is not null then
+    begin
+      update auth.users
+      set email_confirmed_at = coalesce(email_confirmed_at, now())
+      where id = v_target.auth_user_id;
+    exception when others then
+      null;
+    end;
+  end if;
+
   -- In-app notification to user
-  perform public.rpc_create_notification(
-    v_target.id,
-    'account_' || p_decision,
-    'Registration ' || p_decision,
-    case when p_decision = 'approved'
-      then 'Your Offers User registration has been approved. You can now access the Offers Portal.'
-      else 'Your Offers User registration was rejected.' || case when p_note is not null then ' Note: ' || p_note else '' end
-    end,
-    'user',
-    v_target.id::text
-  );
+  begin
+    perform public.rpc_create_notification(
+      v_target.id,
+      'account_' || p_decision,
+      'Registration ' || p_decision,
+      case when p_decision = 'approved'
+        then 'Your Offers User registration has been approved. You can now access the Offers Portal.'
+        else 'Your Offers User registration was rejected.' || case when p_note is not null then ' Note: ' || p_note else '' end
+      end,
+      'user',
+      v_target.id::text
+    );
+  exception when others then
+    null;
+  end;
 
   return jsonb_build_object(
     'ok', true,

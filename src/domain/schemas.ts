@@ -52,18 +52,18 @@ const userFields = {
 };
 
 function refineUser(user: { role: string; warehouseId: string | null; companyId: string | null }, ctx: z.RefinementCtx) {
-    if (user.role === "worker" && !user.warehouseId) {
-      ctx.addIssue({ code: "custom", message: "A worker must be assigned to one warehouse.", path: ["warehouseId"] });
-    }
-    if (user.role !== "worker" && user.warehouseId) {
-      ctx.addIssue({ code: "custom", message: "Only a worker has a warehouse assignment.", path: ["warehouseId"] });
-    }
-    if (user.role === "customer" && !user.companyId) {
-      ctx.addIssue({ code: "custom", message: "A customer must belong to one company.", path: ["companyId"] });
-    }
-    if (user.role !== "customer" && user.companyId) {
-      ctx.addIssue({ code: "custom", message: "Only a customer belongs to a company.", path: ["companyId"] });
-    }
+  if (user.role === "worker" && !user.warehouseId) {
+    ctx.addIssue({ code: "custom", message: "A worker must be assigned to one warehouse.", path: ["warehouseId"] });
+  }
+  if (user.role !== "worker" && user.warehouseId) {
+    ctx.addIssue({ code: "custom", message: "Only a worker has a warehouse assignment.", path: ["warehouseId"] });
+  }
+  if (user.role === "customer" && !user.companyId) {
+    ctx.addIssue({ code: "custom", message: "A customer must belong to one company.", path: ["companyId"] });
+  }
+  if (user.role !== "customer" && user.companyId) {
+    ctx.addIssue({ code: "custom", message: "Only a customer belongs to a company.", path: ["companyId"] });
+  }
 }
 
 export const userRecordSchema = z.object({ ...userFields, passwordHash: z.string().min(1) }).superRefine(refineUser);

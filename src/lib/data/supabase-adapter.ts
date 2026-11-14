@@ -507,7 +507,7 @@ export class SupabaseAdapter {
       return null;
     }
     const profile = mapUserProfile(res.value);
-    if (!profile.active || !isActiveRole(profile.role)) {
+    if (!profile.active || (!isActiveRole(profile.role) && profile.role !== "offers_user")) {
       return null;
     }
     if (token) {
@@ -525,8 +525,33 @@ export class SupabaseAdapter {
     const accessToken = authRes.value.accessToken;
     const profile = await this.current(accessToken);
     if (!profile) {
-      const checkRes = await this.client.select<Record<string, unknown>>("users", `select=approval_status,role&email=eq.${encodeURIComponent(email)}`, accessToken);
+      // User is either pending, rejected, inactive, or not found in public.users
+      const statusRes = await this.client.rpc<{
+        ok: boolean;
+        error?: string;
+        role?: string;
+        approval_status?: string;
+        active?: boolean;
+      }>("rpc_get_auth_account_status", {}, accessToken);
+
       await this.client.auth.signOut(accessToken);
+
+      if (statusRes.ok && statusRes.value) {
+        const status = statusRes.value;
+        if (status.role === "offers_user" && status.approval_status === "pending") {
+          return fail("Your account is pending administrator approval. You will receive access once approved.");
+        }
+        if (status.approval_status === "rejected") {
+          return fail("Your registration request has been declined. Please contact the administrator.");
+        }
+      }
+
+      // Fallback query directly on users table if RPC returned nothing
+      const checkRes = await this.client.select<Record<string, unknown>>(
+        "users",
+        `select=approval_status,role&email=eq.${encodeURIComponent(email)}`,
+        accessToken,
+      );
       if (checkRes.ok && checkRes.value.length > 0) {
         const u = checkRes.value[0];
         if (u.role === "offers_user" && u.approval_status === "pending") {
@@ -536,6 +561,7 @@ export class SupabaseAdapter {
           return fail("Your registration request has been declined. Please contact the administrator.");
         }
       }
+
       return fail("This account is inactive or not linked to an active RM profile.");
     }
     this.tokenByActorId.set(profile.id, accessToken);
@@ -771,7 +797,7 @@ export class SupabaseAdapter {
       return { state: emptyWorkspace(), actor: null };
     }
     const profile = await this.current(sessionId);
-    if (!profile || !profile.active || !isActiveRole(profile.role)) {
+    if (!profile || !profile.active || (!isActiveRole(profile.role) && profile.role !== "offers_user")) {
       return { state: emptyWorkspace(), actor: null };
     }
     const store = await this.snapshot(sessionId);
@@ -830,6 +856,53 @@ export class SupabaseAdapter {
   }
 
   async run(sessionId: string | null, name: string, payload: unknown): Promise<WorkspaceResponse> {
+    if (name === "registerOffersUser") {
+      const body = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+      const nameVal = text(body.name);
+      const emailVal = text(body.email).toLowerCase();
+      const passwordVal = text(body.password);
+      const companyVal = text(body.company);
+      const notesVal = text(body.notes);
+
+      if (!nameVal || !emailVal || !passwordVal) {
+        return { state: emptyWorkspace(), actor: null, error: "Name, email, and password are required." };
+      }
+      if (passwordVal.length < 6) {
+        return { state: emptyWorkspace(), actor: null, error: "Password must be at least 6 characters long." };
+      }
+
+      const signUpRes = await this.client.auth.signUp(emailVal, passwordVal, {
+        name: nameVal,
+        role: "offers_user",
+      });
+      if (!signUpRes.ok) {
+        return { state: emptyWorkspace(), actor: null, error: signUpRes.error };
+      }
+
+      const rpcRes = await this.client.rpc<Record<string, unknown>>(
+        "rpc_register_offers_user",
+        {
+          p_auth_user_id: signUpRes.value.id,
+          p_email: emailVal,
+          p_name: nameVal,
+          p_company: companyVal || null,
+          p_notes: notesVal || null,
+        },
+        null,
+      );
+
+      if (!rpcRes.ok) {
+        return { state: emptyWorkspace(), actor: null, error: rpcRes.error };
+      }
+
+      return {
+        state: emptyWorkspace(),
+        actor: null,
+        notice: "Registration submitted. Pending admin approval.",
+      };
+    }
+
     if (!sessionId) {
       return { state: emptyWorkspace(), actor: null, error: "Sign in again to continue." };
     }
@@ -837,7 +910,7 @@ export class SupabaseAdapter {
     if (!profile) {
       return { state: emptyWorkspace(), actor: null, error: "Sign in again to continue." };
     }
-    if (!profile.active || !isActiveRole(profile.role)) {
+    if (!profile.active || (!isActiveRole(profile.role) && profile.role !== "offers_user")) {
       return { state: emptyWorkspace(), actor: null, error: "This account is not permitted to perform actions." };
     }
 
@@ -1833,37 +1906,6 @@ export class SupabaseAdapter {
           else notice = `Offer accepted and marked as sold.`;
           break;
         }
-        case "registerOffersUser": {
-          const name = text(body.name);
-          const email = text(body.email);
-          const password = text(body.password);
-          if (!name || !email || !password) {
-            error = "Name, email, and password are required.";
-            break;
-          }
-          const authRes = await this.client.auth.adminCreateUser({
-            email,
-            password,
-            name,
-            role: "offers_user",
-          });
-          if (!authRes.ok) {
-            error = authRes.error;
-            break;
-          }
-          const dbRes = await this.client.insert("users", {
-            id: authRes.value.id,
-            email,
-            name,
-            role: "offers_user",
-            approval_status: "pending",
-            active: false,
-            registration_notes: text(body.notes) || null,
-          });
-          if (!dbRes.ok) error = dbRes.error;
-          else notice = "Registration submitted. Pending admin approval.";
-          break;
-        }
         case "decideOffersUserRegistration":
         case "decideUserRegistration": {
           const rpcRes = await this.client.rpc<Record<string, unknown>>(
@@ -2021,7 +2063,7 @@ export class SupabaseAdapter {
       throw new Error("Sign in again to continue.");
     }
     const actor = mapUserProfile(res.value[0]);
-    if (!actor.active || !isActiveRole(actor.role)) {
+    if (!actor.active || (!isActiveRole(actor.role) && actor.role !== "offers_user")) {
       throw new Error("Sign in again to continue.");
     }
     return { actor, token };

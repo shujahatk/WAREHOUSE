@@ -240,6 +240,46 @@ export class SupabaseRestClient {
       }
     },
 
+    signUp: async (
+      email: string,
+      password: string,
+      metadata?: Record<string, unknown>,
+    ): Promise<Result<{ id: string; email: string; session?: { accessToken: string } }>> => {
+      const url = `${this.config.url}/auth/v1/signup`;
+      try {
+        const response = await this.fetchImpl(url, {
+          method: "POST",
+          headers: this.headers(null),
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            password,
+            data: metadata,
+          }),
+          cache: "no-store",
+        });
+        const data = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+        if (!response.ok || !data) {
+          return { ok: false, error: extractErrorMessage(data, "Registration request failed.") };
+        }
+        const userObj = (data.user ?? data) as Record<string, unknown>;
+        const id = typeof userObj.id === "string" ? userObj.id : "";
+        if (!id) {
+          return { ok: false, error: extractErrorMessage(data, "Failed to create user account.") };
+        }
+        const accessToken = typeof data.access_token === "string" ? data.access_token : undefined;
+        return {
+          ok: true,
+          value: {
+            id,
+            email: typeof userObj.email === "string" ? userObj.email : email,
+            session: accessToken ? { accessToken } : undefined,
+          },
+        };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : "Registration request failed." };
+      }
+    },
+
     adminCreateUser: async (input: {
       email: string;
       password: string;

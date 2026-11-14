@@ -180,7 +180,7 @@ const ACTION_ROLES: Record<AppAction, Role[]> = {
 };
 
 export function canPerform(role: Role, action: DemoAction): boolean {
-  if (!isActiveRole(role)) return false;
+  if (!isActiveRole(role) && role !== "offers_user") return false;
   return ACTION_ROLES[action].includes(role);
 }
 

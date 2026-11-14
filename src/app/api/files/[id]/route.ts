@@ -19,7 +19,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (!user) {
     return new Response("Unauthorized: Session expired or invalid.", { status: 401 });
   }
-  if (!user.active || !isActiveRole(user.role)) {
+  if (!user.active || (!isActiveRole(user.role) && user.role !== "offers_user")) {
     return new Response("Forbidden: Inactive or unauthorized account.", { status: 403 });
   }
 
