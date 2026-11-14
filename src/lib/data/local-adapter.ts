@@ -94,7 +94,7 @@ export class LocalAdapter {
     let currentUserId: string | null = null;
     const store = await this.edit((current) => {
       const user = sessionId ? userFromSession(current, sessionId, now) : null;
-      if (user && isActiveRole(user.role)) {
+      if (user && (isActiveRole(user.role) || user.role === "offers_user")) {
         actor = toActor(current, user);
         currentUserId = user.id;
       }
@@ -122,10 +122,30 @@ export class LocalAdapter {
       await this.edit((store) => {
         const user = sessionId ? userFromSession(store, sessionId, now) : null;
         if (!user) {
+          if (name === "registerOffersUser") {
+            const fakeSystemActor: UserRecord = {
+              id: "system",
+              email: "system@internal",
+              name: "System",
+              role: "owner",
+              warehouseId: null,
+              companyId: null,
+              active: true,
+              approvalStatus: "approved",
+              registrationNotes: null,
+              passwordHash: "",
+              createdAt: now,
+              updatedAt: now,
+            };
+            const result = applyCommand(store, fakeSystemActor, name, payload, now);
+            error = result.error;
+            notice = result.notice;
+            return;
+          }
           error = "Sign in again to continue.";
           return;
         }
-        if (!user.active || !isActiveRole(user.role)) {
+        if (!user.active || (!isActiveRole(user.role) && user.role !== "offers_user")) {
           error = "This account is not permitted to perform actions.";
           return;
         }
@@ -776,6 +796,7 @@ function userFromSession(store: StoreData, sessionId: string, now: string): User
 
 function toActor(store: StoreData, user: UserRecord): Actor {
   return {
+    id: user.id,
     name: user.name,
     role: user.role,
     email: user.email,

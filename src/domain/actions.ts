@@ -13,7 +13,7 @@ async function sessionId(): Promise<string | null> {
 import { checkLoginRateLimit, resetRateLimit } from "@/lib/security/rate-limit";
 import { logger } from "@/lib/logger";
 
-export async function signInAction(email: string, password: string): Promise<{ error: string | null }> {
+export async function signInAction(email: string, password: string): Promise<{ error: string | null; role?: string }> {
   try {
     const rate = checkLoginRateLimit(email);
     if (!rate.allowed) {
@@ -37,10 +37,26 @@ export async function signInAction(email: string, password: string): Promise<{ e
       maxAge: 60 * 60 * 12,
       secure: process.env.NODE_ENV === "production",
     });
-    return { error: null };
+    return { error: null, role: result.value.profile.role };
   } catch (error) {
     logger.error("Sign-in exception", error, { email });
     return { error: error instanceof Error ? error.message : "Sign-in could not reach the warehouse store." };
+  }
+}
+
+export async function registerOffersUserAction(payload: {
+  name: string;
+  email: string;
+  password: string;
+  company?: string;
+  notes?: string;
+}): Promise<{ error: string | null; ok: boolean }> {
+  try {
+    const res = await getAdapter().run(null, "registerOffersUser", payload);
+    if (res.error) return { error: res.error, ok: false };
+    return { error: null, ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Registration failed.", ok: false };
   }
 }
 

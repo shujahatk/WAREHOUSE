@@ -8,9 +8,10 @@ import { useSession } from "@/components/shell/auth-gate";
 import { canReadOrder, formatEuro, formatKg } from "@/domain/view";
 import { canPerform } from "@/lib/permissions";
 import { AttachmentPreviewModal, type PreviewAttachmentItem } from "@/components/files/attachment-preview-modal";
+import { compressImageIfNeeded, fileToBase64 } from "@/lib/client-image";
 
 export function PurchaseDetail({ number }: { number: string }) {
-  const { state, approve, reject, editPurchase, notice } = useDemo();
+  const { state, approve, reject, editPurchase, assignWorkerPo, completeWorkerPo, selectDocument, notice } = useDemo();
   const { identity } = useSession();
   const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
   const found = state.orders.find((item) => item.number.toLowerCase() === number.toLowerCase());
@@ -21,6 +22,26 @@ export function PurchaseDetail({ number }: { number: string }) {
   const [quantity, setQuantity] = useState(order ? String(order.quantityKg) : "");
   const [value, setValue] = useState(order ? String(order.valueEur) : "");
   const [previewItem, setPreviewItem] = useState<PreviewAttachmentItem | null>(null);
+
+  // Worker assignment state (Staff / Admin)
+  const workers = (state.accounts || []).filter((a) => a.role === "worker");
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string>(() => order?.assignedWorkerId ?? workers[0]?.id ?? workers[0]?.email ?? "");
+  const [todayStr] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [tomorrowStr] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [scheduledDate, setScheduledDate] = useState<string>(() => order?.scheduledDate ?? new Date().toISOString().slice(0, 10));
+  const [assignNotes, setAssignNotes] = useState<string>("");
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
+  const [assignSuccess, setAssignSuccess] = useState(false);
+
+  // Worker execution state
+  const isAssignedWorker = identity.role === "worker" && (order?.assignedWorkerId === identity.id || order?.assignedWorkerName === identity.name);
+  const [completionNotes, setCompletionNotes] = useState(order?.completionNotes ?? "");
+  const [completing, setCompleting] = useState(false);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
   if (!order) {
     return (
       <>
@@ -106,6 +127,244 @@ export function PurchaseDetail({ number }: { number: string }) {
             Save order details
           </button>
         </form>
+      ) : null}
+
+      {/* Staff / Admin Worker Assignment Section */}
+      {(identity.role === "manager" || identity.role === "owner") ? (
+        <Surface className="mb-4 border-indigo-200 bg-indigo-50/30 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900">Worker Task Assignment & Scheduling</h2>
+              <p className="text-xs text-neutral-600">
+                Staff can assign this order to a specific worker and schedule it for today or future dates.
+              </p>
+            </div>
+            {order.assignedWorkerName ? (
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                order.executionStatus === "completed"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-blue-100 text-blue-800"
+              }`}>
+                ● {order.executionStatus === "completed" ? "Completed" : "Assigned"}: {order.assignedWorkerName}
+                {order.scheduledDate ? ` · ${order.scheduledDate}` : ""}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700">
+                Unassigned
+              </span>
+            )}
+          </div>
+
+          <form
+            className="mt-3 grid gap-3 sm:grid-cols-3"
+            onSubmit={(e) => {
+              void (async () => {
+                e.preventDefault();
+                if (!selectedWorkerId) return;
+                setAssignSubmitting(true);
+                const err = await assignWorkerPo({
+                  poNumber: order.number,
+                  workerId: selectedWorkerId,
+                  scheduledDate,
+                  notes: assignNotes.trim() || undefined,
+                });
+                setAssignSubmitting(false);
+                if (!err) {
+                  setAssignSuccess(true);
+                  setTimeout(() => setAssignSuccess(false), 3000);
+                }
+              })();
+            }}
+          >
+            <label className="text-xs font-medium text-neutral-700">
+              Assign to Worker
+              <select
+                value={selectedWorkerId}
+                onChange={(e) => setSelectedWorkerId(e.target.value)}
+                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
+              >
+                <option value="">Select a worker...</option>
+                {workers.map((w) => (
+                  <option key={w.id || w.email} value={w.id || w.email}>
+                    {w.name} ({w.warehouse || "Warehouse"})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-xs font-medium text-neutral-700">
+              Scheduled Date
+              <div className="mt-1 flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
+                />
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScheduledDate(todayStr)}
+                  className={`text-[11px] font-medium underline ${scheduledDate === todayStr ? "text-indigo-600 font-bold" : "text-neutral-500"}`}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScheduledDate(tomorrowStr)}
+                  className={`text-[11px] font-medium underline ${scheduledDate === tomorrowStr ? "text-indigo-600 font-bold" : "text-neutral-500"}`}
+                >
+                  Tomorrow
+                </button>
+              </div>
+            </label>
+
+            <label className="text-xs font-medium text-neutral-700">
+              Task Notes / Instructions
+              <input
+                type="text"
+                value={assignNotes}
+                onChange={(e) => setAssignNotes(e.target.value)}
+                placeholder="e.g. Inspect pallet packaging..."
+                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
+              />
+            </label>
+
+            <div className="flex items-center gap-2 sm:col-span-3">
+              <button
+                type="submit"
+                disabled={assignSubmitting || !selectedWorkerId}
+                className="inline-flex h-9 items-center justify-center rounded-lg bg-neutral-950 px-4 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+              >
+                {assignSubmitting ? "Assigning…" : order.assignedWorkerName ? "Update Assignment" : "Assign to Worker"}
+              </button>
+              {assignSuccess ? (
+                <span className="text-xs font-semibold text-emerald-700">✓ Assignment saved & worker notified</span>
+              ) : null}
+            </div>
+          </form>
+
+          {order.completionNotes ? (
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900">
+              <span className="font-semibold">Worker Completion Notes:</span> {order.completionNotes}
+              {order.completedAt ? ` · Completed at ${order.completedAt.slice(0, 16).replace("T", " ")}` : ""}
+            </div>
+          ) : null}
+        </Surface>
+      ) : null}
+
+      {/* Assigned Worker Task Execution Section */}
+      {isAssignedWorker ? (
+        <Surface className="mb-4 border-emerald-300 bg-emerald-50/40 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 pb-2">
+            <div>
+              <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
+                Assigned to You
+              </span>
+              <h2 className="mt-1 text-sm font-semibold text-neutral-900">Task Execution & Evidence</h2>
+              <p className="text-xs text-neutral-600">
+                Scheduled for: <strong>{order.scheduledDate || "Today"}</strong>. Upload photos or documents and mark complete when finished.
+              </p>
+            </div>
+            <StatusPill label={order.executionStatus === "completed" ? "Completed" : "In Progress"} />
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-neutral-700">
+                Completion Notes / Observations
+                <textarea
+                  rows={2}
+                  value={completionNotes}
+                  onChange={(e) => setCompletionNotes(e.target.value)}
+                  placeholder="e.g. All 12 packages inspected, tare verified at 25kg each..."
+                  className="mt-1 w-full rounded-lg border border-neutral-300 bg-white p-2.5 text-sm text-neutral-900"
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-800 hover:bg-neutral-50">
+                <span>📷 Upload Photo Evidence</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void (async () => {
+                      setUploadingEvidence(true);
+                      const compressed = await compressImageIfNeeded(file);
+                      const base64 = await fileToBase64(compressed.blob);
+                      await selectDocument({
+                        id: `doc-${Date.now()}`,
+                        name: file.name,
+                        category: "Purchase",
+                        mime: compressed.mime || "image/jpeg",
+                        size: compressed.size,
+                        bytesBase64: base64,
+                      });
+                      setUploadingEvidence(false);
+                    })();
+                  }}
+                />
+              </label>
+
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-800 hover:bg-neutral-50">
+                <span>📄 Upload Document / CMR</span>
+                <input
+                  type="file"
+                  accept=".pdf,image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void (async () => {
+                      setUploadingEvidence(true);
+                      const base64 = await fileToBase64(file);
+                      await selectDocument({
+                        id: `doc-${Date.now()}`,
+                        name: file.name,
+                        category: "Transport",
+                        mime: file.type || "application/pdf",
+                        size: file.size,
+                        bytesBase64: base64,
+                      });
+                      setUploadingEvidence(false);
+                    })();
+                  }}
+                />
+              </label>
+
+              {uploadingEvidence ? <span className="text-xs text-neutral-500">Uploading evidence…</span> : null}
+
+              {order.executionStatus !== "completed" ? (
+                <button
+                  type="button"
+                  disabled={completing}
+                  onClick={() => {
+                    void (async () => {
+                      setCompleting(true);
+                      await completeWorkerPo({
+                        poNumber: order.number,
+                        completionNotes: completionNotes.trim() || undefined,
+                      });
+                      setCompleting(false);
+                    })();
+                  }}
+                  className="inline-flex h-9 items-center justify-center rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {completing ? "Submitting…" : "Mark Task Completed"}
+                </button>
+              ) : (
+                <span className="text-xs font-semibold text-emerald-800">✓ Task Completed</span>
+              )}
+            </div>
+          </div>
+        </Surface>
       ) : null}
       <div className="grid gap-3 lg:grid-cols-3">
         <Surface className="p-4 lg:col-span-2">

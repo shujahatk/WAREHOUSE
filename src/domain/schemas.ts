@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const domainRoleSchema = z.enum(["owner", "worker", "manager", "customer", "moderator"]);
+export const domainRoleSchema = z.enum(["owner", "worker", "manager", "customer", "moderator", "offers_user"]);
 export const companyKindSchema = z.enum(["supplier", "customer"]);
 export const purchaseStatusSchema = z.enum(["draft", "submitted", "approved", "declined"]);
 export const shipmentDirectionSchema = z.enum(["inbound", "outbound"]);
@@ -45,6 +45,8 @@ const userFields = {
   warehouseId: id.nullable(),
   companyId: id.nullable(),
   active: z.boolean(),
+  approvalStatus: z.enum(["pending", "approved", "rejected"]).default("approved"),
+  registrationNotes: z.string().nullable().default(null),
   createdAt: stamp,
   updatedAt: stamp,
 };
@@ -104,6 +106,14 @@ export const purchaseOrderSchema = z.object({
   status: purchaseStatusSchema,
   valueEur: z.number().refine((value) => Number.isFinite(value) && value >= 0, "Value must be zero or greater."),
   notes: z.string(),
+  assignedWorkerId: id.nullable().default(null),
+  assignedBy: id.nullable().default(null),
+  assignedAt: stamp.nullable().default(null),
+  scheduledDate: z.string().nullable().default(null),
+  executionStatus: z.enum(["unassigned", "assigned", "in_progress", "completed"]).default("unassigned"),
+  completionNotes: z.string().nullable().default(null),
+  completedAt: stamp.nullable().default(null),
+  completedBy: id.nullable().default(null),
   createdBy: id,
   createdAt: stamp,
   updatedAt: stamp,
@@ -253,6 +263,7 @@ export const offerStatusSchema = z.enum([
   "negotiating",
   "won",
   "lost",
+  "accepted",
 ]);
 export type OfferStatus = z.infer<typeof offerStatusSchema>;
 
@@ -323,6 +334,14 @@ export const offerSchema = z.object({
   decidedBy: id.nullable().default(null),
   decidedAt: stamp.nullable().default(null),
   isFavourite: z.boolean().default(false),
+  poId: id.nullable().default(null),
+  poNumber: z.string().nullable().default(null),
+  clientName: z.string().nullable().default(null),
+  contactNumber: z.string().nullable().default(null),
+  emailAddress: z.string().nullable().default(null),
+  origin: z.string().nullable().default(null),
+  destination: z.string().nullable().default(null),
+  soldAt: stamp.nullable().default(null),
   createdBy: id,
   createdAt: stamp,
   updatedBy: id.nullable().default(null),

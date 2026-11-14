@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLayoutEffect, useState, type FormEvent } from "react";
 import { notifyAuthChanged } from "@/components/providers/workspace-provider";
@@ -48,7 +49,11 @@ export function LoginForm() {
         bc.postMessage({ type: "auth_changed" });
         bc.close();
       } catch {}
-      router.replace("/dashboard");
+      if (result.role === "offers_user") {
+        router.replace("/offers");
+      } else {
+        router.replace("/dashboard");
+      }
     } catch (err) {
       setPending(false);
       setError(err instanceof Error ? err.message : "Unable to sign in. Please try again.");
@@ -101,7 +106,15 @@ export function LoginForm() {
         {pending ? "Signing in…" : "Sign in"}
       </button>
       <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs leading-5 text-neutral-600">
-        <p>Sign in with the account configured for this warehouse.</p>
+        <p>Sign in with your configured warehouse or offers account.</p>
+      </div>
+      <div className="text-center pt-2">
+        <p className="text-sm text-neutral-600">
+          Trading or Purchasing Partner?{" "}
+          <Link href="/register" className="font-medium text-neutral-950 underline hover:text-neutral-800">
+            Register for Offers Portal
+          </Link>
+        </p>
       </div>
     </form>
   );

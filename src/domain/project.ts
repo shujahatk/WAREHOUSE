@@ -60,6 +60,10 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     const linked = store.shipments.find((item) => item.purchaseOrderId === order.id);
     const warehouse = linked ? (warehouseName.get(linked.warehouseId) ?? "") : "";
     const title = order.title || (company ? `${company.name} - ${lines[0]?.description || "Order"}` : order.number);
+    const assignedWorker = order.assignedWorkerId ? userById.get(order.assignedWorkerId) : null;
+    const assigner = order.assignedBy ? userById.get(order.assignedBy) : null;
+    const completer = order.completedBy ? userById.get(order.completedBy) : null;
+
     return {
       number: order.number,
       title,
@@ -80,6 +84,16 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       eta: "",
       customerCompany: company?.kind === "customer" ? company.name : "",
       notes: order.notes,
+      assignedWorkerId: order.assignedWorkerId ?? null,
+      assignedWorkerName: assignedWorker?.name ?? null,
+      assignedBy: order.assignedBy ?? null,
+      assignedByName: assigner?.name ?? null,
+      assignedAt: order.assignedAt ?? null,
+      scheduledDate: order.scheduledDate ?? null,
+      executionStatus: order.executionStatus ?? "unassigned",
+      completionNotes: order.completionNotes ?? null,
+      completedAt: order.completedAt ?? null,
+      completedBy: order.completedBy ?? (completer?.name ?? null),
     };
   });
 
@@ -124,14 +138,14 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
         containerNumber: item.containerNumber,
         demurrage: demurrage
           ? {
-              startedAt: demurrage.startedAt,
-              completedAt: demurrage.completedAt,
-              freeMinutes: demurrage.freeMinutes,
-              ratePerMinute: demurrage.ratePerMinute,
-              elapsedMinutes: demurrage.elapsedMinutes,
-              billableMinutes: demurrage.billableMinutes,
-              chargeEUR: demurrage.chargeEur,
-            }
+            startedAt: demurrage.startedAt,
+            completedAt: demurrage.completedAt,
+            freeMinutes: demurrage.freeMinutes,
+            ratePerMinute: demurrage.ratePerMinute,
+            elapsedMinutes: demurrage.elapsedMinutes,
+            billableMinutes: demurrage.billableMinutes,
+            chargeEUR: demurrage.chargeEur,
+          }
           : emptyDemurrage(),
       };
     });
@@ -146,13 +160,13 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       const confirmer = customs?.confirmedBy ? userById.get(customs.confirmedBy) : undefined;
       const confirmation: CustomsConfirmation = customs?.confirmedAt
         ? {
-            status: "Confirmed",
-            confirmedBy: confirmer?.name ?? "",
-            confirmedAt: customs.confirmedAt,
-            proofName: proof?.name ?? "",
-            proofMime: proof?.mime ?? "",
-            proofSize: proof?.byteSize ?? 0,
-          }
+          status: "Confirmed",
+          confirmedBy: confirmer?.name ?? "",
+          confirmedAt: customs.confirmedAt,
+          proofName: proof?.name ?? "",
+          proofMime: proof?.mime ?? "",
+          proofSize: proof?.byteSize ?? 0,
+        }
         : PENDING_CUSTOMS_CONFIRMATION;
       const sections = sectionsFor(item.id);
       return {
@@ -170,11 +184,11 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
         handover: item.handedOverAt ?? "",
         customs: customs
           ? {
-              reference: customs.reference,
-              procedureNote: customs.procedureNote,
-              goodsDescription: customs.goodsDescription,
-              declarantReference: customs.declarantReference,
-            }
+            reference: customs.reference,
+            procedureNote: customs.procedureNote,
+            goodsDescription: customs.goodsDescription,
+            declarantReference: customs.declarantReference,
+          }
           : EMPTY_CUSTOMS,
         sellerConfirmation:
           item.sellerStatus === "Confirmed"
@@ -219,13 +233,13 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       status: item.status,
       cmr: item.cmrReference
         ? {
-            reference: item.cmrReference,
-            carrier: item.cmrCarrier ?? "",
-            goodsDescription: item.cmrGoodsDescription ?? "",
-            remarks: item.cmrRemarks ?? "",
-            enteredBy: item.cmrEnteredBy ?? "",
-            enteredAt: item.cmrEnteredAt ?? "",
-          }
+          reference: item.cmrReference,
+          carrier: item.cmrCarrier ?? "",
+          goodsDescription: item.cmrGoodsDescription ?? "",
+          remarks: item.cmrRemarks ?? "",
+          enteredBy: item.cmrEnteredBy ?? "",
+          enteredAt: item.cmrEnteredAt ?? "",
+        }
         : null,
     };
   });
@@ -538,6 +552,15 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
         decidedByName: decider?.name ?? null,
         decidedAt: o.decidedAt,
         isFavourite: o.isFavourite || false,
+        poId: o.poId ?? null,
+        poNumber: o.poNumber ?? null,
+        clientName: o.clientName ?? null,
+        contactNumber: o.contactNumber ?? null,
+        emailAddress: o.emailAddress ?? null,
+        origin: o.origin ?? null,
+        destination: o.destination ?? null,
+        price: o.pricePerUnit || o.totalValue || 0,
+        soldAt: o.soldAt ?? null,
         createdBy: o.createdBy,
         createdByName: creator?.name ?? "Moderator",
         createdAt: o.createdAt,
@@ -705,12 +728,15 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     documents,
     activity,
     accounts: store.users.map((user) => ({
+      id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
       warehouse: user.warehouseId ? (warehouseName.get(user.warehouseId) ?? null) : null,
       company: user.companyId ? (companyById.get(user.companyId)?.name ?? null) : null,
       status: user.active ? "Active" : "Inactive",
+      approvalStatus: user.approvalStatus ?? "approved",
+      registrationNotes: user.registrationNotes ?? null,
     })),
     packaging: store.packagingTypes.map((item) => ({ id: item.id, label: item.name, tareKg: item.tareKg, preset: false })),
     attachments,
@@ -753,17 +779,17 @@ function documentView(store: StoreData, item: DocumentRecord, url: string | null
     annex:
       annex && shipment
         ? {
-            reference: annex.reference,
-            shipment: shipment.reference,
-            direction: shipment.direction,
-            notes: annex.notes,
-            status: annexStatus[annex.status] ?? "Uploaded",
-            uploadedBy: store.users.find((user) => user.id === annex.uploadedBy)?.name ?? "",
-            uploadedAt: annex.uploadedAt,
-            mime: item.mime,
-            size: item.byteSize,
-            history: [],
-          }
+          reference: annex.reference,
+          shipment: shipment.reference,
+          direction: shipment.direction,
+          notes: annex.notes,
+          status: annexStatus[annex.status] ?? "Uploaded",
+          uploadedBy: store.users.find((user) => user.id === annex.uploadedBy)?.name ?? "",
+          uploadedAt: annex.uploadedAt,
+          mime: item.mime,
+          size: item.byteSize,
+          history: [],
+        }
         : null,
   };
 }

@@ -107,6 +107,23 @@ export type WorkspaceApi = {
   addOfferComment: (draft: { id: string; comment: string }) => Text;
   addOfferAttachment: (draft: { id: string; name: string; mime?: string; bytesBase64?: string; kind?: "image" | "document" }) => Text;
   deleteOfferAttachment: (draft: { id: string; attachmentId: string }) => Text;
+  assignWorkerPo: (draft: { poNumber: string; workerId: string; scheduledDate: string; notes?: string }) => Text;
+  completeWorkerPo: (draft: { poNumber: string; completionNotes?: string }) => Text;
+  submitSellingOffer: (draft: {
+    poNumber: string;
+    materialType: string;
+    materialName: string;
+    clientName: string;
+    contactNumber: string;
+    emailAddress: string;
+    price: number;
+    origin: string;
+    destination: string;
+    description?: string;
+  }) => Text;
+  decideSellingOffer: (draft: { offerNumber: string; decision: "approved" | "rejected"; note?: string }) => Text;
+  acceptSellingOffer: (offerNumber: string) => Text;
+  decideOffersUserRegistration: (draft: { userId: string; decision: "approved" | "rejected"; notes?: string }) => Text;
   markNotificationRead: (id: string) => Text;
   markAllNotificationsRead: () => Text;
   refresh: () => Promise<void>;
@@ -336,6 +353,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       addOfferComment: (draft) => run("addOfferComment", draft),
       addOfferAttachment: (draft) => run("addOfferAttachment", draft),
       deleteOfferAttachment: (draft) => run("deleteOfferAttachment", draft),
+      assignWorkerPo: (draft) => run("assignWorkerPo", draft),
+      completeWorkerPo: (draft) => run("completeWorkerPo", draft),
+      submitSellingOffer: (draft) => run("submitSellingOffer", draft),
+      decideSellingOffer: (draft) => run("decideSellingOffer", draft),
+      acceptSellingOffer: (offerNumber) => run("acceptSellingOffer", { offerNumber }),
+      decideOffersUserRegistration: (draft) => run("decideOffersUserRegistration", draft),
       markNotificationRead: (id) => run("markNotificationRead", { id }),
       markAllNotificationsRead: () => run("markAllNotificationsRead", {}),
       refresh: async () => {

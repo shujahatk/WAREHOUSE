@@ -15,6 +15,7 @@ export type AuthUser = {
 
 export type Action =
   | "user:manage"
+  | "user:approve"
   | "warehouse:manage"
   | "material:manage"
   | "packaging:manage"
@@ -27,6 +28,8 @@ export type Action =
   | "order:delete"
   | "order:edit"
   | "order:view"
+  | "order:assign"
+  | "order:complete"
   | "request:create"
   | "request:approve"
   | "request:decline"
@@ -71,7 +74,9 @@ export type Action =
   | "offer:negotiate"
   | "offer:status"
   | "offer:comment"
-  | "offer:attach";
+  | "offer:attach"
+  | "offer:sell"
+  | "offer:accept";
 
 export type Resource = {
   warehouseId?: string | null;
@@ -137,6 +142,9 @@ export function can(
       case "material:manage":
       case "packaging:manage":
       case "threshold:set":
+      case "order:assign":
+      case "user:approve":
+      case "offer:accept":
       case "offer:view":
       case "offer:approve":
       case "offer:reject":
@@ -216,6 +224,7 @@ export function can(
       case "chat:send":
       case "chat:view":
       case "stock:view":
+      case "order:assign":
         return true;
       case "request:sendBack":
         return resource?.status !== "completed" && resource?.status !== "deleted";
@@ -229,7 +238,6 @@ export function can(
       case "request:decline":
       case "request:complete":
       case "request:create":
-      case "worker:assign":
       case "stock:move":
       case "stock:adjust":
       case "stock:transfer":
@@ -267,8 +275,17 @@ export function can(
       case "annex7:upload":
       case "stock:move":
       case "stock:view":
-      case "order:view":
         return matchesWorkerWarehouse(user, resource);
+      case "order:view": {
+        if (resource?.assignedWorkerId && resource.assignedWorkerId !== user.id) return false;
+        if (resource?.assigned_worker_id && resource.assigned_worker_id !== user.id) return false;
+        return matchesWorkerWarehouse(user, resource);
+      }
+      case "order:complete": {
+        if (resource?.assignedWorkerId && resource.assignedWorkerId !== user.id) return false;
+        if (resource?.assigned_worker_id && resource.assigned_worker_id !== user.id) return false;
+        return true;
+      }
       case "request:complete":
         if (resource?.status !== "approved") return false;
         return matchesWorkerWarehouse(user, resource);
@@ -336,9 +353,41 @@ export function can(
       case "offer:status":
       case "offer:comment":
       case "offer:attach":
+      case "offer:accept":
         return true;
       case "offer:approve":
       case "offer:reject":
+      default:
+        return false;
+    }
+  }
+
+  // 5. Offers User (offers_user):
+  // - Dedicated portal for trading & procurement offers
+  // - Views all Purchasing Offers
+  // - Submits Selling Offers linked to a PO (9 validated fields)
+  // - Views their own submitted Selling Offers & status
+  // - Views commercially accepted / Sold offers
+  // - Uploads attachments to their offers
+  // - STRICT ISOLATION: No access to inventory, warehouse operations, staff, or admin
+  if (user.role === "offers_user") {
+    switch (action) {
+      case "offer:view":
+        if (!resource || !resource.kind || resource.kind === "purchasing") return true;
+        if (resource.kind === "selling") {
+          return (
+            resource.createdBy === user.id ||
+            resource.created_by === user.id ||
+            resource.status === "accepted"
+          );
+        }
+        return true;
+      case "offer:create":
+      case "offer:sell":
+      case "offer:submit":
+      case "file:upload":
+      case "file:view":
+        return true;
       default:
         return false;
     }

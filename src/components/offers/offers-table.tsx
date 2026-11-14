@@ -12,6 +12,8 @@ const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   negotiating: { label: "Negotiating", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   won: { label: "Won", className: "bg-emerald-50 text-emerald-700 border-emerald-300" },
   lost: { label: "Lost", className: "bg-rose-50 text-rose-700 border-rose-200" },
+  accepted: { label: "Accepted (Sold)", className: "bg-emerald-100 text-emerald-900 border-emerald-400 font-bold" },
+  sold: { label: "Sold", className: "bg-emerald-100 text-emerald-900 border-emerald-400 font-bold" },
 };
 
 const PRIORITY_BADGES: Record<string, { label: string; className: string }> = {

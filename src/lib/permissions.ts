@@ -1,19 +1,19 @@
 export type ActiveRole = "owner" | "manager" | "worker" | "moderator";
-export type Role = ActiveRole | "customer" | "data-entry" | "management";
+export type Role = ActiveRole | "offers_user" | "customer" | "data-entry" | "management";
 
 export const ACTIVE_ROLES: readonly ActiveRole[] = ["owner", "manager", "worker", "moderator"] as const;
 
-const ALL_ACTIVE: Role[] = ["owner", "manager", "worker", "moderator"];
+const ALL_ACTIVE: Role[] = ["owner", "manager", "worker", "moderator", "offers_user"];
 const WAREHOUSE_ROLES: Role[] = ["owner", "manager", "worker"];
 const ADMIN_AND_STAFF: Role[] = ["owner", "manager"];
-const ADMIN_AND_MODERATOR: Role[] = ["owner", "moderator"];
+const OFFERS_ACCESS_ROLES: Role[] = ["owner", "moderator", "offers_user"];
 const ADMIN_ONLY: Role[] = ["owner"];
 
 const ROUTE_RULES: { prefix: string; roles: Role[] }[] = [
   { prefix: "/roadmap", roles: [] },
   { prefix: "/chat", roles: [] },
   { prefix: "/sales", roles: [] },
-  { prefix: "/offers", roles: ADMIN_AND_MODERATOR },
+  { prefix: "/offers", roles: OFFERS_ACCESS_ROLES },
   { prefix: "/users", roles: ADMIN_ONLY },
   { prefix: "/reports", roles: ADMIN_ONLY },
   { prefix: "/analytics", roles: ADMIN_AND_STAFF },
@@ -27,7 +27,7 @@ const ROUTE_RULES: { prefix: string; roles: Role[] }[] = [
   { prefix: "/warehouses", roles: ADMIN_AND_STAFF },
   { prefix: "/materials", roles: ADMIN_AND_STAFF },
   { prefix: "/tasks", roles: WAREHOUSE_ROLES },
-  { prefix: "/dashboard", roles: ALL_ACTIVE },
+  { prefix: "/dashboard", roles: ["owner", "manager", "worker", "moderator"] },
   { prefix: "/containers", roles: WAREHOUSE_ROLES },
   { prefix: "/outbound", roles: WAREHOUSE_ROLES },
   { prefix: "/inventory", roles: WAREHOUSE_ROLES },
@@ -39,12 +39,13 @@ export function isActiveRole(role: string): role is ActiveRole {
   return (ACTIVE_ROLES as readonly string[]).includes(role);
 }
 
-export function normalizeRole(role: string): ActiveRole | null {
+export function normalizeRole(role: string): "owner" | "manager" | "worker" | "moderator" | "offers_user" | null {
   const key = role.trim().toLowerCase();
   if (key === "owner" || key === "admin") return "owner";
   if (key === "manager" || key === "staff") return "manager";
   if (key === "worker") return "worker";
   if (key === "moderator" || key === "offer-moderator" || key === "offer_moderator") return "moderator";
+  if (key === "offers_user" || key === "offers-user" || key === "offersuser" || key === "offer-user") return "offers_user";
   return null;
 }
 
@@ -53,12 +54,16 @@ export function roleLabel(role: Role): string {
   if (role === "manager") return "Staff";
   if (role === "worker") return "Worker";
   if (role === "moderator") return "Sales & Purchasing Offer Moderator";
+  if (role === "offers_user") return "Offers User";
   if (role === "data-entry") return "Data entry";
   if (role === "customer") return "Customer";
   return "Management";
 }
 
 export function canAccess(role: Role, pathname: string): boolean {
+  if (role === "offers_user") {
+    return pathname === "/offers" || pathname.startsWith("/offers/") || pathname === "/notifications" || pathname.startsWith("/notifications/");
+  }
   if (!isActiveRole(role)) return false;
   const rule = ROUTE_RULES.find((entry) => pathname === entry.prefix || pathname.startsWith(`${entry.prefix}/`));
   if (!rule) return false;
@@ -77,6 +82,9 @@ export type AppAction =
   | "delete-request"
   | "complete-request"
   | "assign-worker"
+  | "assign-worker-po"
+  | "submit-selling-offer"
+  | "decide-selling-offer"
   | "register-shipment"
   | "edit-shipment"
   | "unload"
@@ -129,6 +137,9 @@ const ACTION_ROLES: Record<AppAction, Role[]> = {
   "delete-request": ["worker"],
   "complete-request": ["worker"],
   "assign-worker": [],
+  "assign-worker-po": ["owner", "manager"],
+  "submit-selling-offer": ["offers_user"],
+  "decide-selling-offer": ["owner"],
   "register-shipment": ["manager", "worker"],
   "edit-shipment": ["manager", "worker"],
   unload: ["worker"],
@@ -155,11 +166,11 @@ const ACTION_ROLES: Record<AppAction, Role[]> = {
   "view-audit": ["owner"],
   "import-data": ["owner", "manager"],
   "export-data": ["owner", "manager", "moderator"],
-  "create-offer": ["moderator"],
+  "create-offer": ["moderator", "offers_user"],
   "edit-offer": ["moderator"],
   "delete-offer": ["moderator"],
-  "view-offer": ["owner", "moderator"],
-  "submit-offer": ["moderator"],
+  "view-offer": ["owner", "moderator", "offers_user"],
+  "submit-offer": ["moderator", "offers_user"],
   "approve-offer": ["owner"],
   "reject-offer": ["owner"],
   "negotiate-offer": ["moderator"],

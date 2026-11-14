@@ -156,7 +156,7 @@ export function PurchaseList() {
             <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
                 <tr>
-                  {["PO Name & Number", "Supplier / Customer", "Material", "Quantity", "Value", "Warehouse", "Status", "Date"].map((header) => (
+                  {["PO Name & Number", "Supplier / Customer", "Material", "Quantity", "Assignment", "Warehouse", "Status", "Date"].map((header) => (
                     <th key={header} scope="col" className="px-4 py-3 font-medium">
                       {header}
                     </th>
@@ -175,7 +175,19 @@ export function PurchaseList() {
                     <td className="px-4 py-3">{order.customerCompany || order.supplier}</td>
                     <td className="px-4 py-3">{order.material === "—" ? "Not recorded" : order.material}</td>
                     <td className="px-4 py-3 tabular-nums">{order.quantityKg > 0 ? formatKg(order.quantityKg) : "Not recorded"}</td>
-                    <td className="px-4 py-3 tabular-nums">{order.valueEur > 0 ? formatEuro(order.valueEur) : "Not recorded"}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {order.assignedWorkerName ? (
+                        <div>
+                          <span className="font-medium text-neutral-900">{order.assignedWorkerName}</span>
+                          <div className="text-[11px] text-neutral-500">
+                            {order.scheduledDate ? `${order.scheduledDate}` : "Scheduled"}
+                            {order.executionStatus === "completed" ? " · ✓ Done" : ""}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-neutral-400">Unassigned</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-neutral-700">{order.warehouse || "Bornem"}</td>
                     <td className="px-4 py-3">
                       <StatusPill label={order.status} />

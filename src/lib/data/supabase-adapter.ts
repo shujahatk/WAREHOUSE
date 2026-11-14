@@ -83,6 +83,8 @@ function mapUserProfile(row: Record<string, unknown>): UserProfile {
     warehouseId: typeof row.warehouse_id === "string" ? row.warehouse_id : null,
     companyId: typeof row.company_id === "string" ? row.company_id : null,
     active: Boolean(row.active ?? true),
+    approvalStatus: (row.approval_status as "pending" | "approved" | "rejected") ?? (row.approvalStatus as "pending" | "approved" | "rejected") ?? "approved",
+    registrationNotes: typeof row.registration_notes === "string" ? row.registration_notes : (typeof row.registrationNotes === "string" ? row.registrationNotes : null),
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
   };
@@ -126,6 +128,14 @@ function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
     createdBy: String(row.created_by),
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
+    assignedWorkerId: typeof row.assigned_worker_id === "string" ? row.assigned_worker_id : (typeof row.assignedWorkerId === "string" ? row.assignedWorkerId : null),
+    assignedBy: typeof row.assigned_by === "string" ? row.assigned_by : (typeof row.assignedBy === "string" ? row.assignedBy : null),
+    assignedAt: typeof row.assigned_at === "string" ? row.assigned_at : (typeof row.assignedAt === "string" ? row.assignedAt : null),
+    scheduledDate: typeof row.scheduled_date === "string" ? row.scheduled_date : (typeof row.scheduledDate === "string" ? row.scheduledDate : null),
+    executionStatus: (row.execution_status as "unassigned" | "assigned" | "in_progress" | "completed") || "unassigned",
+    completionNotes: typeof row.completion_notes === "string" ? row.completion_notes : (typeof row.completionNotes === "string" ? row.completionNotes : null),
+    completedAt: typeof row.completed_at === "string" ? row.completed_at : (typeof row.completedAt === "string" ? row.completedAt : null),
+    completedBy: typeof row.completed_by === "string" ? row.completed_by : (typeof row.completedBy === "string" ? row.completedBy : null),
   };
 }
 
@@ -376,6 +386,14 @@ function mapOffer(row: Record<string, unknown>): Offer {
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
     deletedAt: typeof row.deleted_at === "string" ? row.deleted_at : null,
     deletedBy: typeof row.deleted_by === "string" ? row.deleted_by : null,
+    poId: typeof row.po_id === "string" ? row.po_id : (typeof row.poId === "string" ? row.poId : null),
+    poNumber: typeof row.po_number === "string" ? row.po_number : (typeof row.poNumber === "string" ? row.poNumber : null),
+    clientName: typeof row.client_name === "string" ? row.client_name : (typeof row.clientName === "string" ? row.clientName : null),
+    contactNumber: typeof row.contact_number === "string" ? row.contact_number : (typeof row.contactNumber === "string" ? row.contactNumber : null),
+    emailAddress: typeof row.email_address === "string" ? row.email_address : (typeof row.emailAddress === "string" ? row.emailAddress : null),
+    origin: typeof row.origin === "string" ? row.origin : null,
+    destination: typeof row.destination === "string" ? row.destination : null,
+    soldAt: typeof row.sold_at === "string" ? row.sold_at : (typeof row.soldAt === "string" ? row.soldAt : null),
   };
 }
 
@@ -507,8 +525,18 @@ export class SupabaseAdapter {
     const accessToken = authRes.value.accessToken;
     const profile = await this.current(accessToken);
     if (!profile) {
+      const checkRes = await this.client.select<Record<string, unknown>>("users", `select=approval_status,role&email=eq.${encodeURIComponent(email)}`, accessToken);
       await this.client.auth.signOut(accessToken);
-      return fail("This account is inactive or not linked to an active StockFlow profile.");
+      if (checkRes.ok && checkRes.value.length > 0) {
+        const u = checkRes.value[0];
+        if (u.role === "offers_user" && u.approval_status === "pending") {
+          return fail("Your account is pending administrator approval. You will receive access once approved.");
+        }
+        if (u.approval_status === "rejected") {
+          return fail("Your registration request has been declined. Please contact the administrator.");
+        }
+      }
+      return fail("This account is inactive or not linked to an active RM profile.");
     }
     this.tokenByActorId.set(profile.id, accessToken);
     this.lastAccessToken = accessToken;
@@ -1304,7 +1332,7 @@ export class SupabaseAdapter {
                 p_link: "/tasks",
                 p_warehouse_id: res.value.warehouseId || profile.warehouseId || null,
               }, token);
-            } catch {}
+            } catch { }
           }
           break;
         }
@@ -1495,7 +1523,7 @@ export class SupabaseAdapter {
                   p_warehouse_id: res.value.warehouseId || null,
                 }, token);
               }
-            } catch {}
+            } catch { }
           }
           break;
         }
@@ -1546,29 +1574,29 @@ export class SupabaseAdapter {
 
           const updatedDetails: GeneralRequestOperationalDetails = operationalDetails
             ? {
-                ...operationalDetails,
-                assignedPoSoNumber: rawPoSo,
-                assignedPoSoBy: profile.id,
-                assignedPoSoByName: profile.name,
-                assignedPoSoAt: this.now(),
-              }
+              ...operationalDetails,
+              assignedPoSoNumber: rawPoSo,
+              assignedPoSoBy: profile.id,
+              assignedPoSoByName: profile.name,
+              assignedPoSoAt: this.now(),
+            }
             : {
-                requestType: isPo ? "unloading" : "loading",
-                materialType: "General Material",
-                materialDescription: "",
-                packagingType: "Standard Packaging",
-                packageCount: 1,
-                grossWeightKg: 0,
-                tarePerPackageKg: 0,
-                totalTareWeightKg: 0,
-                netWeightKg: 0,
-                warehouseLocation: "Warehouse",
-                assignedPoSoNumber: rawPoSo,
-                assignedPoSoBy: profile.id,
-                assignedPoSoByName: profile.name,
-                assignedPoSoAt: this.now(),
-                inventoryMoved: false,
-              };
+              requestType: isPo ? "unloading" : "loading",
+              materialType: "General Material",
+              materialDescription: "",
+              packagingType: "Standard Packaging",
+              packageCount: 1,
+              grossWeightKg: 0,
+              tarePerPackageKg: 0,
+              totalTareWeightKg: 0,
+              netWeightKg: 0,
+              warehouseLocation: "Warehouse",
+              assignedPoSoNumber: rawPoSo,
+              assignedPoSoBy: profile.id,
+              assignedPoSoByName: profile.name,
+              assignedPoSoAt: this.now(),
+              inventoryMoved: false,
+            };
 
           const newDesc = serializeOperationalRequestDescription(updatedDetails, updatedDetails.notes);
 
@@ -1615,7 +1643,7 @@ export class SupabaseAdapter {
                   p_warehouse_id: currentReq.warehouseId || null,
                 }, token);
               }
-            } catch {}
+            } catch { }
           }
           break;
         }
@@ -1728,6 +1756,243 @@ export class SupabaseAdapter {
           if (!rpcRes.ok && profile) {
             await this.client.update("notifications", `recipient_id=eq.${profile.id}&read=eq.false`, { read: true, read_at: this.now() }, token);
           }
+          break;
+        }
+        case "assignWorkerPo": {
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_assign_worker_po",
+            {
+              p_order_number: text(body.poNumber || body.number),
+              p_worker_id: text(body.workerId || body.assignedWorkerId),
+              p_scheduled_date: text(body.scheduledDate) || this.now().slice(0, 10),
+              p_notes: text(body.notes) || null,
+            },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = `Worker assigned to ${text(body.poNumber || body.number)}.`;
+          break;
+        }
+        case "completeWorkerPo": {
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_complete_worker_po",
+            {
+              p_order_number: text(body.poNumber || body.number),
+              p_completion_notes: text(body.completionNotes || body.notes) || null,
+            },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = `Order ${text(body.poNumber || body.number)} marked as completed.`;
+          break;
+        }
+        case "submitSellingOffer": {
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_submit_selling_offer",
+            {
+              p_po_number: text(body.poNumber || body.po),
+              p_material_type: text(body.materialType),
+              p_material_name: text(body.materialName || body.material),
+              p_client_name: text(body.clientName),
+              p_contact_number: text(body.contactNumber || body.phone),
+              p_email_address: text(body.emailAddress || body.email),
+              p_price: num(body.price),
+              p_origin: text(body.origin),
+              p_destination: text(body.destination),
+            },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = "Selling offer submitted for review.";
+          break;
+        }
+        case "decideSellingOffer": {
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_decide_selling_offer",
+            {
+              p_offer_number: text(body.offerNumber || body.offerId || body.number),
+              p_decision: text(body.decision).toLowerCase(),
+              p_note: text(body.note || body.decisionNote) || null,
+            },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = `Selling offer decision recorded.`;
+          break;
+        }
+        case "acceptSellingOffer":
+        case "markOfferSold": {
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_accept_selling_offer",
+            {
+              p_offer_number: text(body.offerNumber || body.offerId || body.number),
+            },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = `Offer accepted and marked as sold.`;
+          break;
+        }
+        case "registerOffersUser": {
+          const name = text(body.name);
+          const email = text(body.email);
+          const password = text(body.password);
+          if (!name || !email || !password) {
+            error = "Name, email, and password are required.";
+            break;
+          }
+          const authRes = await this.client.auth.adminCreateUser({
+            email,
+            password,
+            name,
+            role: "offers_user",
+          });
+          if (!authRes.ok) {
+            error = authRes.error;
+            break;
+          }
+          const dbRes = await this.client.insert("users", {
+            id: authRes.value.id,
+            email,
+            name,
+            role: "offers_user",
+            approval_status: "pending",
+            active: false,
+            registration_notes: text(body.notes) || null,
+          });
+          if (!dbRes.ok) error = dbRes.error;
+          else notice = "Registration submitted. Pending admin approval.";
+          break;
+        }
+        case "decideOffersUserRegistration":
+        case "decideUserRegistration": {
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_decide_offers_user_registration",
+            {
+              p_user_id: text(body.userId || body.id),
+              p_decision: text(body.decision).toLowerCase(),
+              p_note: text(body.notes || body.registrationNotes) || null,
+            },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = `Registration decision updated.`;
+          break;
+        }
+        case "createOffer": {
+          const res = await svc.offers.create({
+            kind: text(body.kind).toLowerCase() === "selling" ? "selling" : "purchasing",
+            material: text(body.material),
+            materialType: text(body.materialType) || "Plastics",
+            materialGrade: text(body.materialGrade) || "Standard",
+            quantity: num(body.quantity),
+            unit: text(body.unit) || "kg",
+            pricePerUnit: num(body.pricePerUnit),
+            currency: text(body.currency) || "EUR",
+            country: text(body.country),
+            location: text(body.location),
+            truckLoads: num(body.truckLoads) || 1,
+            description: text(body.description),
+            priority: (text(body.priority).toLowerCase() as Offer["priority"]) || "medium",
+            offerType: text(body.offerType) || "Spot",
+            team: text(body.team) || "General",
+            status: text(body.status).toLowerCase() === "received" ? "received" : "draft",
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = `Offer ${res.value.number} created.`;
+          break;
+        }
+        case "editOffer": {
+          const res = await svc.offers.edit({
+            id: text(body.id || body.offerId),
+            material: text(body.material) || undefined,
+            materialType: text(body.materialType) || undefined,
+            materialGrade: text(body.materialGrade) || undefined,
+            quantity: body.quantity !== undefined ? num(body.quantity) : undefined,
+            unit: text(body.unit) || undefined,
+            pricePerUnit: body.pricePerUnit !== undefined ? num(body.pricePerUnit) : undefined,
+            currency: text(body.currency) || undefined,
+            country: text(body.country) || undefined,
+            location: text(body.location) || undefined,
+            truckLoads: body.truckLoads !== undefined ? num(body.truckLoads) : undefined,
+            description: text(body.description) || undefined,
+            priority: body.priority ? (text(body.priority).toLowerCase() as Offer["priority"]) : undefined,
+            offerType: text(body.offerType) || undefined,
+            team: text(body.team) || undefined,
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = `Offer ${res.value.number} updated.`;
+          break;
+        }
+        case "deleteOffer": {
+          const res = await svc.offers.delete({
+            id: text(body.id || body.offerId),
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = "Offer deleted.";
+          break;
+        }
+        case "submitOffer":
+        case "submitOfferForReview": {
+          const res = await svc.offers.submitReview({
+            id: text(body.id || body.offerId),
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = `Offer ${res.value.number} submitted for review.`;
+          break;
+        }
+        case "decideOffer": {
+          const res = await svc.offers.decide({
+            id: text(body.id || body.offerId),
+            decision: text(body.decision).toLowerCase() as "approved" | "rejected",
+            decisionNote: text(body.note || body.decisionNote),
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = `Decision recorded for offer ${res.value.number}.`;
+          break;
+        }
+        case "updateOfferStatus": {
+          const res = await svc.offers.updateStatus({
+            id: text(body.id || body.offerId),
+            status: text(body.status).toLowerCase() as Offer["status"],
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = `Status updated to ${res.value.status}.`;
+          break;
+        }
+        case "toggleOfferFavourite": {
+          const res = await svc.offers.toggleFavourite({
+            id: text(body.id || body.offerId),
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = "Favourite updated.";
+          break;
+        }
+        case "addOfferComment": {
+          const res = await svc.offers.addComment({
+            id: text(body.id || body.offerId),
+            comment: text(body.comment),
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = "Comment added.";
+          break;
+        }
+        case "deleteOfferAttachment": {
+          const res = await svc.offers.deleteAttachment({
+            id: text(body.offerId || body.id),
+            attachmentId: text(body.attachmentId || body.id),
+            actorId: profile.id,
+          });
+          if (!res.ok) error = res.error;
+          else notice = "Attachment removed.";
           break;
         }
         case "postCorrection": {

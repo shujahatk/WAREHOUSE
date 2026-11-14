@@ -23,6 +23,7 @@ export default function OfferDetailPage() {
     addOfferComment,
     addOfferAttachment,
     deleteOfferAttachment,
+    acceptSellingOffer,
   } = useDemo();
   const { identity } = useSession();
 
@@ -65,6 +66,9 @@ export default function OfferDetailPage() {
       }}
       onDecide={async (decision, note) => {
         return decideOffer({ id: offer.id, decision, note });
+      }}
+      onAcceptOffer={async (num) => {
+        return acceptSellingOffer(num);
       }}
       onUpdateStatus={async (status) => {
         return updateOfferStatus({ id: offer.id, status });

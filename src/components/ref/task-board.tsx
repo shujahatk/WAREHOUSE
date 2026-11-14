@@ -17,6 +17,7 @@ import {
   type GeneralRequestPriority,
   type GeneralRequestView,
   type GeneralRequestOperationalDetails,
+  type DemoOrder,
 } from "@/domain/view";
 
 const PRIORITY_OPTIONS: { id: GeneralRequestPriority; label: string; tone: string }[] = [
@@ -235,6 +236,33 @@ export function TaskBoard() {
   // Preview attachment state
   const [previewAttachment, setPreviewAttachment] = useState<PreviewAttachmentItem | null>(null);
 
+  // Worker PO/SO Assignment state
+  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const [workerActiveTab, setWorkerActiveTab] = useState<"today" | "upcoming" | "requests">("today");
+  const [executingOrder, setExecutingOrder] = useState<DemoOrder | null>(null);
+  const [executingNotes, setExecutingNotes] = useState("");
+  const [executingSubmitting, setExecutingSubmitting] = useState(false);
+  const [executingUploading, setExecutingUploading] = useState(false);
+
+  const workerAssignedOrders = useMemo(() => {
+    if (!isWorker) return [];
+    return (demo.state.orders || []).filter(
+      (o) => o.assignedWorkerId === identity.id || o.assignedWorkerName === identity.name
+    );
+  }, [demo.state.orders, isWorker, identity.id, identity.name]);
+
+  const todayAssignments = useMemo(() => {
+    return workerAssignedOrders.filter(
+      (o) => !o.scheduledDate || o.scheduledDate <= todayDateStr
+    );
+  }, [workerAssignedOrders, todayDateStr]);
+
+  const upcomingAssignments = useMemo(() => {
+    return workerAssignedOrders.filter(
+      (o) => Boolean(o.scheduledDate && o.scheduledDate > todayDateStr)
+    );
+  }, [workerAssignedOrders, todayDateStr]);
+
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -418,6 +446,180 @@ export function TaskBoard() {
           </div>
         ) : null}
       </div>
+
+      {/* Worker PO/SO Assigned Tasks Hub */}
+      {isWorker ? (
+        <div className="mb-6">
+          <div className="flex border-b border-neutral-200">
+            <button
+              type="button"
+              onClick={() => setWorkerActiveTab("today")}
+              className={`relative pb-3 px-4 text-sm font-semibold transition ${
+                workerActiveTab === "today"
+                  ? "border-b-2 border-neutral-950 text-neutral-950"
+                  : "text-neutral-500 hover:text-neutral-800"
+              }`}
+            >
+              Today&apos;s Assignments
+              <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                todayAssignments.length > 0 ? "bg-amber-100 text-amber-800 font-bold" : "bg-neutral-100 text-neutral-600"
+              }`}>
+                {todayAssignments.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWorkerActiveTab("upcoming")}
+              className={`relative pb-3 px-4 text-sm font-semibold transition ${
+                workerActiveTab === "upcoming"
+                  ? "border-b-2 border-neutral-950 text-neutral-950"
+                  : "text-neutral-500 hover:text-neutral-800"
+              }`}
+            >
+              Upcoming Assignments
+              <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+                {upcomingAssignments.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWorkerActiveTab("requests")}
+              className={`relative pb-3 px-4 text-sm font-semibold transition ${
+                workerActiveTab === "requests"
+                  ? "border-b-2 border-neutral-950 text-neutral-950"
+                  : "text-neutral-500 hover:text-neutral-800"
+              }`}
+            >
+              Loading / Unloading Requests
+              <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+                {visibleGeneral.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Today's Assignments View */}
+          {workerActiveTab === "today" && (
+            <div className="mt-4 space-y-3">
+              {todayAssignments.length === 0 ? (
+                <Surface className="p-8 text-center">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 mb-2">
+                    📋
+                  </div>
+                  <p className="text-sm font-medium text-neutral-800">No tasks scheduled for today</p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Staff-assigned PO/SO tasks scheduled for today will appear here for execution.
+                  </p>
+                </Surface>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {todayAssignments.map((ord) => (
+                    <Surface key={ord.number} className="flex flex-col justify-between p-4 border-amber-200 bg-amber-50/20 shadow-xs">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+                            Today: {ord.scheduledDate || "Scheduled"}
+                          </span>
+                          <StatusPill label={ord.executionStatus === "completed" ? "Completed" : "Ready to Execute"} />
+                        </div>
+                        <h3 className="mt-2 text-base font-semibold text-neutral-950">{ord.title || ord.number}</h3>
+                        <p className="text-xs text-neutral-600 font-medium">Ref: {ord.number} · {ord.supplier}</p>
+                        <div className="mt-2 space-y-1 text-xs text-neutral-600">
+                          <p>Material: <span className="font-semibold text-neutral-900">{ord.material}</span></p>
+                          <p>Weight: <span className="font-semibold text-neutral-900">{formatKg(ord.quantityKg)}</span></p>
+                          {ord.notes ? (
+                            <p className="italic text-neutral-700 bg-white/70 p-1.5 rounded border border-neutral-200 mt-1">
+                              Staff note: &ldquo;{ord.notes}&rdquo;
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-neutral-200 flex items-center justify-between gap-2">
+                        <Link
+                          href={`/purchases/${ord.number}`}
+                          className="text-xs font-medium text-neutral-700 hover:text-neutral-950 underline"
+                        >
+                          View PO &rarr;
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExecutingOrder(ord);
+                            setExecutingNotes(ord.completionNotes || "");
+                          }}
+                          className="inline-flex h-8 items-center justify-center rounded-lg bg-neutral-950 px-3 text-xs font-semibold text-white hover:bg-neutral-800"
+                        >
+                          {ord.executionStatus === "completed" ? "Review Evidence" : "Execute & Upload Evidence"}
+                        </button>
+                      </div>
+                    </Surface>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Upcoming Assignments View */}
+          {workerActiveTab === "upcoming" && (
+            <div className="mt-4 space-y-3">
+              {upcomingAssignments.length === 0 ? (
+                <Surface className="p-8 text-center">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 mb-2">
+                    📅
+                  </div>
+                  <p className="text-sm font-medium text-neutral-800">No upcoming tasks scheduled in advance</p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Tasks scheduled by Staff for tomorrow or future dates will appear here for advance preparation.
+                  </p>
+                </Surface>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {upcomingAssignments.map((ord) => (
+                    <Surface key={ord.number} className="flex flex-col justify-between p-4 border-indigo-100 bg-indigo-50/20 shadow-xs">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-900">
+                            Upcoming: {ord.scheduledDate}
+                          </span>
+                          <span className="text-xs font-medium text-neutral-500">Advance Prep</span>
+                        </div>
+                        <h3 className="mt-2 text-base font-semibold text-neutral-950">{ord.title || ord.number}</h3>
+                        <p className="text-xs text-neutral-600 font-medium">Ref: {ord.number} · {ord.supplier}</p>
+                        <div className="mt-2 space-y-1 text-xs text-neutral-600">
+                          <p>Material: <span className="font-semibold text-neutral-900">{ord.material}</span></p>
+                          <p>Weight: <span className="font-semibold text-neutral-900">{formatKg(ord.quantityKg)}</span></p>
+                          {ord.notes ? (
+                            <p className="italic text-neutral-700 bg-white/70 p-1.5 rounded border border-neutral-200 mt-1">
+                              Staff note: &ldquo;{ord.notes}&rdquo;
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-neutral-200 flex items-center justify-between gap-2">
+                        <Link
+                          href={`/purchases/${ord.number}`}
+                          className="text-xs font-medium text-neutral-700 hover:text-neutral-950 underline"
+                        >
+                          View Details &rarr;
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExecutingOrder(ord);
+                            setExecutingNotes(ord.completionNotes || "");
+                          }}
+                          className="inline-flex h-8 items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 text-xs font-semibold text-neutral-900 hover:bg-neutral-50"
+                        >
+                          Prepare / Notes
+                        </button>
+                      </div>
+                    </Surface>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* Primary Section: Operational Requests */}
       <div className="space-y-4">
@@ -1602,6 +1804,160 @@ export function TaskBoard() {
                       ? "Confirm Completion & Move Stock"
                       : "Confirm Decision"}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Worker Task Execution & Evidence Modal */}
+      {executingOrder ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-xl border border-neutral-200 bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+              <div>
+                <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+                  {executingOrder.scheduledDate ? `Scheduled: ${executingOrder.scheduledDate}` : "Today's Task"}
+                </span>
+                <h3 className="mt-1 text-lg font-bold text-neutral-950">{executingOrder.title || executingOrder.number}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExecutingOrder(null)}
+                className="text-neutral-400 hover:text-neutral-700 text-lg font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-2 rounded-lg bg-neutral-50 p-3 text-xs">
+                <div>
+                  <span className="text-neutral-500">PO Reference:</span>
+                  <p className="font-semibold text-neutral-900">{executingOrder.number}</p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Supplier/Customer:</span>
+                  <p className="font-semibold text-neutral-900">{executingOrder.supplier}</p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Material:</span>
+                  <p className="font-semibold text-neutral-900">{executingOrder.material}</p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Quantity:</span>
+                  <p className="font-semibold text-neutral-900">{formatKg(executingOrder.quantityKg)}</p>
+                </div>
+                {executingOrder.notes ? (
+                  <div className="col-span-2 mt-1 border-t border-neutral-200 pt-1">
+                    <span className="text-neutral-500">Staff Instructions:</span>
+                    <p className="font-medium text-neutral-800">{executingOrder.notes}</p>
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-700">
+                  Completion Notes / Observations
+                  <textarea
+                    rows={3}
+                    value={executingNotes}
+                    onChange={(e) => setExecutingNotes(e.target.value)}
+                    placeholder="Enter operation observations, gross/tare weights, seal numbers..."
+                    className="mt-1 w-full rounded-lg border border-neutral-300 p-2.5 text-xs text-neutral-900"
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-lg border border-dashed border-neutral-300 p-3 bg-neutral-50/50">
+                <span className="block text-xs font-semibold text-neutral-800 mb-2">Attach Task Evidence</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-800 hover:bg-neutral-50">
+                    <span>📷 Upload Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        void (async () => {
+                          setExecutingUploading(true);
+                          const compressed = await compressImageIfNeeded(file);
+                          const base64 = await fileToBase64(compressed.blob);
+                          await demo.selectDocument({
+                            id: `doc-${Date.now()}`,
+                            name: file.name,
+                            category: "Purchase",
+                            mime: compressed.mime || "image/jpeg",
+                            size: compressed.size,
+                            bytesBase64: base64,
+                          });
+                          setExecutingUploading(false);
+                        })();
+                      }}
+                    />
+                  </label>
+                  <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-800 hover:bg-neutral-50">
+                    <span>📄 Upload Document / CMR</span>
+                    <input
+                      type="file"
+                      accept=".pdf,image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        void (async () => {
+                          setExecutingUploading(true);
+                          const base64 = await fileToBase64(file);
+                          await demo.selectDocument({
+                            id: `doc-${Date.now()}`,
+                            name: file.name,
+                            category: "Transport",
+                            mime: file.type || "application/pdf",
+                            size: file.size,
+                            bytesBase64: base64,
+                          });
+                          setExecutingUploading(false);
+                        })();
+                      }}
+                    />
+                  </label>
+                  {executingUploading ? <span className="text-xs text-neutral-500">Uploading…</span> : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2 border-t border-neutral-200 pt-3">
+              <button
+                type="button"
+                onClick={() => setExecutingOrder(null)}
+                className="h-9 rounded-lg border border-neutral-300 px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+              >
+                Close
+              </button>
+              {executingOrder.executionStatus !== "completed" ? (
+                <button
+                  type="button"
+                  disabled={executingSubmitting}
+                  onClick={() => {
+                    void (async () => {
+                      setExecutingSubmitting(true);
+                      await demo.completeWorkerPo({
+                        poNumber: executingOrder.number,
+                        completionNotes: executingNotes.trim() || undefined,
+                      });
+                      setExecutingSubmitting(false);
+                      setExecutingOrder(null);
+                    })();
+                  }}
+                  className="inline-flex h-9 items-center justify-center rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {executingSubmitting ? "Completing…" : "Mark Task Completed"}
+                </button>
+              ) : (
+                <span className="text-xs font-bold text-emerald-700">✓ Completed</span>
+              )}
             </div>
           </div>
         </div>

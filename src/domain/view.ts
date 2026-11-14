@@ -21,7 +21,7 @@ export type {
   OfferAttachmentKind,
 };
 
-export type OfferStatusView = "Draft" | "Received" | "Under Review" | "Negotiating" | "Won" | "Lost";
+export type OfferStatusView = "Draft" | "Received" | "Under Review" | "Negotiating" | "Won" | "Lost" | "Accepted" | "Sold";
 export type OfferPriorityView = "Low" | "Medium" | "High" | "Urgent";
 export type OfferApprovalView = "Pending" | "Approved" | "Rejected";
 
@@ -32,6 +32,8 @@ export const OFFER_STATUS_LABELS: Record<string, OfferStatusView> = {
   negotiating: "Negotiating",
   won: "Won",
   lost: "Lost",
+  accepted: "Accepted",
+  sold: "Sold",
 };
 
 export const OFFER_PRIORITY_LABELS: Record<string, OfferPriorityView> = {
@@ -103,7 +105,7 @@ export type OfferView = {
   offerType: string;
   team: string;
   status: OfferStatusView;
-  statusKey: "draft" | "received" | "under_review" | "negotiating" | "won" | "lost";
+  statusKey: "draft" | "received" | "under_review" | "negotiating" | "won" | "lost" | "accepted" | "sold";
   approvalStatus: "pending" | "approved" | "rejected";
   approvalLabel: OfferApprovalView;
   adminDecisionNote: string | null;
@@ -111,6 +113,16 @@ export type OfferView = {
   decidedByName: string | null;
   decidedAt: string | null;
   isFavourite: boolean;
+  poId?: string | null;
+  poNumber?: string | null;
+  clientName?: string | null;
+  contactNumber?: string | null;
+  emailAddress?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  price?: number | null;
+  packagingType?: string | null;
+  soldAt?: string | null;
   createdBy: string;
   createdByName: string;
   createdAt: string;
@@ -159,6 +171,16 @@ export type DemoOrder = {
   eta: string;
   customerCompany: string;
   notes: string;
+  assignedWorkerId?: string | null;
+  assignedWorkerName?: string | null;
+  assignedBy?: string | null;
+  assignedByName?: string | null;
+  assignedAt?: string | null;
+  scheduledDate?: string | null;
+  executionStatus?: "unassigned" | "assigned" | "in_progress" | "completed";
+  completionNotes?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
 };
 
 export type ShipmentSection = {
@@ -476,12 +498,15 @@ export type DemoNotification = {
 };
 
 export type PublicUser = {
+  id?: string;
   email: string;
   name: string;
   role: Role;
   warehouse: string | null;
   company: string | null;
   status: "Active" | "Inactive";
+  approvalStatus?: "pending" | "approved" | "rejected";
+  registrationNotes?: string | null;
 };
 
 export type DemoIdentity = PublicUser;
@@ -712,6 +737,7 @@ export type Actor = {
   warehouse: string | null;
   email: string;
   company?: string | null;
+  id?: string | null;
 };
 
 export function emptyWorkspace(): WorkspaceState {
@@ -740,8 +766,16 @@ export function emptyWorkspace(): WorkspaceState {
 
 export function visibleOffers(
   state: WorkspaceState,
-  actor: { role: Role; name?: string; email?: string },
+  actor: { role: Role; name?: string; email?: string; id?: string | null },
 ): OfferView[] {
+  if (actor.role === "offers_user") {
+    return (state.offers || []).filter(
+      (o) =>
+        o.kind === "purchasing" ||
+        (actor.id && o.createdBy === actor.id) ||
+        Boolean(actor.name && o.createdByName === actor.name)
+    );
+  }
   if (actor.role !== "owner" && actor.role !== "moderator") {
     return [];
   }
@@ -957,11 +991,28 @@ export function visibleStock(state: DemoState, role: Role, warehouse: string | n
 }
 
 export function visibleOrders(state: DemoState, actor: Actor): DemoOrder[] {
+  if (actor.role === "worker") {
+    return state.orders.filter(
+      (order) =>
+        (actor.id && order.assignedWorkerId === actor.id) ||
+        order.assignedWorkerName === actor.name ||
+        Boolean(order.notes && order.notes.includes(actor.name)),
+    );
+  }
+  if (actor.role === "offers_user") return [];
   if (actor.role !== "customer") return state.orders;
   return state.orders.filter((order) => sameParty(order.customerCompany, actor.company));
 }
 
 export function canReadOrder(actor: Actor, order: DemoOrder): boolean {
+  if (actor.role === "worker") {
+    return Boolean(
+      (actor.id && order.assignedWorkerId === actor.id) ||
+      order.assignedWorkerName === actor.name ||
+      Boolean(order.notes && order.notes.includes(actor.name))
+    );
+  }
+  if (actor.role === "offers_user") return false;
   if (actor.role !== "customer") return true;
   return sameParty(order.customerCompany, actor.company);
 }

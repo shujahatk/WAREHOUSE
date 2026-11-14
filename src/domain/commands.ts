@@ -60,6 +60,8 @@ export function profile(user: UserRecord): UserProfile {
     warehouseId: user.warehouseId,
     companyId: user.companyId,
     active: user.active,
+    approvalStatus: user.approvalStatus ?? "approved",
+    registrationNotes: user.registrationNotes ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -184,6 +186,14 @@ function ensureOrder(store: StoreData, number: string, companyId: string, actorI
     status: "draft",
     valueEur: 0,
     notes: "",
+    assignedWorkerId: null,
+    assignedBy: null,
+    assignedAt: null,
+    scheduledDate: null,
+    executionStatus: "unassigned",
+    completionNotes: null,
+    completedAt: null,
+    completedBy: null,
     createdBy: actorId,
     createdAt: now,
     updatedAt: now,
@@ -994,6 +1004,14 @@ export function createOffer(
     decidedBy: null,
     decidedAt: null,
     isFavourite: false,
+    poId: text(payload.poId) || null,
+    poNumber: text(payload.poNumber) || null,
+    clientName: text(payload.clientName) || null,
+    contactNumber: text(payload.contactNumber) || null,
+    emailAddress: text(payload.emailAddress) || null,
+    origin: text(payload.origin) || null,
+    destination: text(payload.destination) || null,
+    soldAt: null,
     createdBy: actor.id,
     createdAt: now,
     updatedBy: null,
@@ -1265,13 +1283,13 @@ export function updateOfferStatus(
   now: string
 ): Result<Offer> {
   if (actor.role !== "moderator") {
-    return fail("Only a Sales & Purchasing Offer Moderator can update offer statuses.");
+    return fail("Only a Moderator can update offer statuses.");
   }
 
   const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
   if (!offer) return fail("Offer not found.");
 
-  const validStatuses = ["draft", "received", "under_review", "negotiating", "won", "lost"];
+  const validStatuses = ["draft", "received", "under_review", "negotiating", "won", "lost", "accepted"];
   const statusKey = newStatus.trim().toLowerCase();
   if (!validStatuses.includes(statusKey)) {
     return fail(`Invalid offer status: ${newStatus}`);
@@ -1459,6 +1477,445 @@ export function deleteOfferAttachment(
   });
 
   return ok(undefined);
+}
+
+export function assignWorkerPo(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<PurchaseOrder> {
+  if (actor.role !== "owner" && actor.role !== "manager") {
+    return fail("Only Staff or Admin can assign workers to orders.");
+  }
+  const poNumber = text(payload.poNumber || payload.number);
+  const po = store.purchaseOrders.find((p) => p.number === poNumber);
+  if (!po) return fail(`Purchase order ${poNumber} does not exist.`);
+
+  const workerId = text(payload.workerId || payload.assignedWorkerId);
+  const worker = store.users.find((u) => u.id === workerId && u.active);
+  if (!worker || worker.role !== "worker") {
+    return fail("Target user must be an active worker.");
+  }
+
+  const scheduledDate = text(payload.scheduledDate) || now.slice(0, 10);
+  const notes = text(payload.notes);
+
+  po.assignedWorkerId = worker.id;
+  po.assignedBy = actor.id;
+  po.assignedAt = now;
+  po.scheduledDate = scheduledDate;
+  po.executionStatus = "assigned";
+  if (notes) po.notes = notes;
+  po.updatedAt = now;
+
+  notify(
+    store,
+    worker.id,
+    "order_assigned",
+    `New Task Assigned: ${po.number}`,
+    `You have been assigned order ${po.number} scheduled for ${scheduledDate}.`,
+    now,
+    { targetType: "purchase_order", targetId: po.number, link: "/tasks" }
+  );
+
+  audit(store, actor.id, "po-assigned", "purchase_order", po.number, `Assigned ${po.number} to worker ${worker.name} for ${scheduledDate}`, now);
+
+  return ok(po);
+}
+
+export function completeWorkerPo(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<PurchaseOrder> {
+  const poNumber = text(payload.poNumber || payload.number);
+  const po = store.purchaseOrders.find((p) => p.number === poNumber);
+  if (!po) return fail(`Purchase order ${poNumber} does not exist.`);
+
+  if (actor.role === "worker" && po.assignedWorkerId !== actor.id) {
+    return fail("You are not the assigned worker for this order.");
+  }
+
+  const completionNotes = text(payload.completionNotes || payload.notes);
+  po.executionStatus = "completed";
+  po.completedAt = now;
+  po.completedBy = actor.id;
+  po.completionNotes = completionNotes || po.completionNotes || null;
+  po.updatedAt = now;
+
+  if (po.assignedBy) {
+    notify(
+      store,
+      po.assignedBy,
+      "order_completed",
+      `Task Completed: ${po.number}`,
+      `${actor.name} has completed assigned order ${po.number}.${completionNotes ? ` Notes: ${completionNotes}` : ""}`,
+      now,
+      { targetType: "purchase_order", targetId: po.number, link: `/purchases/${po.number}` }
+    );
+  }
+
+  audit(store, actor.id, "po-completed", "purchase_order", po.number, `Completed assigned order ${po.number}`, now);
+
+  return ok(po);
+}
+
+export function submitSellingOffer(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<Offer> {
+  if (actor.role !== "owner" && actor.role !== "moderator" && actor.role !== "offers_user") {
+    return fail("Unauthorized: Only Offers Users, Moderators or Admins can submit selling offers.");
+  }
+
+  // 9 Required Validated Fields
+  const poNumber = text(payload.poNumber || payload.po);
+  if (!poNumber) return fail("PO Number is required.");
+
+  const materialType = text(payload.materialType);
+  if (!materialType) return fail("Material Type is required.");
+
+  const materialName = text(payload.materialName || payload.material);
+  if (!materialName) return fail("Material Name is required.");
+
+  const clientName = text(payload.clientName);
+  if (!clientName) return fail("Client Name is required.");
+
+  const contactNumber = text(payload.contactNumber || payload.phone);
+  if (!contactNumber) return fail("Contact Number is required.");
+
+  const emailAddress = text(payload.emailAddress || payload.email);
+  if (!emailAddress || !emailAddress.includes("@")) return fail("A valid Email Address is required.");
+
+  const price = typeof payload.price === "number" ? payload.price : parseFloat(String(payload.price || 0));
+  if (!Number.isFinite(price) || price <= 0) return fail("Price must be greater than zero.");
+
+  const origin = text(payload.origin);
+  if (!origin) return fail("Origin is required.");
+
+  const destination = text(payload.destination);
+  if (!destination) return fail("Destination is required.");
+
+  const po = store.purchaseOrders.find((p) => p.number === poNumber);
+
+  if (!store.offers) store.offers = [];
+  if (!store.offerAttachments) store.offerAttachments = [];
+  if (!store.offerComments) store.offerComments = [];
+  if (!store.offerActivities) store.offerActivities = [];
+
+  const offerId = randomUUID();
+  const number = nextOfferNumber(store, "selling", now);
+
+  const offer: Offer = {
+    id: offerId,
+    number,
+    kind: "selling",
+    material: materialName,
+    materialType,
+    materialGrade: text(payload.materialGrade) || "Standard",
+    quantity: typeof payload.quantity === "number" ? payload.quantity : 1,
+    unit: text(payload.unit) || "lot",
+    pricePerUnit: price,
+    currency: (text(payload.currency) || "EUR").toUpperCase(),
+    totalValue: price,
+    country: origin,
+    location: origin,
+    truckLoads: 1,
+    description: text(payload.description) || `Selling offer for ${materialName} linked to ${poNumber}`,
+    priority: "medium",
+    offerType: "Spot",
+    team: "Trading",
+    status: "received",
+    approvalStatus: "pending",
+    adminDecisionNote: null,
+    decidedBy: null,
+    decidedAt: null,
+    isFavourite: false,
+    createdBy: actor.id,
+    createdAt: now,
+    updatedBy: null,
+    updatedAt: now,
+    deletedAt: null,
+    deletedBy: null,
+    poId: po ? po.number : null,
+    poNumber,
+    clientName,
+    contactNumber,
+    emailAddress,
+    origin,
+    destination,
+    soldAt: null,
+  };
+
+  store.offers.push(offer);
+
+  // Attachments if provided
+  const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+  for (const rawAtt of attachments) {
+    const attRec = record(rawAtt);
+    const attName = text(attRec.name) || "attachment";
+    const attMime = text(attRec.mime) || "application/octet-stream";
+    const isImage = attRec.kind === "image" || attMime.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(attName);
+    const attId = randomUUID();
+    const storageKey = `offers/${offerId}/${attId}-${attName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    let byteSize = 0;
+    if (typeof attRec.bytesBase64 === "string" && attRec.bytesBase64) {
+      const buffer = Buffer.from(attRec.bytesBase64, "base64");
+      byteSize = buffer.byteLength;
+      store.blobs.push({
+        key: storageKey,
+        name: attName,
+        mime: attMime,
+        bytesBase64: attRec.bytesBase64,
+      });
+    }
+    store.offerAttachments.push({
+      id: attId,
+      offerId,
+      name: attName,
+      kind: isImage ? "image" : "document",
+      mime: attMime,
+      byteSize: byteSize || (typeof attRec.byteSize === "number" ? attRec.byteSize : 0),
+      storageKey,
+      url: null,
+      uploadedBy: actor.id,
+      createdAt: now,
+    });
+  }
+
+  // Activity log
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId,
+    actorId: actor.id,
+    action: "selling_offer_submitted",
+    details: `Submitted Selling Offer linked to ${poNumber} for ${clientName}`,
+    createdAt: now,
+  });
+
+  // Notify Admins
+  notifyRole(
+    store,
+    "owner",
+    "offer_submission",
+    `New Selling Offer: ${number}`,
+    `${actor.name} submitted Selling Offer ${number} linked to ${poNumber} for ${clientName}.`,
+    now,
+    { targetType: "offer", targetId: offerId, link: `/offers/${offerId}` }
+  );
+
+  audit(store, actor.id, "selling-offer-submitted", "offer", offerId, `Submitted Selling Offer ${number} for PO ${poNumber}`, now);
+
+  return ok(offer);
+}
+
+export function decideSellingOffer(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<Offer> {
+  if (actor.role !== "owner") {
+    return fail("Only Admin can approve or reject selling offers.");
+  }
+  const offerId = text(payload.offerId || payload.id || payload.number);
+  let decisionRaw = text(payload.decision).toLowerCase();
+  if (decisionRaw === "approve") decisionRaw = "approved";
+  if (decisionRaw === "reject") decisionRaw = "rejected";
+  if (decisionRaw !== "approved" && decisionRaw !== "rejected") {
+    return fail("Decision must be either 'approved' or 'rejected'.");
+  }
+  const decision = decisionRaw as "approved" | "rejected";
+  const note = text(payload.note || payload.decisionNote);
+
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  offer.approvalStatus = decision;
+  offer.adminDecisionNote = note || null;
+  offer.decidedBy = actor.id;
+  offer.decidedAt = now;
+  offer.updatedAt = now;
+  if (decision === "rejected") {
+    offer.status = "lost";
+  }
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: `selling_offer_${decision}`,
+    details: `Admin decision: ${decision}.${note ? ` Note: ${note}` : ""}`,
+    createdAt: now,
+  });
+
+  notify(
+    store,
+    offer.createdBy,
+    "offer_decision",
+    `Selling Offer ${decision}: ${offer.number}`,
+    `Admin has ${decision} your Selling Offer ${offer.number}.${note ? ` Note: ${note}` : ""}`,
+    now,
+    { targetType: "offer", targetId: offer.id, link: `/offers/${offer.id}` }
+  );
+
+  audit(store, actor.id, `selling-offer-${decision}`, "offer", offer.id, `Admin ${decision} Selling Offer ${offer.number}`, now);
+
+  return ok(offer);
+}
+
+export function acceptSellingOffer(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<Offer> {
+  if (actor.role !== "owner" && actor.role !== "moderator") {
+    return fail("Only Admin or Moderator can accept an offer.");
+  }
+  const offerId = text(payload.offerId || payload.id || payload.number);
+  const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
+  if (!offer) return fail("Offer not found.");
+
+  if (offer.approvalStatus !== "approved") {
+    return fail("Only approved offers can be commercially accepted.");
+  }
+
+  offer.status = "accepted";
+  offer.soldAt = now;
+  offer.updatedAt = now;
+
+  if (!store.offerActivities) store.offerActivities = [];
+  store.offerActivities.push({
+    id: randomUUID(),
+    offerId: offer.id,
+    actorId: actor.id,
+    action: "offer_accepted_sold",
+    details: `Offer commercially accepted and marked as Sold by ${actor.name}`,
+    createdAt: now,
+  });
+
+  notify(
+    store,
+    offer.createdBy,
+    "offer_sold",
+    `Deal Accepted & Marked as Sold: ${offer.number}`,
+    `Your Selling Offer ${offer.number} has reached commercial acceptance and is now marked as Sold.`,
+    now,
+    { targetType: "offer", targetId: offer.id, link: `/offers/${offer.id}` }
+  );
+
+  audit(store, actor.id, "offer-sold", "offer", offer.id, `Offer ${offer.number} marked as accepted & sold`, now);
+
+  return ok(offer);
+}
+
+export function registerOffersUser(
+  store: StoreData,
+  payload: Record<string, unknown>,
+  now: string
+): Result<UserProfile> {
+  const name = text(payload.name);
+  if (!name) return fail("Full name is required.");
+
+  const email = text(payload.email).toLowerCase();
+  if (!email || !email.includes("@")) return fail("A valid email address is required.");
+
+  const password = text(payload.password);
+  if (!password || password.length < 6) return fail("Password must be at least 6 characters.");
+
+  const company = text(payload.company || payload.companyName);
+  const notes = text(payload.notes || payload.registrationNotes);
+
+  const existing = store.users.find((u) => u.email.toLowerCase() === email);
+  if (existing) return fail("An account with that email already exists.");
+
+  const userId = randomUUID();
+  const formattedNotes = notes
+    ? company
+      ? `${notes} (Company: ${company})`
+      : notes
+    : company
+    ? `Company: ${company}`
+    : null;
+
+  const newUser: UserRecord = {
+    id: userId,
+    email,
+    name,
+    role: "offers_user",
+    warehouseId: null,
+    companyId: null,
+    active: false,
+    approvalStatus: "pending",
+    registrationNotes: formattedNotes,
+    passwordHash: hashPassword(password),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.users.push(newUser);
+
+  notifyRole(
+    store,
+    "owner",
+    "user_registration",
+    `New Offers User Registration: ${name}`,
+    `${name} (${email}${company ? `, ${company}` : ""}) registered and is awaiting approval.`,
+    now,
+    { targetType: "user", targetId: userId, link: "/users" }
+  );
+
+  return ok(profile(newUser));
+}
+
+export function decideOffersUserRegistration(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<UserProfile> {
+  if (actor.role !== "owner") {
+    return fail("Only Admin can approve or reject account registrations.");
+  }
+  const userId = text(payload.userId || payload.id);
+  let decisionRaw = text(payload.decision).toLowerCase();
+  if (decisionRaw === "approve") decisionRaw = "approved";
+  if (decisionRaw === "reject") decisionRaw = "rejected";
+  if (decisionRaw !== "approved" && decisionRaw !== "rejected") {
+    return fail("Decision must be either 'approved' or 'rejected'.");
+  }
+  const decision = decisionRaw as "approved" | "rejected";
+  const notes = text(payload.notes || payload.registrationNotes);
+
+  const target = store.users.find((u) => u.id === userId);
+  if (!target) return fail("User not found.");
+
+  target.approvalStatus = decision;
+  target.active = decision === "approved";
+  if (notes) target.registrationNotes = notes;
+  target.updatedAt = now;
+
+  notify(
+    store,
+    target.id,
+    `account_${decision}`,
+    `Registration ${decision.toUpperCase()}`,
+    decision === "approved"
+      ? "Your Offers User registration has been approved. You can now log in and access the Offers Portal."
+      : `Your Offers User registration was declined.${notes ? ` Note: ${notes}` : ""}`,
+    now,
+    { targetType: "user", targetId: target.id, link: "/login" }
+  );
+
+  audit(store, actor.id, `user-registration-${decision}`, "user", target.id, `Registration ${decision} for ${target.email}`, now);
+
+  return ok(profile(target));
 }
 
 export function assignRequestWorker(
@@ -2284,6 +2741,22 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
     }
     case "deleteOfferAttachment":
       return asCommand(deleteOfferAttachment(store, actor, text(body.offerId || body.id), text(body.attachmentId || body.id), now), "Attachment removed.");
+    case "assignWorkerPo":
+      return asCommand(assignWorkerPo(store, actor, record(body), now), "Worker was assigned to the order.");
+    case "completeWorkerPo":
+      return asCommand(completeWorkerPo(store, actor, record(body), now), "Order execution completed.");
+    case "submitSellingOffer":
+      return asCommand(submitSellingOffer(store, actor, record(body), now), "Selling offer submitted for review.");
+    case "decideSellingOffer":
+      return asCommand(decideSellingOffer(store, actor, record(body), now), "Selling offer decision recorded.");
+    case "acceptSellingOffer":
+    case "markOfferSold":
+      return asCommand(acceptSellingOffer(store, actor, record(body), now), "Offer accepted and marked as sold.");
+    case "registerOffersUser":
+      return asCommand(registerOffersUser(store, record(body), now), "Registration submitted. Pending admin approval.");
+    case "decideOffersUserRegistration":
+    case "decideUserRegistration":
+      return asCommand(decideOffersUserRegistration(store, actor, record(body), now), "Registration decision updated.");
     case "markNotificationRead":
       return asCommand(markNotificationRead(store, actor, text(body.id || body.notificationId), now), "Notification marked as read.");
     case "markAllNotificationsRead":
@@ -2338,6 +2811,14 @@ function createPurchase(store: StoreData, actor: UserRecord, body: Record<string
     status: "submitted",
     valueEur,
     notes: text(body.notes),
+    assignedWorkerId: null,
+    assignedBy: null,
+    assignedAt: null,
+    scheduledDate: null,
+    executionStatus: "unassigned",
+    completionNotes: null,
+    completedAt: null,
+    completedBy: null,
     createdBy: actor.id,
     createdAt: now,
     updatedAt: now,
@@ -2371,6 +2852,14 @@ function submitOrder(store: StoreData, actor: UserRecord, body: Record<string, u
     status: "submitted",
     valueEur: 0,
     notes,
+    assignedWorkerId: null,
+    assignedBy: null,
+    assignedAt: null,
+    scheduledDate: null,
+    executionStatus: "unassigned",
+    completionNotes: null,
+    completedAt: null,
+    completedBy: null,
     createdBy: actor.id,
     createdAt: now,
     updatedAt: now,
@@ -3317,15 +3806,23 @@ export function sessionProfile(store: StoreData, sessionId: string, now: string)
     return null;
   }
   const user = store.users.find((item) => item.id === session.userId && item.active);
-  if (!user || !isActiveRole(user.role)) return null;
+  if (!user || (!isActiveRole(user.role) && user.role !== "offers_user")) return null;
   return profile(user);
 }
 
 export function signInUser(store: StoreData, email: string, password: string, now: string): Result<{ sessionId: string; profile: UserProfile }> {
   const user = store.users.find((item) => same(item.email, email));
   if (!user || !verifyPassword(password, user.passwordHash)) return fail("Those credentials were not recognized.");
+  if (user.role === "offers_user") {
+    if (user.approvalStatus === "pending") {
+      return fail("Your account is pending administrator approval. You will receive access once approved.");
+    }
+    if (user.approvalStatus === "rejected") {
+      return fail("Your registration request has been rejected. Please contact the administrator.");
+    }
+  }
   if (!user.active) return fail("This account is inactive.");
-  if (!isActiveRole(user.role)) return fail("This account role is no longer active.");
+  if (!isActiveRole(user.role) && user.role !== "offers_user") return fail("This account role is no longer active.");
   const sessionId = randomUUID();
   const expiresAt = new Date(Date.parse(now) + 12 * 60 * 60 * 1000).toISOString();
   store.sessions.push({ id: sessionId, userId: user.id, expiresAt });

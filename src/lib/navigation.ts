@@ -16,7 +16,7 @@ export type NavSection = {
 const ALL: ActiveRole[] = ["owner", "manager", "worker", "moderator"];
 const WAREHOUSE_OPS: ActiveRole[] = ["owner", "manager", "worker"];
 const OFFICE: ActiveRole[] = ["owner", "manager"];
-const OFFERS_ROLES: ActiveRole[] = ["owner", "moderator"];
+const OFFERS_ROLES: Role[] = ["owner", "moderator", "offers_user"];
 const ADMIN: ActiveRole[] = ["owner"];
 const STAFF: ActiveRole[] = ["manager"];
 
