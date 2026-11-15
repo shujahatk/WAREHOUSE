@@ -9,6 +9,7 @@ import { OffersTable } from "@/components/offers/offers-table";
 import { OfferQuickViewDrawer } from "@/components/offers/offer-quick-view-drawer";
 import { OfferFormModal } from "@/components/offers/offer-form-modal";
 import { OfferDecisionModal } from "@/components/offers/offer-decision-modal";
+import { SellingOfferModal } from "@/components/offers/selling-offer-modal";
 import { exportOffersToCsv } from "@/components/offers/offers-csv";
 import type { OfferView } from "@/domain/view";
 
@@ -20,11 +21,13 @@ export default function PurchasingOffersPage() {
     deleteOffer,
     decideOffer,
     toggleOfferFavourite,
+    submitSellingOffer,
     notice,
   } = useDemo();
   const { identity } = useSession();
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [sellingModalOffer, setSellingModalOffer] = useState<OfferView | null>(null);
   const [editingOffer, setEditingOffer] = useState<OfferView | null>(null);
   const [decideModalOffer, setDecideModalOffer] = useState<OfferView | null>(null);
   const [quickViewOffer, setQuickViewOffer] = useState<OfferView | null>(null);
@@ -239,6 +242,21 @@ export default function PurchasingOffersPage() {
           onClose={() => setDecideModalOffer(null)}
           onDecide={async (decision, note) => {
             return decideOffer({ id: decideModalOffer.id, decision, note });
+          }}
+        />
+      ) : null}
+
+      {sellingModalOffer ? (
+        <SellingOfferModal
+          isOpen={Boolean(sellingModalOffer)}
+          onClose={() => setSellingModalOffer(null)}
+          initialPoNumber={sellingModalOffer.poNumber || sellingModalOffer.number}
+          initialPurchasingOfferId={sellingModalOffer.id}
+          initialMaterialType={sellingModalOffer.materialType}
+          initialMaterialName={sellingModalOffer.material}
+          initialOrigin={sellingModalOffer.country || sellingModalOffer.location}
+          onSubmit={async (draft) => {
+            return submitSellingOffer(draft);
           }}
         />
       ) : null}

@@ -47,6 +47,7 @@ export function OffersTable({
 }) {
   const isModerator = role === "moderator";
   const isAdmin = role === "owner";
+  const isOffersUser = role === "offers_user";
 
   // Filter states
   const [search, setSearch] = useState("");
@@ -798,6 +799,16 @@ export function OffersTable({
                           >
                             Dossier
                           </Link>
+
+                          {isOffersUser && offer.kind === "purchasing" ? (
+                            <Link
+                              href={`/offers/${offer.id}`}
+                              className="rounded-md bg-emerald-800 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 shadow-2xs transition"
+                              title="Propose Selling Offer for this Purchase Order"
+                            >
+                              Propose
+                            </Link>
+                          ) : null}
 
                           {isAdmin && offer.statusKey === "under_review" && onDecide ? (
                             <button

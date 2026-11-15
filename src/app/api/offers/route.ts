@@ -16,10 +16,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized: Authentication required." }, { status: 401 });
   }
 
-  // Admin and Moderator only; Staff and Worker have NO access
-  if (user.role !== "owner" && user.role !== "moderator") {
+  // Admin, Moderator, and Offers User only; Staff and Worker have NO access
+  if (user.role !== "owner" && user.role !== "moderator" && user.role !== "offers_user") {
     return NextResponse.json(
-      { error: "Forbidden: Your account does not have permission to access Offers Management." },
+      { error: "Forbidden: Your account does not have permission to access Offers." },
       { status: 403 }
     );
   }

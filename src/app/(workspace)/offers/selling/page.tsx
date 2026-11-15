@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { useSession } from "@/components/shell/auth-gate";
@@ -143,6 +144,26 @@ export default function SellingOffersPage() {
 
     return list;
   }, [sellingOffers, sellingStatusTab, activeKpiFilter]);
+
+  if (isOffersUser) {
+    return (
+      <div className="mx-auto max-w-lg rounded-2xl border border-neutral-200 bg-white p-8 text-center shadow-xs mt-6">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-700 text-xl font-bold">
+          ✕
+        </div>
+        <h2 className="mt-3 text-lg font-bold text-neutral-900">Access Restricted</h2>
+        <p className="mt-2 text-xs text-neutral-500 leading-relaxed">
+          The internal Selling Offers desk is reserved for RM Trading Moderators and Administrators. External Offers Users can access verified Purchasing Offers and submit responses linked to specific purchase orders.
+        </p>
+        <Link
+          href="/offers/purchasing"
+          className="mt-5 inline-flex h-9 items-center justify-center rounded-lg bg-neutral-950 px-4 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 transition"
+        >
+          &rarr; View Purchasing Offers Catalog
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

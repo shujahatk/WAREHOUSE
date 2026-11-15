@@ -7,11 +7,17 @@ export function SellingOfferModal({
   isOpen,
   onClose,
   onSubmit,
+  initialPoNumber,
+  initialPurchasingOfferId,
+  initialMaterialType,
+  initialMaterialName,
+  initialOrigin,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (draft: {
     poNumber: string;
+    purchasingOfferId?: string;
     materialType: string;
     materialName: string;
     clientName: string;
@@ -22,18 +28,24 @@ export function SellingOfferModal({
     destination: string;
     description?: string;
   }) => Promise<string | undefined>;
+  initialPoNumber?: string;
+  initialPurchasingOfferId?: string;
+  initialMaterialType?: string;
+  initialMaterialName?: string;
+  initialOrigin?: string;
 }) {
   const { state } = useDemo();
   const availableOrders = state.orders || [];
 
-  const [poNumber, setPoNumber] = useState(() => availableOrders[0]?.number ?? "");
-  const [materialType, setMaterialType] = useState("Plastics (LDPE)");
-  const [materialName, setMaterialName] = useState("");
+  const [poNumber, setPoNumber] = useState(() => initialPoNumber || availableOrders[0]?.number || "");
+  const [purchasingOfferId, setPurchasingOfferId] = useState(() => initialPurchasingOfferId || "");
+  const [materialType, setMaterialType] = useState(() => initialMaterialType || "Plastics (LDPE)");
+  const [materialName, setMaterialName] = useState(() => initialMaterialName || "");
   const [clientName, setClientName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [emailAddress, setEmailAddress] = useState("");
   const [price, setPrice] = useState("");
-  const [origin, setOrigin] = useState("Antwerp, Belgium");
+  const [origin, setOrigin] = useState(() => initialOrigin || "Antwerp, Belgium");
   const [destination, setDestination] = useState("");
   const [description, setDescription] = useState("");
 
@@ -97,6 +109,7 @@ export function SellingOfferModal({
     try {
       const err = await onSubmit({
         poNumber: trimmedPo,
+        purchasingOfferId: purchasingOfferId.trim() || undefined,
         materialType: trimmedMatType,
         materialName: trimmedMatName,
         clientName: trimmedClient,
@@ -146,6 +159,22 @@ export function SellingOfferModal({
           >
             ✕
           </button>
+        </div>
+
+        {initialPoNumber || initialPurchasingOfferId ? (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-950 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <span className="font-bold text-emerald-800">Linked to Purchasing Offer:</span>
+              <span className="font-mono font-semibold">{initialPoNumber || initialPurchasingOfferId}</span>
+            </span>
+            <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
+              Direct Response
+            </span>
+          </div>
+        ) : null}
+
+        <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5 text-[11px] text-amber-900">
+          <strong>Important:</strong> Once submitted, your Selling Offer will be locked. You will be able to track its review and approval status, but submitted offers cannot be edited or withdrawn.
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs" noValidate>

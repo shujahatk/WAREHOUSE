@@ -337,6 +337,7 @@ export const offerSchema = z.object({
   isFavourite: z.boolean().default(false),
   poId: id.nullable().default(null),
   poNumber: z.string().nullable().default(null),
+  purchasingOfferId: id.nullable().default(null),
   clientName: z.string().nullable().default(null),
   contactNumber: z.string().nullable().default(null),
   emailAddress: z.string().nullable().default(null),

@@ -389,6 +389,7 @@ function mapOffer(row: Record<string, unknown>): Offer {
     deletedBy: typeof row.deleted_by === "string" ? row.deleted_by : null,
     poId: typeof row.po_id === "string" ? row.po_id : (typeof row.poId === "string" ? row.poId : null),
     poNumber: typeof row.po_number === "string" ? row.po_number : (typeof row.poNumber === "string" ? row.poNumber : null),
+    purchasingOfferId: typeof row.purchasing_offer_id === "string" ? row.purchasing_offer_id : (typeof row.purchasingOfferId === "string" ? row.purchasingOfferId : null),
     clientName: typeof row.client_name === "string" ? row.client_name : (typeof row.clientName === "string" ? row.clientName : null),
     contactNumber: typeof row.contact_number === "string" ? row.contact_number : (typeof row.contactNumber === "string" ? row.contactNumber : null),
     emailAddress: typeof row.email_address === "string" ? row.email_address : (typeof row.emailAddress === "string" ? row.emailAddress : null),
@@ -2101,7 +2102,8 @@ export class SupabaseAdapter {
           break;
         }
         case "submitSellingOffer": {
-          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+          const purchasingOfferId = text(body.purchasingOfferId || body.linkedOfferId) || null;
+          let rpcRes = await this.client.rpc<Record<string, unknown>>(
             "rpc_submit_selling_offer",
             {
               p_po_number: text(body.poNumber || body.po),
@@ -2113,9 +2115,27 @@ export class SupabaseAdapter {
               p_price: num(body.price),
               p_origin: text(body.origin),
               p_destination: text(body.destination),
+              p_purchasing_offer_id: purchasingOfferId,
             },
             token
           );
+          if (!rpcRes.ok && (rpcRes.error?.includes("p_purchasing_offer_id") || rpcRes.error?.includes("schema cache") || rpcRes.error?.includes("PGRST202"))) {
+            rpcRes = await this.client.rpc<Record<string, unknown>>(
+              "rpc_submit_selling_offer",
+              {
+                p_po_number: text(body.poNumber || body.po),
+                p_material_type: text(body.materialType),
+                p_material_name: text(body.materialName || body.material),
+                p_client_name: text(body.clientName),
+                p_contact_number: text(body.contactNumber || body.phone),
+                p_email_address: text(body.emailAddress || body.email),
+                p_price: num(body.price),
+                p_origin: text(body.origin),
+                p_destination: text(body.destination),
+              },
+              token
+            );
+          }
           if (!rpcRes.ok) error = rpcRes.error;
           else notice = "Selling offer submitted for review.";
           break;

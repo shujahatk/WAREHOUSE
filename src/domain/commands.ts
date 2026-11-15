@@ -1320,6 +1320,7 @@ export function createOffer(
     emailAddress: text(payload.emailAddress) || null,
     origin: text(payload.origin) || null,
     destination: text(payload.destination) || null,
+    purchasingOfferId: text(payload.purchasingOfferId) || null,
     soldAt: null,
     createdBy: actor.id,
     createdAt: now,
@@ -2008,6 +2009,12 @@ export function submitSellingOffer(
 
   const po = store.purchaseOrders.find((p) => p.number === poNumber);
 
+  const explicitPurchasingOfferId = text(payload.purchasingOfferId || payload.linkedOfferId || payload.parentOfferId);
+  const matchedPurchasingOffer = explicitPurchasingOfferId
+    ? (store.offers || []).find((o) => (o.id === explicitPurchasingOfferId || o.number === explicitPurchasingOfferId) && o.kind === "purchasing")
+    : (store.offers || []).find((o) => o.kind === "purchasing" && ((po && o.poId === po.id) || o.poNumber === poNumber));
+  const purchasingOfferId = matchedPurchasingOffer ? matchedPurchasingOffer.id : (explicitPurchasingOfferId || null);
+
   if (!store.offers) store.offers = [];
   if (!store.offerAttachments) store.offerAttachments = [];
   if (!store.offerComments) store.offerComments = [];
@@ -2049,6 +2056,7 @@ export function submitSellingOffer(
     deletedBy: null,
     poId: po ? po.number : null,
     poNumber,
+    purchasingOfferId,
     clientName,
     contactNumber,
     emailAddress,
@@ -2299,6 +2307,9 @@ export function decideOffersUserRegistration(
   }
   const decision = decisionRaw as "approved" | "rejected";
   const notes = text(payload.notes || payload.registrationNotes);
+  if (decision === "rejected" && !notes) {
+    return fail("A rejection reason is mandatory.");
+  }
 
   const target = store.users.find((u) => u.id === userId);
   if (!target) return fail("User not found.");
@@ -2448,9 +2459,12 @@ export function rejectRegistration(
   if (!target) return fail("User not found.");
 
   const reason = text(payload.reason || payload.notes);
+  if (!reason) {
+    return fail("A rejection reason is mandatory.");
+  }
   target.approvalStatus = "rejected";
   target.active = false;
-  if (reason) target.registrationNotes = reason;
+  target.registrationNotes = reason;
   target.updatedAt = now;
 
   notify(

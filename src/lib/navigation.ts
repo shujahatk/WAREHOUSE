@@ -17,6 +17,7 @@ const ALL: ActiveRole[] = ["owner", "manager", "worker", "moderator"];
 const WAREHOUSE_OPS: ActiveRole[] = ["owner", "manager", "worker"];
 const OFFICE: ActiveRole[] = ["owner", "manager"];
 const OFFERS_ROLES: Role[] = ["owner", "moderator", "offers_user"];
+const OFFERS_INTERNAL_ONLY: Role[] = ["owner", "moderator"];
 const ADMIN: ActiveRole[] = ["owner"];
 const STAFF: ActiveRole[] = ["manager"];
 
@@ -51,7 +52,7 @@ export const navSections: NavSection[] = [
     items: [
       { href: "/offers", label: "Offers Dashboard", icon: "dashboard", roles: OFFERS_ROLES },
       { href: "/offers/purchasing", label: "Purchasing Offers", icon: "purchases", roles: OFFERS_ROLES },
-      { href: "/offers/selling", label: "Selling Offers", icon: "sales", roles: OFFERS_ROLES },
+      { href: "/offers/selling", label: "Selling Offers", icon: "sales", roles: OFFERS_INTERNAL_ONLY },
     ],
   },
   {

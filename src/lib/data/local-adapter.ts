@@ -429,14 +429,26 @@ export class LocalAdapter {
       offers: {
         list: async (filter, actorId) => {
           const snapshot = await this.snapshot();
+          let requestingUserRole: string | undefined;
           if (actorId) {
             const user = snapshot.users.find((u) => u.id === actorId);
-            if (user && user.role !== "owner" && user.role !== "moderator") {
+            if (user && user.role !== "owner" && user.role !== "moderator" && user.role !== "offers_user") {
               return { items: [], total: 0, page: 1, pageSize: filter?.pageSize || 25, totalPages: 0 };
             }
+            requestingUserRole = user?.role;
           }
 
           let items = (snapshot.offers || []).filter((o) => !o.deletedAt);
+
+          // Offers User: ALL published purchasing offers, and ONLY their OWN submitted selling offers
+          if (requestingUserRole === "offers_user") {
+            items = items.filter(
+              (o) =>
+                o.kind === "purchasing" ||
+                (o.kind === "selling" && o.createdBy === actorId)
+            );
+          }
+
           if (filter?.kind) items = items.filter((o) => o.kind === filter.kind);
           if (filter?.status) items = items.filter((o) => o.status === filter.status);
           if (filter?.priority) items = items.filter((o) => o.priority === filter.priority);
@@ -470,7 +482,13 @@ export class LocalAdapter {
           const snapshot = await this.snapshot();
           if (actorId) {
             const user = snapshot.users.find((u) => u.id === actorId);
-            if (user && user.role !== "owner" && user.role !== "moderator") return null;
+            if (user && user.role !== "owner" && user.role !== "moderator" && user.role !== "offers_user") return null;
+            if (user?.role === "offers_user") {
+              const offer = (snapshot.offers || []).find((o) => (o.id === id || o.number === id) && !o.deletedAt);
+              if (!offer) return null;
+              if (offer.kind === "selling" && offer.createdBy !== actorId) return null;
+              return offer;
+            }
           }
           return (snapshot.offers || []).find((o) => (o.id === id || o.number === id) && !o.deletedAt) ?? null;
         },

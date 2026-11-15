@@ -62,6 +62,11 @@ export function roleLabel(role: Role): string {
 
 export function canAccess(role: Role, pathname: string): boolean {
   if (role === "offers_user") {
+    // Offers Users can ONLY access purchasing offers and notifications.
+    // Selling offers desk is strictly hidden and forbidden.
+    if (pathname === "/offers/selling" || pathname.startsWith("/offers/selling/")) {
+      return false;
+    }
     return pathname === "/offers" || pathname.startsWith("/offers/") || pathname === "/notifications" || pathname.startsWith("/notifications/");
   }
   if (!isActiveRole(role)) return false;

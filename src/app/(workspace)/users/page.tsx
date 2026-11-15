@@ -41,6 +41,27 @@ export default function UsersPage() {
     [allUsers],
   );
 
+  const approvedRequests = useMemo(
+    () => allUsers.filter((u) => u.approvalStatus === "approved" && (Boolean(u.registrationNotes) || u.role === "offers_user")),
+    [allUsers],
+  );
+
+  const rejectedRequests = useMemo(
+    () => allUsers.filter((u) => u.approvalStatus === "rejected"),
+    [allUsers],
+  );
+
+  const [requestFilter, setRequestFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
+
+  const displayedRequests = useMemo(() => {
+    if (requestFilter === "pending") return pendingRequests;
+    if (requestFilter === "approved") return approvedRequests;
+    if (requestFilter === "rejected") return rejectedRequests;
+    return allUsers.filter(
+      (u) => u.approvalStatus === "pending" || u.approvalStatus === "rejected" || Boolean(u.registrationNotes) || u.role === "offers_user"
+    );
+  }, [requestFilter, pendingRequests, approvedRequests, rejectedRequests, allUsers]);
+
   const activeUsers = useMemo(
     () => allUsers.filter((u) => u.approvalStatus !== "pending"),
     [allUsers],
@@ -133,12 +154,17 @@ export default function UsersPage() {
   // Handle Reject
   async function handleReject() {
     if (!rejectModalUser) return;
+    const reason = actionNotes.trim();
+    if (!reason) {
+      setActionError("A rejection reason is mandatory.");
+      return;
+    }
     setActionPending(true);
     setActionError(null);
     try {
       const err = await rejectRegistration({
         userId: rejectModalUser.id || rejectModalUser.email,
-        reason: actionNotes.trim() || undefined,
+        reason,
       });
       if (err) {
         setActionError(err);
@@ -350,39 +376,112 @@ export default function UsersPage() {
 
       {/* TAB 1: REGISTRATION REQUESTS */}
       {activeTab === "requests" ? (
-        <div className="mt-4">
-          {pendingRequests.length === 0 ? (
+        <div className="mt-4 space-y-4">
+          {/* Sub-Filters: Pending / Approved / Rejected / All */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 pb-3">
+            <button
+              type="button"
+              onClick={() => setRequestFilter("pending")}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                requestFilter === "pending"
+                  ? "bg-amber-600 text-white shadow-2xs"
+                  : "bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+              )}
+            >
+              Pending Approval ({pendingRequests.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setRequestFilter("approved")}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                requestFilter === "approved"
+                  ? "bg-emerald-700 text-white shadow-2xs"
+                  : "bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+              )}
+            >
+              Previously Approved ({approvedRequests.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setRequestFilter("rejected")}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                requestFilter === "rejected"
+                  ? "bg-rose-700 text-white shadow-2xs"
+                  : "bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+              )}
+            >
+              Rejected ({rejectedRequests.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setRequestFilter("all")}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                requestFilter === "all"
+                  ? "bg-neutral-900 text-white shadow-2xs"
+                  : "bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+              )}
+            >
+              All Requests ({allUsers.filter((u) => u.approvalStatus === "pending" || u.approvalStatus === "rejected" || Boolean(u.registrationNotes) || u.role === "offers_user").length})
+            </button>
+          </div>
+
+          {displayedRequests.length === 0 ? (
             <Surface className="p-12 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
                 <Icon name="check" className="h-6 w-6" />
               </div>
-              <h3 className="mt-3 text-base font-semibold text-neutral-900">All Registration Requests Reviewed</h3>
+              <h3 className="mt-3 text-base font-semibold text-neutral-900">No Applications in this View</h3>
               <p className="mt-1 text-sm text-neutral-500 max-w-sm mx-auto">
-                There are currently no applicants waiting for approval. When someone submits a signup form, their request will appear here instantly.
+                {requestFilter === "pending"
+                  ? "There are currently no pending applicants awaiting review."
+                  : `No ${requestFilter} registration records found.`}
               </p>
             </Surface>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 flex items-center justify-between">
-                <span>
-                  <strong>{pendingRequests.length} pending applicant{pendingRequests.length > 1 ? "s" : ""}</strong> awaiting approval. Signing up does not grant system access until approved by an administrator.
-                </span>
-                <span className="text-[11px] text-amber-700 font-medium">Auto-refreshes every 12s</span>
-              </div>
+              {requestFilter === "pending" && pendingRequests.length > 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 flex items-center justify-between">
+                  <span>
+                    <strong>{pendingRequests.length} pending applicant{pendingRequests.length > 1 ? "s" : ""}</strong> awaiting approval. Signing up does not grant system access until approved by an administrator.
+                  </span>
+                  <span className="text-[11px] text-amber-700 font-medium">Auto-refreshes every 12s</span>
+                </div>
+              ) : null}
 
               <div className="grid gap-3">
-                {pendingRequests.map((applicant) => (
+                {displayedRequests.map((applicant) => (
                   <Surface
                     key={applicant.id || applicant.email}
-                    className="p-4 border-amber-200 bg-white shadow-xs hover:border-amber-300 transition"
+                    className={cn(
+                      "p-4 bg-white shadow-xs transition",
+                      applicant.approvalStatus === "pending"
+                        ? "border-amber-200 hover:border-amber-300"
+                        : applicant.approvalStatus === "rejected"
+                        ? "border-rose-200 hover:border-rose-300 bg-rose-50/20"
+                        : "border-neutral-200 hover:border-emerald-300"
+                    )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="text-base font-semibold text-neutral-950">{applicant.name}</h3>
-                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 uppercase tracking-wide">
-                            Pending Approval
-                          </span>
+                          {applicant.approvalStatus === "pending" ? (
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 uppercase tracking-wide">
+                              Pending Approval
+                            </span>
+                          ) : applicant.approvalStatus === "rejected" ? (
+                            <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800 uppercase tracking-wide">
+                              ✕ Rejected
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase tracking-wide">
+                              ✓ Approved ({roleLabel(applicant.role)})
+                            </span>
+                          )}
                         </div>
                         <p className="mt-1 text-xs text-neutral-600">
                           <span className="font-medium text-neutral-900">{applicant.email}</span>
@@ -394,8 +493,15 @@ export default function UsersPage() {
                           ) : null}
                         </p>
                         {applicant.registrationNotes ? (
-                          <div className="mt-2 rounded-lg bg-neutral-50 border border-neutral-200 p-2.5 text-xs text-neutral-700">
-                            <span className="font-medium text-neutral-900">Applicant Note: </span>
+                          <div className={cn(
+                            "mt-2 rounded-lg border p-2.5 text-xs",
+                            applicant.approvalStatus === "rejected"
+                              ? "bg-rose-50/80 border-rose-200 text-rose-900"
+                              : "bg-neutral-50 border-neutral-200 text-neutral-700"
+                          )}>
+                            <span className="font-semibold text-neutral-900">
+                              {applicant.approvalStatus === "rejected" ? "Rejection Reason: " : "Applicant Note: "}
+                            </span>
                             &ldquo;{applicant.registrationNotes}&rdquo;
                           </div>
                         ) : null}
@@ -417,35 +523,39 @@ export default function UsersPage() {
                         >
                           View Details
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setApproveModalUser(applicant);
-                            setAssignedRole(applicant.role === "offers_user" ? "offers_user" : "worker");
-                            setAssignedWarehouse(applicant.warehouse || "Bornem");
-                            setActionNotes("");
-                            setActionError(null);
-                          }}
-                          className="inline-flex h-8 items-center justify-center rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition"
-                        >
-                          Approve &amp; Assign Role
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRejectModalUser(applicant);
-                            setActionNotes("");
-                            setActionError(null);
-                          }}
-                          className="inline-flex h-8 items-center justify-center rounded-lg border border-red-200 bg-red-50/50 px-2.5 text-xs font-semibold text-red-700 hover:bg-red-100"
-                        >
-                          Reject
-                        </button>
+                        {applicant.approvalStatus === "pending" || applicant.approvalStatus === "rejected" ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setApproveModalUser(applicant);
+                              setAssignedRole(applicant.role === "offers_user" ? "offers_user" : "worker");
+                              setAssignedWarehouse(applicant.warehouse || "Bornem");
+                              setActionNotes("");
+                              setActionError(null);
+                            }}
+                            className="inline-flex h-8 items-center justify-center rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition"
+                          >
+                            Approve &amp; Assign Role
+                          </button>
+                        ) : null}
+                        {applicant.approvalStatus === "pending" ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRejectModalUser(applicant);
+                              setActionNotes("");
+                              setActionError(null);
+                            }}
+                            className="inline-flex h-8 items-center justify-center rounded-lg border border-red-200 bg-red-50/50 px-2.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                          >
+                            Reject
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => {
                             setDeleteModalUser(applicant);
-                            setIsDeletePendingRequest(true);
+                            setIsDeletePendingRequest(applicant.approvalStatus === "pending");
                             setActionError(null);
                           }}
                           className="inline-flex h-8 items-center justify-center rounded-lg border border-neutral-200 bg-white px-2 text-xs font-medium text-neutral-500 hover:text-red-700 hover:bg-neutral-50"
@@ -805,12 +915,13 @@ export default function UsersPage() {
 
             <div className="mt-4">
               <label className="block text-xs font-medium text-neutral-700">
-                Reason for Rejection (optional)
+                Reason for Rejection <span className="text-red-600 font-bold">* (Mandatory)</span>
                 <textarea
                   rows={3}
+                  required
                   value={actionNotes}
                   onChange={(e) => setActionNotes(e.target.value)}
-                  placeholder="e.g. Unverified email or unauthorized domain"
+                  placeholder="Enter a mandatory rejection reason for declining this request..."
                   className="mt-1 w-full rounded-lg border border-neutral-300 p-2.5 text-xs focus:border-red-700 focus:outline-hidden"
                 />
               </label>

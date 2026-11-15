@@ -40,12 +40,16 @@ export function OffersNav({
       count: purchasingCount,
       description: "Material sourcing & supplier offers",
     },
-    {
-      href: "/offers/selling",
-      label: "Selling Offers",
-      count: sellingCount,
-      description: "Customer sales & margin desk",
-    },
+    ...(!isOffersUser
+      ? [
+          {
+            href: "/offers/selling",
+            label: "Selling Offers",
+            count: sellingCount,
+            description: "Customer sales & margin desk",
+          },
+        ]
+      : []),
   ];
 
   return (

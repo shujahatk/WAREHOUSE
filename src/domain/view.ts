@@ -115,6 +115,7 @@ export type OfferView = {
   isFavourite: boolean;
   poId?: string | null;
   poNumber?: string | null;
+  purchasingOfferId?: string | null;
   clientName?: string | null;
   contactNumber?: string | null;
   emailAddress?: string | null;
@@ -795,11 +796,16 @@ export function visibleOffers(
   actor: { role: Role; name?: string; email?: string; id?: string | null },
 ): OfferView[] {
   if (actor.role === "offers_user") {
+    // Offers User: ALL published purchasing offers, and ONLY their OWN submitted selling offers.
+    // Selling offers of other traders are STRICTLY hidden.
     return (state.offers || []).filter(
       (o) =>
         o.kind === "purchasing" ||
-        (actor.id && o.createdBy === actor.id) ||
-        Boolean(actor.name && o.createdByName === actor.name)
+        (o.kind === "selling" && (
+          (actor.id && o.createdBy === actor.id) ||
+          Boolean(actor.email && o.emailAddress && o.emailAddress.toLowerCase() === actor.email.toLowerCase()) ||
+          Boolean(actor.name && o.createdByName === actor.name)
+        ))
     );
   }
   if (actor.role !== "owner" && actor.role !== "moderator") {

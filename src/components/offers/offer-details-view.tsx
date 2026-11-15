@@ -8,6 +8,7 @@ import { compressImageIfNeeded, fileToBase64 } from "@/lib/client-image";
 import { AttachmentPreviewModal, type PreviewAttachmentItem } from "@/components/files/attachment-preview-modal";
 import { OfferFormModal } from "./offer-form-modal";
 import { OfferStatusModal } from "./offer-status-modal";
+import { SellingOfferModal } from "./selling-offer-modal";
 import { cn } from "@/lib/cn";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
@@ -41,6 +42,7 @@ export function OfferDetailsView({
   onAddComment,
   onAddAttachment,
   onDeleteAttachment,
+  onSubmitSellingOffer,
 }: {
   offer: OfferView;
   role: Role;
@@ -54,6 +56,19 @@ export function OfferDetailsView({
   onAddComment?: (comment: string) => Promise<string | undefined>;
   onAddAttachment?: (att: { name: string; mime?: string; bytesBase64?: string; kind?: "image" | "document" }) => Promise<string | undefined>;
   onDeleteAttachment?: (attachmentId: string) => Promise<string | undefined>;
+  onSubmitSellingOffer?: (draft: {
+    poNumber: string;
+    purchasingOfferId?: string;
+    materialType: string;
+    materialName: string;
+    clientName: string;
+    contactNumber: string;
+    emailAddress: string;
+    price: number;
+    origin: string;
+    destination: string;
+    description?: string;
+  }) => Promise<string | undefined>;
 }) {
   const isModerator = role === "moderator";
   const isAdmin = role === "owner";
@@ -62,6 +77,7 @@ export function OfferDetailsView({
   const [previewItem, setPreviewItem] = useState<PreviewAttachmentItem | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [sellingModalOpen, setSellingModalOpen] = useState(false);
 
   // Admin Decision Inline State
   const [showDecisionInput, setShowDecisionInput] = useState(false);
@@ -262,6 +278,27 @@ export function OfferDetailsView({
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Offers User Propose Selling Offer Button */}
+          {isOffersUser && offer.kind === "purchasing" ? (
+            <button
+              type="button"
+              onClick={() => setSellingModalOpen(true)}
+              className="flex h-9 items-center gap-1.5 rounded-lg bg-emerald-800 px-4 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              Propose Selling Offer for this PO
+            </button>
+          ) : null}
+
+          {/* Offers User Locked Status on submitted Selling Offer */}
+          {isOffersUser && offer.kind === "selling" ? (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-100 border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700">
+              🔒 Locked (Submitted Proposal)
+            </span>
+          ) : null}
+
           {/* Favourite star */}
           {!isOffersUser ? (
             <button
@@ -365,6 +402,19 @@ export function OfferDetailsView({
           <button type="button" onClick={() => setActionError(null)} className="font-bold">
             &times;
           </button>
+        </div>
+      ) : null}
+
+      {/* Offers User Locked Banner */}
+      {isOffersUser && offer.kind === "selling" ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-950 flex items-start gap-3 shadow-2xs">
+          <span className="text-lg">🔒</span>
+          <div>
+            <h4 className="font-bold text-amber-900">Submitted Selling Proposal (Locked)</h4>
+            <p className="mt-0.5 text-amber-800/90 leading-relaxed">
+              This selling proposal is currently locked under administrative review. Once submitted, proposals cannot be edited or withdrawn. You can track real-time appraisal decisions, pricing clearance, and commercial acceptance here.
+            </p>
+          </div>
         </div>
       ) : null}
 
@@ -851,6 +901,27 @@ export function OfferDetailsView({
           offer={offer}
           onUpdateStatus={async (s) => {
             return onUpdateStatus?.(s);
+          }}
+        />
+      ) : null}
+      {sellingModalOpen ? (
+        <SellingOfferModal
+          isOpen={sellingModalOpen}
+          onClose={() => setSellingModalOpen(false)}
+          initialPoNumber={offer.poNumber || offer.number}
+          initialPurchasingOfferId={offer.id}
+          initialMaterialType={offer.materialType}
+          initialMaterialName={offer.material}
+          initialOrigin={offer.country || offer.location}
+          onSubmit={async (draft) => {
+            if (onSubmitSellingOffer) {
+              const err = await onSubmitSellingOffer(draft);
+              if (!err) {
+                setActionNotice("Selling offer submitted successfully and associated with this Purchasing Offer.");
+              }
+              return err;
+            }
+            return undefined;
           }}
         />
       ) : null}
