@@ -617,6 +617,263 @@ export function createGeneralRequest(
   return ok(generalReq);
 }
 
+export function createStaffOperationalRequest(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<WorkerGeneralRequest> {
+  if (actor.role !== "manager" && actor.role !== "owner") {
+    return fail("Only Staff or Admin can prepare operational requests.");
+  }
+
+  const poSoNumber = text(payload.poSoNumber || payload.number);
+  const partnerName = text(payload.partnerName || payload.partner || payload.supplier || payload.customer);
+  const material = text(payload.material || payload.materialType);
+  const materialGrade = text(payload.materialGrade || payload.grade) || "Standard";
+  const quantity = num(payload.quantity || payload.quantityKg);
+  const unit = text(payload.unit) || "kg";
+  const price = payload.price != null && payload.price !== "" ? num(payload.price) : null;
+  const warehouseName = text(payload.warehouse) || "Bornem";
+  const operationType: "loading" | "unloading" = text(payload.operationType || payload.loadingType).toLowerCase() === "loading" ? "loading" : "unloading";
+  const scheduledDate = text(payload.scheduledDate) || now.slice(0, 10);
+  const assignedWorkerId = text(payload.assignedWorkerId || payload.workerId) || null;
+  const instructions = text(payload.instructions || payload.notes);
+  const requestStatus = text(payload.status).toLowerCase() === "draft" ? "draft" : "submitted";
+
+  if (!poSoNumber) return fail("PO/SO Number is required.");
+  if (!partnerName) return fail("Supplier or Customer name is required.");
+  if (!material) return fail("Material is required.");
+  if (!quantity || quantity <= 0) return fail("Quantity must be greater than zero.");
+
+  let assignedWorkerName: string | null = null;
+  if (assignedWorkerId) {
+    const worker = store.users.find((u) => u.id === assignedWorkerId && u.active);
+    if (worker) assignedWorkerName = worker.name;
+  }
+
+  const wh = upsertWarehouse(store, warehouseName, "Not recorded", randomUUID);
+
+  const opDetails: GeneralRequestOperationalDetails = {
+    requestType: operationType,
+    poSoNumber,
+    partnerName,
+    materialType: material,
+    materialGrade,
+    materialDescription: `${material} (${materialGrade})`,
+    quantity,
+    unit,
+    price,
+    packagingType: text(payload.packagingType) || "Standard Packaging",
+    packageCount: Math.max(1, Math.round(num(payload.packageCount) || 1)),
+    grossWeightKg: quantity,
+    tarePerPackageKg: num(payload.tarePerPackageKg) || 0,
+    totalTareWeightKg: num(payload.totalTareWeightKg) || 0,
+    netWeightKg: quantity,
+    warehouseLocation: warehouseName,
+    scheduledDate,
+    assignedWorkerId,
+    assignedWorkerName,
+    instructions,
+    notes: instructions,
+    assignedPoSoNumber: poSoNumber,
+    assignedPoSoBy: actor.id,
+    assignedPoSoByName: actor.name,
+    assignedPoSoAt: now,
+    inventoryMoved: false,
+  };
+
+  const finalDescription = serializeOperationalRequestDescription(opDetails, instructions || undefined);
+
+  const year = new Date(now).getUTCFullYear();
+  let seq = store.requestSequence.find((entry) => entry.year === year);
+  if (!seq) {
+    seq = { year, next: 1 };
+    store.requestSequence.push(seq);
+  }
+  const number = `REQ-${year}-${String(seq.next).padStart(4, "0")}`;
+  seq.next += 1;
+
+  const reqId = randomUUID();
+  const generalReq: WorkerGeneralRequest = {
+    id: reqId,
+    number,
+    category: "loading_unloading",
+    priority: "normal",
+    description: finalDescription,
+    warehouseId: wh.id,
+    shipmentId: null,
+    purchaseOrderId: null,
+    createdBy: actor.id,
+    status: requestStatus as GeneralRequestStatus,
+    responseNote: null,
+    decidedBy: null,
+    decidedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (!store.workerGeneralRequests) store.workerGeneralRequests = [];
+  store.workerGeneralRequests.push(generalReq);
+
+  const attachments = Array.isArray(payload.attachments) ? (payload.attachments as Record<string, unknown>[]) : [];
+  for (const item of attachments) {
+    const name = text(item.name);
+    const bytesBase64 = text(item.bytesBase64);
+    if (name && bytesBase64) {
+      const buffer = Buffer.from(bytesBase64, "base64");
+      const detected = detectFileType(buffer);
+      if (detected.valid) {
+        const documentId = randomUUID();
+        const ext = detected.ext;
+        const kind: DocumentKind = detected.mime.startsWith("image/") ? "photo" : "other";
+        const storageKey = computeStorageKey(kind, number, Date.parse(now) || Date.now(), documentId, ext);
+        const existingCount = store.documents.filter((d) => d.kind === kind).length;
+        const readableName = computeReadableName(number, kind, existingCount + 1, ext);
+        putBlob(store, readableName, detected.mime, bytesBase64, storageKey);
+
+        store.documents.push({
+          id: documentId,
+          kind,
+          category: "Purchase",
+          shipmentId: null,
+          purchaseOrderId: null,
+          requestId: null,
+          requestNumber: number,
+          poNumber: poSoNumber,
+          containerNumber: null,
+          warehouse: warehouseName,
+          notes: instructions || null,
+          originalFilename: name,
+          readableName,
+          storageKey,
+          byteSize: buffer.byteLength,
+          cmrReference: null,
+          cmrCarrier: null,
+          cmrGoodsDescription: null,
+          cmrRemarks: null,
+          cmrEnteredBy: null,
+          cmrEnteredAt: null,
+          status: "active",
+          name,
+          mime: detected.mime,
+          createdBy: actor.id,
+          createdAt: now,
+        });
+
+        if (!store.workerGeneralRequestAttachments) store.workerGeneralRequestAttachments = [];
+        store.workerGeneralRequestAttachments.push({
+          id: randomUUID(),
+          generalRequestId: reqId,
+          documentId,
+        });
+      }
+    }
+  }
+
+  const partner = upsertCompany(store, partnerName, operationType === "loading" ? "customer" : "supplier", randomUUID);
+  let existingPo = store.purchaseOrders.find((p) => p.number === poSoNumber);
+  if (!existingPo) {
+    existingPo = {
+      id: randomUUID(),
+      number: poSoNumber,
+      title: `${operationType === "loading" ? "Sales Order" : "Purchase Order"} - ${partnerName}`,
+      companyId: partner.id,
+      status: "draft",
+      valueEur: (price || 1) * quantity,
+      notes: instructions || "",
+      assignedWorkerId,
+      assignedBy: actor.id,
+      assignedAt: now,
+      scheduledDate,
+      executionStatus: "unassigned",
+      completionNotes: null,
+      completedAt: null,
+      completedBy: null,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: actor.id,
+    };
+    store.purchaseOrders.push(existingPo);
+  } else {
+    existingPo.assignedWorkerId = assignedWorkerId;
+    existingPo.scheduledDate = scheduledDate;
+    existingPo.updatedAt = now;
+  }
+
+  if (requestStatus === "submitted") {
+    notifyRole(
+      store,
+      "owner",
+      "general_request",
+      `New Operational Request: ${number} (${poSoNumber})`,
+      `${actor.name} submitted a ${operationType} request for ${poSoNumber} (${quantity} ${unit} ${material}) scheduled for ${scheduledDate}.`,
+      now,
+      { targetType: "general_request", targetId: reqId, link: "/tasks" }
+    );
+  }
+
+  audit(store, actor.id, "staff-operational-request-created", "general_request", reqId, `${actor.name} prepared operational request ${number} for ${poSoNumber}`, now);
+  return ok(generalReq);
+}
+
+export function editStaffOperationalRequest(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<WorkerGeneralRequest> {
+  const reqId = text(payload.id || payload.requestId);
+  const req = (store.workerGeneralRequests || []).find((r) => r.id === reqId);
+  if (!req) return fail("Request not found.");
+
+  if (req.status === "approved" || req.status === "completed") {
+    return fail("Approved requests are locked for Staff. Corrections must follow an Admin-controlled workflow.");
+  }
+  if (actor.role !== "owner" && req.createdBy !== actor.id) {
+    return fail("You can only edit requests that you created.");
+  }
+
+  const { operationalDetails } = parseOperationalRequestDescription(req.description);
+  if (operationalDetails) {
+    if (payload.quantity) operationalDetails.quantity = num(payload.quantity);
+    if (payload.material) operationalDetails.materialType = text(payload.material);
+    if (payload.scheduledDate) operationalDetails.scheduledDate = text(payload.scheduledDate);
+    if (payload.assignedWorkerId) operationalDetails.assignedWorkerId = text(payload.assignedWorkerId);
+    if (payload.instructions) operationalDetails.instructions = text(payload.instructions);
+    req.description = serializeOperationalRequestDescription(operationalDetails, operationalDetails.instructions || undefined);
+  }
+  req.updatedAt = now;
+
+  audit(store, actor.id, "staff-operational-request-edited", "general_request", req.id, `Edited by ${actor.name}`, now);
+  return ok(req);
+}
+
+export function cancelStaffOperationalRequest(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<WorkerGeneralRequest> {
+  const reqId = text(payload.id || payload.requestId);
+  const req = (store.workerGeneralRequests || []).find((r) => r.id === reqId);
+  if (!req) return fail("Request not found.");
+
+  if (req.status === "approved" || req.status === "completed") {
+    return fail("Approved requests cannot be cancelled directly by Staff.");
+  }
+  if (actor.role !== "owner" && req.createdBy !== actor.id) {
+    return fail("You can only cancel requests that you created.");
+  }
+
+  req.status = "declined";
+  req.responseNote = "Cancelled by Staff.";
+  req.updatedAt = now;
+
+  audit(store, actor.id, "staff-operational-request-cancelled", "general_request", req.id, `Cancelled by ${actor.name}`, now);
+  return ok(req);
+}
+
 export function decideGeneralRequest(
   store: StoreData,
   actor: UserRecord,
@@ -759,6 +1016,57 @@ export function decideGeneralRequest(
   request.decidedBy = actor.id;
   request.decidedAt = now;
   request.updatedAt = now;
+
+  if (decision === "approved") {
+    const { operationalDetails } = parseOperationalRequestDescription(request.description);
+    if (operationalDetails) {
+      const poNum = operationalDetails.poSoNumber || operationalDetails.assignedPoSoNumber;
+      if (poNum) {
+        const po = store.purchaseOrders.find((p) => p.number === poNum);
+        if (po) {
+          po.status = "approved";
+          po.executionStatus = operationalDetails.assignedWorkerId ? "assigned" : "unassigned";
+          if (operationalDetails.assignedWorkerId) {
+            po.assignedWorkerId = operationalDetails.assignedWorkerId;
+          }
+          if (operationalDetails.scheduledDate) {
+            po.scheduledDate = operationalDetails.scheduledDate;
+          }
+          po.updatedAt = now;
+        }
+      }
+      if (operationalDetails.assignedWorkerId) {
+        notify(
+          store,
+          operationalDetails.assignedWorkerId,
+          "task_assigned",
+          `New Task Assigned: ${poNum || request.number}`,
+          `You have an approved operational task scheduled for ${operationalDetails.scheduledDate || "today"} (${operationalDetails.materialType}).`,
+          now,
+          { targetType: "purchase_order", targetId: poNum || request.number, link: "/tasks" }
+        );
+      }
+    }
+    notify(
+      store,
+      request.createdBy,
+      "request_approved",
+      `Operational Request Approved: ${request.number}`,
+      `Admin approved operational request ${request.number}. Task is now active.`,
+      now,
+      { targetType: "general_request", targetId: request.id, link: "/tasks" }
+    );
+  } else if (decision === "declined") {
+    notify(
+      store,
+      request.createdBy,
+      "request_declined",
+      `Operational Request Declined: ${request.number}`,
+      `Admin declined operational request ${request.number}. Reason: ${cleanNote || "Not specified."}`,
+      now,
+      { targetType: "general_request", targetId: request.id, link: "/tasks" }
+    );
+  }
 
   audit(
     store,
@@ -1525,6 +1833,88 @@ export function assignWorkerPo(
   return ok(po);
 }
 
+export function startWorkerPo(
+  store: StoreData,
+  actor: UserRecord,
+  poNumber: string,
+  now: string
+): Result<PurchaseOrder> {
+  const po = store.purchaseOrders.find((p) => p.number === poNumber);
+  if (!po) return fail(`Purchase order ${poNumber} does not exist.`);
+  if (actor.role === "worker" && po.assignedWorkerId !== actor.id) {
+    return fail("You are not the assigned worker for this order.");
+  }
+  po.executionStatus = "in_progress";
+  po.updatedAt = now;
+  audit(store, actor.id, "po-started", "purchase_order", po.number, `Started operational task ${po.number}`, now);
+  return ok(po);
+}
+
+export function uploadTaskEvidence(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<{ id: string; name: string }> {
+  const poNumber = text(payload.poNumber || payload.number);
+  const po = store.purchaseOrders.find((p) => p.number === poNumber);
+  if (!po) return fail(`Purchase order ${poNumber} does not exist.`);
+
+  if (actor.role === "worker" && po.assignedWorkerId !== actor.id) {
+    return fail("You are not authorized to upload evidence for this task.");
+  }
+
+  const stage = text(payload.stage) || "before_unloading";
+  const name = text(payload.name);
+  const bytesBase64 = text(payload.bytesBase64);
+  if (!name || !bytesBase64) return fail("A photo file is required.");
+
+  const buffer = Buffer.from(bytesBase64, "base64");
+  const detected = detectFileType(buffer);
+  if (!detected.valid) return fail(detected.error || "Invalid file format.");
+
+  const documentId = randomUUID();
+  const ext = detected.ext;
+  const storageKey = computeStorageKey("photo", poNumber, Date.parse(now) || Date.now(), documentId, ext);
+  const existingCount = store.documents.filter((d) => d.poNumber === poNumber).length;
+  const readableName = computeReadableName(poNumber, "photo", existingCount + 1, ext);
+  putBlob(store, readableName, detected.mime, bytesBase64, storageKey);
+
+  const doc: DocumentRecord = {
+    id: documentId,
+    kind: "photo",
+    category: "Purchase",
+    shipmentId: null,
+    purchaseOrderId: po.id,
+    requestId: null,
+    requestNumber: null,
+    poNumber: po.number,
+    containerNumber: null,
+    warehouse: "Warehouse",
+    notes: `stage:${stage}`,
+    originalFilename: name,
+    readableName,
+    storageKey,
+    byteSize: buffer.byteLength,
+    cmrReference: null,
+    cmrCarrier: null,
+    cmrGoodsDescription: null,
+    cmrRemarks: null,
+    cmrEnteredBy: null,
+    cmrEnteredAt: null,
+    status: "active",
+    name,
+    mime: detected.mime,
+    createdBy: actor.id,
+    createdAt: now,
+  };
+
+  store.documents.push(doc);
+
+  audit(store, actor.id, "task-evidence-uploaded", "purchase_order", poNumber, `Uploaded ${stage} photo: ${name}`, now);
+  return ok({ id: documentId, name });
+}
+
 export function completeWorkerPo(
   store: StoreData,
   actor: UserRecord,
@@ -1537,6 +1927,21 @@ export function completeWorkerPo(
 
   if (actor.role === "worker" && po.assignedWorkerId !== actor.id) {
     return fail("You are not the assigned worker for this order.");
+  }
+
+  if (payload.enforcePhotoVerification === true) {
+    const orderDocs = store.documents.filter(
+      (d) => d.poNumber === poNumber && d.kind === "photo" && d.status !== "deleted"
+    );
+    const hasBefore = orderDocs.some(
+      (d) => d.notes?.includes("stage:before_loading") || d.notes?.includes("stage:before_unloading") || d.name?.toLowerCase().includes("before")
+    );
+    const hasAfter = orderDocs.some(
+      (d) => d.notes?.includes("stage:after_loading") || d.notes?.includes("stage:after_unloading") || d.name?.toLowerCase().includes("after")
+    );
+    if (!hasBefore || !hasAfter) {
+      return fail("Mandatory photographic evidence is incomplete. Please upload at least one photograph for both Before and After stages before completing this task.");
+    }
   }
 
   const completionNotes = text(payload.completionNotes || payload.notes);
@@ -2987,6 +3392,16 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
       return asCommand(deleteOfferAttachment(store, actor, text(body.offerId || body.id), text(body.attachmentId || body.id), now), "Attachment removed.");
     case "assignWorkerPo":
       return asCommand(assignWorkerPo(store, actor, record(body), now), "Worker was assigned to the order.");
+    case "createStaffOperationalRequest":
+      return asCommand(createStaffOperationalRequest(store, actor, record(body), now), "Operational request submitted.");
+    case "editStaffOperationalRequest":
+      return asCommand(editStaffOperationalRequest(store, actor, record(body), now), "Operational request updated.");
+    case "cancelStaffOperationalRequest":
+      return asCommand(cancelStaffOperationalRequest(store, actor, record(body), now), "Operational request cancelled.");
+    case "startWorkerPo":
+      return asCommand(startWorkerPo(store, actor, text(body.poNumber || body.number), now), "Operation started.");
+    case "uploadTaskEvidence":
+      return asCommand(uploadTaskEvidence(store, actor, record(body), now), "Task evidence recorded.");
     case "completeWorkerPo":
       return asCommand(completeWorkerPo(store, actor, record(body), now), "Order execution completed.");
     case "submitSellingOffer":

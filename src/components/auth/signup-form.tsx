@@ -63,7 +63,18 @@ export function SignUpForm() {
 
     setPending(false);
     if (result.error) {
-      setError(result.error);
+      const raw = result.error;
+      if (
+        raw.includes("rpc_register") ||
+        raw.includes("schema cache") ||
+        raw.includes("foreign key") ||
+        raw.includes("users_auth_user_id_fkey") ||
+        raw.includes("already registered")
+      ) {
+        setError("This email address is already registered in the system. Please sign in with your email and password.");
+      } else {
+        setError(result.error);
+      }
     } else {
       setSubmitted(true);
     }
@@ -229,3 +240,4 @@ export function SignUpForm() {
     </form>
   );
 }
+

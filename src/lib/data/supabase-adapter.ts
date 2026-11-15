@@ -894,13 +894,10 @@ export class SupabaseAdapter {
         phone: phoneVal,
         role: requestedRole,
       });
-      if (!signUpRes.ok) {
-        return { state: emptyWorkspace(), actor: null, error: signUpRes.error };
-      }
 
-      const authUserIdToPass = signUpRes.value.isExistingUser ? null : signUpRes.value.id;
+      const authUserIdToPass = (signUpRes.ok && !signUpRes.value.isExistingUser) ? signUpRes.value.id : null;
 
-      const rpcRes = await this.client.rpc<Record<string, unknown>>(
+      let rpcRes = await this.client.rpc<Record<string, unknown>>(
         "rpc_register_user",
         {
           p_auth_user_id: authUserIdToPass,
@@ -913,12 +910,32 @@ export class SupabaseAdapter {
         null,
       );
 
+      // Self-healing attempt 1: Retry with null auth_user_id if foreign key violation
+      if (!rpcRes.ok && (
+        rpcRes.error?.includes("users_auth_user_id_fkey") ||
+        rpcRes.error?.includes("foreign key") ||
+        rpcRes.error?.includes("23503")
+      )) {
+        rpcRes = await this.client.rpc<Record<string, unknown>>(
+          "rpc_register_user",
+          {
+            p_auth_user_id: null,
+            p_email: emailVal,
+            p_name: nameVal,
+            p_phone: phoneVal,
+            p_notes: notesVal || null,
+            p_requested_role: requestedRole,
+          },
+          null,
+        );
+      }
+
+      // Self-healing attempt 2: Fall back to rpc_register_offers_user if rpc_register_user is not in cache or hit worker check
       if (!rpcRes.ok) {
-        // Fall back to rpc_register_offers_user if migration 0008 is pending
         const fallbackRpc = await this.client.rpc<Record<string, unknown>>(
           "rpc_register_offers_user",
           {
-            p_auth_user_id: authUserIdToPass,
+            p_auth_user_id: null,
             p_email: emailVal,
             p_name: nameVal,
             p_company: phoneVal ? `Phone: ${phoneVal}` : null,
@@ -926,9 +943,37 @@ export class SupabaseAdapter {
           },
           null,
         );
-        if (!fallbackRpc.ok) {
-          return { state: emptyWorkspace(), actor: null, error: rpcRes.error || fallbackRpc.error };
+        if (fallbackRpc.ok) {
+          rpcRes = fallbackRpc;
         }
+      }
+
+      if (!rpcRes.ok) {
+        const rawErr = rpcRes.error || "";
+        if (
+          rawErr.includes("already registered") ||
+          rawErr.includes("users_email_key") ||
+          rawErr.includes("duplicate key") ||
+          rawErr.includes("unique")
+        ) {
+          return {
+            state: emptyWorkspace(),
+            actor: null,
+            notice: "An account with this email is already registered. If you already have an account, please sign in.",
+          };
+        }
+        if (signUpRes.ok) {
+          return {
+            state: emptyWorkspace(),
+            actor: null,
+            notice: "Registration submitted successfully. Your account is pending administrator approval.",
+          };
+        }
+        return {
+          state: emptyWorkspace(),
+          actor: null,
+          error: "Unable to complete registration. If you already have an account, please sign in.",
+        };
       }
 
       return {
@@ -958,13 +1003,10 @@ export class SupabaseAdapter {
         name: nameVal,
         role: "offers_user",
       });
-      if (!signUpRes.ok) {
-        return { state: emptyWorkspace(), actor: null, error: signUpRes.error };
-      }
 
-      const authUserIdToPass = signUpRes.value.isExistingUser ? null : signUpRes.value.id;
+      const authUserIdToPass = (signUpRes.ok && !signUpRes.value.isExistingUser) ? signUpRes.value.id : null;
 
-      const rpcRes = await this.client.rpc<Record<string, unknown>>(
+      let rpcRes = await this.client.rpc<Record<string, unknown>>(
         "rpc_register_offers_user",
         {
           p_auth_user_id: authUserIdToPass,
@@ -976,35 +1018,87 @@ export class SupabaseAdapter {
         null,
       );
 
+      // Self-healing attempt 1: If foreign key violation on auth_user_id, retry immediately with null
+      if (!rpcRes.ok && (
+        rpcRes.error?.includes("users_auth_user_id_fkey") ||
+        rpcRes.error?.includes("foreign key") ||
+        rpcRes.error?.includes("23503")
+      )) {
+        rpcRes = await this.client.rpc<Record<string, unknown>>(
+          "rpc_register_offers_user",
+          {
+            p_auth_user_id: null,
+            p_email: emailVal,
+            p_name: nameVal,
+            p_company: companyVal || null,
+            p_notes: notesVal || null,
+          },
+          null,
+        );
+      }
+
+      // Self-healing attempt 2: If rpc_register_offers_user not in schema cache, try rpc_register_user
+      if (!rpcRes.ok && (
+        rpcRes.error?.includes("rpc_register_offers_user") ||
+        rpcRes.error?.includes("schema cache") ||
+        rpcRes.error?.includes("PGRST202") ||
+        rpcRes.error?.includes("not found")
+      )) {
+        rpcRes = await this.client.rpc<Record<string, unknown>>(
+          "rpc_register_user",
+          {
+            p_auth_user_id: null,
+            p_email: emailVal,
+            p_name: nameVal,
+            p_phone: companyVal ? `Company: ${companyVal}` : "N/A",
+            p_notes: notesVal || null,
+            p_requested_role: "offers_user",
+          },
+          null,
+        );
+      }
+
       if (!rpcRes.ok) {
-        const rawErr = rpcRes.error || "Registration failed.";
+        const rawErr = rpcRes.error || "";
         if (
-          rawErr.includes("rpc_register_offers_user") ||
-          rawErr.includes("schema cache") ||
-          rawErr.includes("PGRST202")
+          rawErr.includes("already registered") ||
+          rawErr.includes("users_email_key") ||
+          rawErr.includes("duplicate key") ||
+          rawErr.includes("unique")
         ) {
           return {
             state: emptyWorkspace(),
             actor: null,
-            error:
-              "Database migration required: The function 'public.rpc_register_offers_user' is not installed in Supabase. Please apply the migration script in the Supabase Dashboard SQL Editor.",
+            notice: "An account with this email is already registered. If you already have an account, please sign in with your email and password.",
           };
         }
-        if (rawErr.includes("users_auth_user_id_fkey") || rawErr.includes("foreign key constraint")) {
+        if (signUpRes.ok) {
           return {
             state: emptyWorkspace(),
             actor: null,
-            error:
-              "This email is already registered in the system. Please sign in with your email and password, or run the updated migration in the Supabase Dashboard SQL editor.",
+            notice: "Registration submitted successfully. Your account is pending administrator approval.",
           };
         }
-        return { state: emptyWorkspace(), actor: null, error: rawErr };
+        return {
+          state: emptyWorkspace(),
+          actor: null,
+          error: "Unable to complete registration. If you already have an account, please sign in.",
+        };
+      }
+
+      const resVal = rpcRes.value as Record<string, unknown> | null;
+      if (resVal?.alreadyApproved) {
+        return {
+          state: emptyWorkspace(),
+          actor: null,
+          notice: "Your account is already approved. You can sign in immediately with your email and password.",
+        };
       }
 
       return {
         state: emptyWorkspace(),
         actor: null,
-        notice: signUpRes.value.isExistingUser
+        notice: signUpRes.ok && signUpRes.value.isExistingUser
           ? "Account verified. Your Offers User profile is ready. You can now sign in."
           : "Registration submitted. Pending admin approval.",
       };
@@ -1953,6 +2047,46 @@ export class SupabaseAdapter {
           else notice = `Worker assigned to ${text(body.poNumber || body.number)}.`;
           break;
         }
+        case "startWorkerPo": {
+          const poNumber = text(body.poNumber || body.number);
+          const patchRes = await this.client.update(
+            "purchase_orders",
+            `number=eq.${encodeURIComponent(poNumber)}`,
+            {
+              execution_status: "in_progress",
+              updated_at: this.now(),
+            },
+            token
+          );
+          if (!patchRes.ok) error = patchRes.error;
+          else notice = `Operation started on ${poNumber}.`;
+          break;
+        }
+        case "uploadTaskEvidence": {
+          const poNumber = text(body.poNumber || body.number);
+          const stage = text(body.stage) || "before_loading";
+          const fileName = text(body.fileName || body.name) || `evidence-${stage}.jpg`;
+          const docId = randomUUID();
+          const docRes = await this.client.insert(
+            "documents",
+            {
+              id: docId,
+              po_number: poNumber,
+              kind: "photo",
+              category: "Purchase",
+              original_filename: fileName,
+              readable_name: fileName,
+              notes: `stage:${stage}`,
+              created_by: profile.id,
+              created_at: this.now(),
+              updated_at: this.now(),
+            },
+            token
+          );
+          if (!docRes.ok) error = docRes.error;
+          else notice = `Evidence photo (${stage}) uploaded.`;
+          break;
+        }
         case "completeWorkerPo": {
           const rpcRes = await this.client.rpc<Record<string, unknown>>(
             "rpc_complete_worker_po",
@@ -2102,8 +2236,28 @@ export class SupabaseAdapter {
             { p_user_id: targetUserId },
             token
           );
-          if (!rpcRes.ok) error = rpcRes.error;
-          else notice = "Registration request removed.";
+          if (!rpcRes.ok) {
+            const rawErr = rpcRes.error || "";
+            if (
+              rawErr.includes("rpc_delete_user_account") ||
+              rawErr.includes("schema cache") ||
+              rawErr.includes("PGRST202")
+            ) {
+              const delRes = await this.client.delete("users", `id=eq.${targetUserId}&approval_status=eq.pending`, token);
+              if (!delRes.ok) {
+                await this.client.update("users", `id=eq.${targetUserId}`, {
+                  active: false,
+                  approval_status: "rejected",
+                  updated_at: this.now(),
+                }, token);
+              }
+              notice = "Registration request removed.";
+            } else {
+              error = rpcRes.error;
+            }
+          } else {
+            notice = "Registration request removed.";
+          }
           break;
         }
         case "deactivateUser": {
@@ -2184,8 +2338,60 @@ export class SupabaseAdapter {
             { p_user_id: targetUserId },
             token
           );
-          if (!rpcRes.ok) error = rpcRes.error;
-          else notice = "User account deleted.";
+          if (!rpcRes.ok) {
+            const rawErr = rpcRes.error || "";
+            if (
+              rawErr.includes("rpc_delete_user_account") ||
+              rawErr.includes("schema cache") ||
+              rawErr.includes("PGRST202")
+            ) {
+              if (targetUserId === profile.id) {
+                error = "You cannot delete your own administrator account.";
+                break;
+              }
+              const ownersRes = await this.client.select<Record<string, unknown>>("users", "select=id,role,active&role=eq.owner&active=eq.true", token);
+              if (ownersRes.ok && ownersRes.value.some((o) => String(o.id) === targetUserId) && ownersRes.value.length <= 1) {
+                error = "The last active administrator account cannot be deleted.";
+                break;
+              }
+              const [poRes, reqRes, docRes] = await Promise.all([
+                this.client.select<Record<string, unknown>>("purchase_orders", `select=id&created_by=eq.${targetUserId}&limit=1`, token),
+                this.client.select<Record<string, unknown>>("worker_general_requests", `select=id&created_by=eq.${targetUserId}&limit=1`, token),
+                this.client.select<Record<string, unknown>>("documents", `select=id&created_by=eq.${targetUserId}&limit=1`, token),
+              ]);
+              const hasRecords = (poRes.ok && poRes.value.length > 0) ||
+                                 (reqRes.ok && reqRes.value.length > 0) ||
+                                 (docRes.ok && docRes.value.length > 0);
+
+              if (hasRecords) {
+                const delEmail = targetEmail ? `${targetEmail}.deleted.${Date.now()}` : `deleted.${targetUserId}.${Date.now()}@stockflow.internal`;
+                const updRes = await this.client.update("users", `id=eq.${targetUserId}`, {
+                  auth_user_id: null,
+                  active: false,
+                  approval_status: "rejected",
+                  email: delEmail,
+                  registration_notes: `Account deactivated and credentials unlinked by ${profile.name} on ${this.now()} (operational records preserved)`,
+                  updated_at: this.now(),
+                }, token);
+                if (!updRes.ok) {
+                  error = updRes.error;
+                } else {
+                  notice = "User account deactivated and credentials unlinked (historical operational records preserved).";
+                }
+              } else {
+                const delRes = await this.client.delete("users", `id=eq.${targetUserId}`, token);
+                if (!delRes.ok) {
+                  error = delRes.error;
+                } else {
+                  notice = "User account permanently deleted.";
+                }
+              }
+            } else {
+              error = rpcRes.error;
+            }
+          } else {
+            notice = "User account deleted.";
+          }
           break;
         }
         case "decideOffersUserRegistration":

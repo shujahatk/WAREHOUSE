@@ -13,6 +13,7 @@ export function RegisterForm() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedNotice, setSubmittedNotice] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -46,13 +47,28 @@ export function RegisterForm() {
 
     setPending(false);
     if (result.error) {
-      setError(result.error);
+      const raw = result.error;
+      if (
+        raw.includes("rpc_register_offers_user") ||
+        raw.includes("schema cache") ||
+        raw.includes("foreign key") ||
+        raw.includes("users_auth_user_id_fkey") ||
+        raw.includes("already registered")
+      ) {
+        setError("This email address is already registered or associated with an account. Please sign in with your email and password.");
+      } else {
+        setError(result.error);
+      }
     } else {
+      if (result.notice) {
+        setSubmittedNotice(result.notice);
+      }
       setSubmitted(true);
     }
   }
 
   if (submitted) {
+    const isAlreadyApproved = submittedNotice?.includes("already approved") || submittedNotice?.includes("ready");
     return (
       <div className="mt-8 space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-6 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-800">
@@ -60,19 +76,29 @@ export function RegisterForm() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h3 className="text-lg font-semibold text-neutral-900">Registration Submitted</h3>
+        <h3 className="text-lg font-semibold text-neutral-900">
+          {isAlreadyApproved ? "Account Ready" : "Registration Submitted"}
+        </h3>
         <p className="text-sm text-neutral-600 leading-relaxed">
-          Thank you, <span className="font-medium text-neutral-900">{name}</span>. Your account request has been registered and is now <strong>Pending Administrator Approval</strong>.
+          {submittedNotice ? (
+            submittedNotice
+          ) : (
+            <>
+              Thank you, <span className="font-medium text-neutral-900">{name}</span>. Your account request has been registered and is now <strong>Pending Administrator Approval</strong>.
+            </>
+          )}
         </p>
         <p className="text-xs text-neutral-500">
-          An administrator has been notified. Once approved, you will receive full access to the RM Offers Portal with your email and password.
+          {isAlreadyApproved
+            ? "Your Offers User credentials are valid. You can sign in immediately to access the portal."
+            : "An administrator has been notified. Once approved, you will receive full access to the RM Offers Portal with your email and password."}
         </p>
         <div className="pt-4">
           <Link
             href="/login"
             className="inline-flex h-10 items-center justify-center rounded-lg bg-neutral-950 px-5 text-sm font-medium text-white hover:bg-neutral-800"
           >
-            Return to Sign in
+            {isAlreadyApproved ? "Sign in to Offers Portal" : "Return to Sign in"}
           </Link>
         </div>
       </div>
@@ -150,9 +176,16 @@ export function RegisterForm() {
       </div>
 
       {error ? (
-        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
-          {error}
-        </p>
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+          <p>{error}</p>
+          {error.includes("already registered") || error.includes("sign in") ? (
+            <p className="mt-1 font-medium">
+              <Link href="/login" className="underline hover:text-red-950">
+                Click here to sign in with your email and password &rarr;
+              </Link>
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       <button

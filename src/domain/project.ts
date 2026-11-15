@@ -64,6 +64,32 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     const assigner = order.assignedBy ? userById.get(order.assignedBy) : null;
     const completer = order.completedBy ? userById.get(order.completedBy) : null;
 
+    const orderDocs = store.documents.filter(
+      (d) => (d.poNumber === order.number || (linked && d.shipmentId === linked.id)) && d.status !== "deleted"
+    );
+    const evidencePhotos = orderDocs
+      .filter((d) => d.kind === "photo" || (d.notes && d.notes.startsWith("stage:")))
+      .map((d) => {
+        let stage: "before_loading" | "after_loading" | "before_unloading" | "after_unloading" = "before_unloading";
+        if (d.notes?.includes("stage:before_loading")) stage = "before_loading";
+        else if (d.notes?.includes("stage:after_loading")) stage = "after_loading";
+        else if (d.notes?.includes("stage:after_unloading")) stage = "after_unloading";
+        else if (d.notes?.includes("stage:before_unloading")) stage = "before_unloading";
+        else if (d.name?.toLowerCase().includes("after")) stage = "after_unloading";
+        return {
+          id: d.id,
+          poNumber: order.number,
+          stage,
+          name: d.name,
+          url: (d.storageKey ? sign(d.storageKey) : null) || `/api/files/${encodeURIComponent(d.id)}`,
+          mime: d.mime,
+          size: d.byteSize,
+          uploadedBy: d.createdBy,
+          uploadedByName: userById.get(d.createdBy)?.name || "Worker",
+          uploadedAt: d.createdAt,
+        };
+      });
+
     return {
       number: order.number,
       title,
@@ -94,6 +120,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       completionNotes: order.completionNotes ?? null,
       completedAt: order.completedAt ?? null,
       completedBy: order.completedBy ?? (completer?.name ?? null),
+      evidencePhotos,
     };
   });
 

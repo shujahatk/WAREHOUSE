@@ -181,6 +181,20 @@ export type DemoOrder = {
   completionNotes?: string | null;
   completedAt?: string | null;
   completedBy?: string | null;
+  evidencePhotos?: TaskEvidencePhoto[];
+};
+
+export type TaskEvidencePhoto = {
+  id: string;
+  poNumber: string;
+  stage: "before_loading" | "after_loading" | "before_unloading" | "after_unloading";
+  name: string;
+  url: string | null;
+  mime: string;
+  size: number;
+  uploadedBy: string;
+  uploadedByName: string;
+  uploadedAt: string;
 };
 
 export type ShipmentSection = {
@@ -599,8 +613,14 @@ export type GeneralRequestAttachmentView = {
 
 export type GeneralRequestOperationalDetails = {
   requestType: "loading" | "unloading";
+  poSoNumber?: string | null;
+  partnerName?: string | null;
   materialType: string;
+  materialGrade?: string | null;
   materialDescription: string;
+  quantity?: number;
+  unit?: string;
+  price?: number | null;
   packagingType: string;
   packageCount: number;
   grossWeightKg: number;
@@ -608,6 +628,10 @@ export type GeneralRequestOperationalDetails = {
   totalTareWeightKg: number;
   netWeightKg: number;
   warehouseLocation: string;
+  scheduledDate?: string | null;
+  assignedWorkerId?: string | null;
+  assignedWorkerName?: string | null;
+  instructions?: string | null;
   notes?: string;
   assignedPoSoNumber?: string | null;
   assignedPoSoBy?: string | null;

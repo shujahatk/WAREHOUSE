@@ -6,6 +6,17 @@ alter table public.users add column if not exists phone text;
 
 create index if not exists idx_users_phone on public.users (phone);
 
+-- Allow pending workers to not require a warehouse until approved by an administrator
+alter table public.users drop constraint if exists users_worker_warehouse_check;
+alter table public.users add constraint users_worker_warehouse_check check (
+  (role = 'worker' and (
+    (approval_status = 'approved' and active = true and warehouse_id is not null)
+    or approval_status in ('pending', 'rejected')
+    or active = false
+  ) and company_id is null)
+  or (role in ('owner', 'manager', 'moderator', 'offers_user') and warehouse_id is null and company_id is null)
+);
+
 -- 2. General Public User Registration RPC
 create or replace function public.rpc_register_user(
   p_auth_user_id uuid,
@@ -531,20 +542,26 @@ begin
     end;
   end if;
 
+  -- Check existing user in public.users
+  select * into v_existing from public.users where lower(trim(email)) = lower(trim(p_email)) limit 1;
+  if v_existing is not null and v_existing.approval_status = 'approved' and v_existing.active = true then
+    return jsonb_build_object('ok', true, 'userId', v_existing.id, 'alreadyApproved', true);
+  end if;
+
   insert into public.users (
     id, auth_user_id, email, name, role, warehouse_id, company_id,
     active, approval_status, registration_notes, created_at, updated_at
   ) values (
     gen_random_uuid(), v_valid_auth_id, lower(trim(p_email)), trim(p_name), 'offers_user', null, null,
-    true, 'approved', v_notes, now(), now()
+    false, 'pending', v_notes, now(), now()
   )
   on conflict (email) do update set
     auth_user_id = coalesce(v_valid_auth_id, users.auth_user_id),
     name = trim(p_name),
     role = 'offers_user',
-    approval_status = 'approved',
-    active = true,
-    registration_notes = v_notes,
+    approval_status = case when users.approval_status = 'approved' then 'approved' else 'pending' end,
+    active = case when users.approval_status = 'approved' then true else false end,
+    registration_notes = coalesce(v_notes, users.registration_notes),
     updated_at = now()
   returning id into v_user_id;
 

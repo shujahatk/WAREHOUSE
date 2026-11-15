@@ -52,11 +52,11 @@ export async function signUpAction(payload: {
   confirmPassword?: string;
   notes?: string;
   requestedRole?: string;
-}): Promise<{ error: string | null; ok: boolean }> {
+}): Promise<{ error: string | null; ok: boolean; notice?: string }> {
   try {
     const res = await getAdapter().run(null, "signUpUser", payload);
     if (res.error) return { error: res.error, ok: false };
-    return { error: null, ok: true };
+    return { error: null, ok: true, notice: res.notice };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Sign up failed.", ok: false };
   }
@@ -68,11 +68,11 @@ export async function registerOffersUserAction(payload: {
   password: string;
   company?: string;
   notes?: string;
-}): Promise<{ error: string | null; ok: boolean }> {
+}): Promise<{ error: string | null; ok: boolean; notice?: string }> {
   try {
     const res = await getAdapter().run(null, "registerOffersUser", payload);
     if (res.error) return { error: res.error, ok: false };
-    return { error: null, ok: true };
+    return { error: null, ok: true, notice: res.notice };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Registration failed.", ok: false };
   }
