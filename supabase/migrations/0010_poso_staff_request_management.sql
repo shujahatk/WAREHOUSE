@@ -181,10 +181,12 @@ $$;
 revoke all on function public.rpc_delete_user_account(uuid) from public, anon;
 grant execute on function public.rpc_delete_user_account(uuid) to authenticated, service_role;
 
--- 4. Ensure table grants for authenticated users
+-- 4. Ensure table & helper grants for authenticated and anon users
 grant select, insert, update on public.purchase_orders to authenticated;
 grant select, insert, update on public.purchase_order_lines to authenticated;
 grant select, update, delete on public.users to authenticated;
+grant execute on function public.current_user_role() to authenticated, anon;
+grant execute on function public.current_app_user() to authenticated, anon;
 
 -- 5. Reload PostgREST schema cache
 notify pgrst, 'reload schema';
