@@ -754,7 +754,9 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     conversations,
     documents,
     activity,
-    accounts: store.users.map((user) => ({
+    accounts: store.users
+      .filter((user) => !user.email.toLowerCase().includes("deleted"))
+      .map((user) => ({
       id: user.id,
       email: user.email,
       name: user.name,

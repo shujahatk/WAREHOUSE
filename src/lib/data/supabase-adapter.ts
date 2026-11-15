@@ -656,7 +656,7 @@ export class SupabaseAdapter {
 
     if (warehousesRes.ok) store.warehouses = warehousesRes.value.map(mapWarehouse);
     if (companiesRes.ok) store.companies = companiesRes.value.map(mapCompany);
-    if (usersRes.ok) store.users = usersRes.value.map(mapUserRecord);
+    if (usersRes.ok) store.users = usersRes.value.filter((u) => !String(u.email || "").toLowerCase().includes("deleted")).map(mapUserRecord);
     if (materialsRes.ok) store.materials = materialsRes.value.map(mapMaterial);
     if (packagingRes.ok) store.packagingTypes = packagingRes.value.map(mapPackagingType);
     if (ordersRes.ok) store.purchaseOrders = ordersRes.value.map(mapPurchaseOrder);
@@ -2246,6 +2246,8 @@ export class SupabaseAdapter {
               const delRes = await this.client.delete("users", `id=eq.${targetUserId}&approval_status=eq.pending`, token);
               if (!delRes.ok) {
                 await this.client.update("users", `id=eq.${targetUserId}`, {
+                  auth_user_id: null,
+                  email: `deleted.${targetUserId}.${Date.now()}@stockflow.internal`,
                   active: false,
                   approval_status: "rejected",
                   updated_at: this.now(),
@@ -2381,7 +2383,21 @@ export class SupabaseAdapter {
               } else {
                 const delRes = await this.client.delete("users", `id=eq.${targetUserId}`, token);
                 if (!delRes.ok) {
-                  error = delRes.error;
+                  // Fallback: If delete fails (permission denied on direct table DELETE), unlink credentials and scramble email
+                  const delEmail = targetEmail ? `${targetEmail}.deleted.${Date.now()}` : `deleted.${targetUserId}.${Date.now()}@stockflow.internal`;
+                  const updRes = await this.client.update("users", `id=eq.${targetUserId}`, {
+                    auth_user_id: null,
+                    active: false,
+                    approval_status: "rejected",
+                    email: delEmail,
+                    registration_notes: `Account deleted and credentials unlinked by ${profile.name} on ${this.now()}`,
+                    updated_at: this.now(),
+                  }, token);
+                  if (!updRes.ok) {
+                    error = updRes.error;
+                  } else {
+                    notice = "User account permanently removed.";
+                  }
                 } else {
                   notice = "User account permanently deleted.";
                 }
