@@ -22,11 +22,7 @@ function loadEnv() {
 }
 
 const env = loadEnv();
-const client = new SupabaseRestClient({
-  url: env.NEXT_PUBLIC_SUPABASE_URL,
-  anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-});
-const adapter = createSupabaseAdapter(client, () => new Date().toISOString());
+const adapter = createSupabaseAdapter(env, fetch, () => new Date().toISOString());
 
 async function runTests() {
   console.log('====================================================');

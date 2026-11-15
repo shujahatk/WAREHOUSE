@@ -893,7 +893,20 @@ export class SupabaseAdapter {
       );
 
       if (!rpcRes.ok) {
-        return { state: emptyWorkspace(), actor: null, error: rpcRes.error };
+        const rawErr = rpcRes.error || "Registration failed.";
+        if (
+          rawErr.includes("rpc_register_offers_user") ||
+          rawErr.includes("schema cache") ||
+          rawErr.includes("PGRST202")
+        ) {
+          return {
+            state: emptyWorkspace(),
+            actor: null,
+            error:
+              "Database migration required: The function 'public.rpc_register_offers_user' is not installed in Supabase. Please apply migration 0007_worker_assignments_and_offers_portal.sql in the Supabase Dashboard SQL Editor.",
+          };
+        }
+        return { state: emptyWorkspace(), actor: null, error: rawErr };
       }
 
       return {

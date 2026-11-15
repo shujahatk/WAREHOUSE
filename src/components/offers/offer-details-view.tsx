@@ -390,8 +390,8 @@ export function OfferDetailsView({
                   isCurrent
                     ? "border-emerald-600 bg-emerald-50/60 ring-1 ring-emerald-600/30"
                     : isPassed
-                    ? "border-neutral-200 bg-neutral-50/70"
-                    : "border-neutral-200/60 bg-white opacity-60"
+                      ? "border-neutral-200 bg-neutral-50/70"
+                      : "border-neutral-200/60 bg-white opacity-60"
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -401,8 +401,8 @@ export function OfferDetailsView({
                       isCurrent
                         ? "text-emerald-900"
                         : isPassed
-                        ? "text-neutral-900"
-                        : "text-neutral-400"
+                          ? "text-neutral-900"
+                          : "text-neutral-400"
                     )}
                   >
                     {s.title}

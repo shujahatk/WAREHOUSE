@@ -743,3 +743,40 @@ grant execute on function public.rpc_decide_selling_offer(text, text, text) to a
 grant execute on function public.rpc_accept_selling_offer(text) to authenticated, service_role;
 grant execute on function public.rpc_decide_offers_user_registration(uuid, text, text) to authenticated, service_role;
 
+-- ----------------------------------------------------------------------------
+-- 6. AUTO-LINK & ACTIVATE EXISTING OFFERS USERS FROM AUTH.USERS
+-- ----------------------------------------------------------------------------
+insert into public.users (
+  id, auth_user_id, email, name, role, warehouse_id, company_id,
+  active, approval_status, registration_notes, created_at, updated_at
+)
+select 
+  gen_random_uuid(),
+  au.id,
+  lower(trim(au.email)),
+  coalesce(au.raw_user_meta_data->>'name', 'Offers User'),
+  'offers_user',
+  null,
+  null,
+  true,
+  'approved',
+  'Company: ' || coalesce(au.raw_user_meta_data->>'company', 'minetech'),
+  now(),
+  now()
+from auth.users au
+where (au.raw_user_meta_data->>'role' = 'offers_user' or lower(au.email) = 'shujahatk17@gmail.com')
+  and not exists (
+    select 1 from public.users u where u.email = lower(trim(au.email))
+  )
+on conflict (email) do update set
+  auth_user_id = excluded.auth_user_id,
+  role = 'offers_user',
+  approval_status = 'approved',
+  active = true,
+  updated_at = now();
+
+update auth.users
+set email_confirmed_at = coalesce(email_confirmed_at, now())
+where raw_user_meta_data->>'role' = 'offers_user' or lower(email) = 'shujahatk17@gmail.com';
+
+
