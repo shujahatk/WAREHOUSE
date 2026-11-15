@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { OfferView } from "@/domain/view";
+import type { OfferView, DemoOrder } from "@/domain/view";
 import type { Role } from "@/lib/permissions";
+import { cn } from "@/lib/cn";
+import { exportOffersToCsv } from "./offers-csv";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-neutral-100 text-neutral-700 border-neutral-300" },
-  received: { label: "Received", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  received: { label: "Received", className: "bg-sky-50 text-sky-700 border-sky-200" },
   under_review: { label: "Under Review", className: "bg-amber-50 text-amber-700 border-amber-300" },
   negotiating: { label: "Negotiating", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   won: { label: "Won", className: "bg-emerald-50 text-emerald-700 border-emerald-300" },
@@ -16,30 +18,31 @@ const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   sold: { label: "Sold", className: "bg-emerald-100 text-emerald-900 border-emerald-400 font-bold" },
 };
 
-const PRIORITY_BADGES: Record<string, { label: string; className: string }> = {
-  low: { label: "Low", className: "bg-neutral-100 text-neutral-600" },
-  medium: { label: "Medium", className: "bg-sky-50 text-sky-700" },
-  high: { label: "High", className: "bg-orange-50 text-orange-700" },
-  urgent: { label: "Urgent", className: "bg-rose-50 text-rose-700 font-bold" },
-};
+type SortKey = "date" | "number" | "material" | "quantity" | "totalValue" | "pricePerUnit" | "status";
 
 export function OffersTable({
   offers,
   role,
+  orders = [],
+  mode = "all",
   onToggleFavourite,
   onEdit,
   onDelete,
   onDecide,
   onOpenCreate,
+  onSelectOffer,
   createLabel = "New Offer",
 }: {
   offers: OfferView[];
   role: Role;
+  orders?: DemoOrder[];
+  mode?: "all" | "purchasing" | "selling";
   onToggleFavourite?: (id: string) => void;
   onEdit?: (offer: OfferView) => void;
   onDelete?: (id: string) => void;
   onDecide?: (offer: OfferView) => void;
   onOpenCreate?: () => void;
+  onSelectOffer?: (offer: OfferView) => void;
   createLabel?: string;
 }) {
   const isModerator = role === "moderator";
@@ -53,9 +56,25 @@ export function OffersTable({
   const [teamFilter, setTeamFilter] = useState("all");
   const [onlyFavourites, setOnlyFavourites] = useState(false);
 
+  // Sorting state
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  // Multi-selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   // Pagination states
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // PO Lookup Map for margin calculation
+  const poMap = useMemo(() => {
+    const map = new Map<string, DemoOrder>();
+    for (const po of orders) {
+      if (po.number) map.set(po.number, po);
+    }
+    return map;
+  }, [orders]);
 
   // Extract unique filter options
   const uniqueCountries = useMemo(() => {
@@ -84,23 +103,110 @@ export function OffersTable({
         const matches =
           o.number.toLowerCase().includes(q) ||
           o.material.toLowerCase().includes(q) ||
-          o.materialGrade.toLowerCase().includes(q) ||
+          (o.materialGrade && o.materialGrade.toLowerCase().includes(q)) ||
           o.country.toLowerCase().includes(q) ||
-          o.location.toLowerCase().includes(q) ||
+          (o.location && o.location.toLowerCase().includes(q)) ||
+          (o.clientName && o.clientName.toLowerCase().includes(q)) ||
+          (o.poNumber && o.poNumber.toLowerCase().includes(q)) ||
+          (o.origin && o.origin.toLowerCase().includes(q)) ||
+          (o.destination && o.destination.toLowerCase().includes(q)) ||
           o.team.toLowerCase().includes(q) ||
-          o.description.toLowerCase().includes(q);
+          (o.description && o.description.toLowerCase().includes(q));
         if (!matches) return false;
       }
       return true;
     });
   }, [offers, statusFilter, priorityFilter, countryFilter, teamFilter, onlyFavourites, search]);
 
+  // Sorting logic
+  const sortedOffers = useMemo(() => {
+    const list = [...filteredOffers];
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "date":
+          cmp = (a.createdAt || "").localeCompare(b.createdAt || "");
+          break;
+        case "number":
+          cmp = a.number.localeCompare(b.number);
+          break;
+        case "material":
+          cmp = a.material.localeCompare(b.material);
+          break;
+        case "quantity":
+          cmp = (a.quantity || 0) - (b.quantity || 0);
+          break;
+        case "totalValue":
+          cmp = (a.totalValue || 0) - (b.totalValue || 0);
+          break;
+        case "pricePerUnit":
+          cmp = (a.pricePerUnit || 0) - (b.pricePerUnit || 0);
+          break;
+        case "status":
+          cmp = (a.statusKey || "").localeCompare(b.statusKey || "");
+          break;
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+    return list;
+  }, [filteredOffers, sortKey, sortAsc]);
+
   // Pagination logic
-  const totalItems = filteredOffers.length;
+  const totalItems = sortedOffers.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const currentPage = Math.min(page, totalPages);
   const startIndex = (currentPage - 1) * pageSize;
-  const paginatedOffers = filteredOffers.slice(startIndex, startIndex + pageSize);
+  const paginatedOffers = sortedOffers.slice(startIndex, startIndex + pageSize);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+  }
+
+  function renderSortIcon(key: SortKey) {
+    if (sortKey !== key) {
+      return <span className="ml-1 text-neutral-300 font-mono text-[9px]">▲▼</span>;
+    }
+    return <span className="ml-1 text-emerald-800 font-mono text-[9px]">{sortAsc ? "▲" : "▼"}</span>;
+  }
+
+  // Selection handlers
+  const allCurrentSelected =
+    paginatedOffers.length > 0 && paginatedOffers.every((o) => selectedIds.has(o.id));
+
+  function toggleSelectAllCurrent() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allCurrentSelected) {
+        for (const o of paginatedOffers) next.delete(o.id);
+      } else {
+        for (const o of paginatedOffers) next.add(o.id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleExportSelected() {
+    const toExport = offers.filter((o) => selectedIds.has(o.id));
+    if (toExport.length === 0) {
+      exportOffersToCsv(filteredOffers, `rm-${mode}-offers.csv`);
+    } else {
+      exportOffersToCsv(toExport, `rm-selected-offers-${toExport.length}.csv`);
+    }
+  }
 
   function resetFilters() {
     setSearch("");
@@ -114,10 +220,16 @@ export function OffersTable({
 
   return (
     <div className="space-y-4">
-      {/* Search and Action Bar */}
+      {/* Top Search & Filter Bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 items-center gap-2">
-          <div className="relative flex-1 max-w-sm">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+              <svg className="h-3.5 w-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
             <input
               type="text"
               value={search}
@@ -125,57 +237,101 @@ export function OffersTable({
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search offer #, material, country, specs..."
-              className="h-9 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-900 placeholder-neutral-400 focus:border-neutral-950 focus:outline-hidden"
+              placeholder={
+                mode === "purchasing"
+                  ? "Search by offer #, material, supplier, location..."
+                  : mode === "selling"
+                  ? "Search by offer #, client, linked PO, route..."
+                  : "Search offer #, material, company, country, specs..."
+              }
+              className="h-9.5 w-full rounded-lg border border-neutral-300 bg-white pl-9 pr-8 text-xs text-neutral-900 placeholder-neutral-400 focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700/20 focus:outline-hidden transition shadow-2xs"
             />
             {search ? (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="absolute right-2.5 top-2 text-xs text-neutral-400 hover:text-neutral-700"
+                className="absolute right-2.5 top-2.5 text-xs text-neutral-400 hover:text-neutral-700"
               >
                 &times;
               </button>
             ) : null}
           </div>
 
+          {/* Starred filter button */}
           <button
             type="button"
             onClick={() => setOnlyFavourites((v) => !v)}
-            className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition ${
+            className={cn(
+              "flex h-9.5 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition shadow-2xs",
               onlyFavourites
-                ? "border-amber-400 bg-amber-50 text-amber-800"
-                : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
-            }`}
+                ? "border-amber-400 bg-amber-50 text-amber-900"
+                : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 hover:text-neutral-950"
+            )}
           >
             <span className={onlyFavourites ? "text-amber-500" : "text-neutral-400"}>★</span>
-            Favourites
+            <span className="hidden sm:inline">Favourites</span>
           </button>
         </div>
 
-        {isModerator && onOpenCreate ? (
-          <button
-            type="button"
-            onClick={onOpenCreate}
-            className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-neutral-950 px-4 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800"
-          >
-            <span>+</span> {createLabel}
-          </button>
-        ) : null}
+        {/* Global Action CTAs */}
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 ? (
+            <button
+              type="button"
+              onClick={handleExportSelected}
+              className="inline-flex h-9.5 items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 text-xs font-semibold text-emerald-900 shadow-2xs hover:bg-emerald-100 transition"
+            >
+              <svg className="h-3.5 w-3.5 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export Selected ({selectedIds.size})
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => exportOffersToCsv(filteredOffers, `rm-${mode}-offers.csv`)}
+              className="inline-flex h-9.5 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-medium text-neutral-700 shadow-2xs hover:bg-neutral-50 hover:text-neutral-950 transition"
+              title="Export all matching records to CSV"
+            >
+              <svg className="h-3.5 w-3.5 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export CSV
+            </button>
+          )}
+
+          {isModerator && onOpenCreate ? (
+            <button
+              type="button"
+              onClick={onOpenCreate}
+              className="flex h-9.5 items-center justify-center gap-1.5 rounded-lg bg-emerald-800 px-4 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              {createLabel}
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {/* Filter Chips / Dropdowns */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200 bg-white p-3 text-xs shadow-2xs">
-        <span className="font-semibold text-neutral-600">Filters:</span>
+      {/* Filter Selector Bar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200/90 bg-white p-3 text-xs shadow-2xs">
+        <span className="font-semibold text-neutral-600 flex items-center gap-1.5 mr-1">
+          <svg className="h-3.5 w-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          Filters:
+        </span>
 
-        {/* Status */}
+        {/* Status Dropdown */}
         <select
           value={statusFilter}
           onChange={(e) => {
             setStatusFilter(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-700 focus:outline-hidden"
+          className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-800 focus:border-emerald-700 focus:outline-hidden"
         >
           <option value="all">All Statuses</option>
           <option value="draft">Draft</option>
@@ -184,16 +340,17 @@ export function OffersTable({
           <option value="negotiating">Negotiating</option>
           <option value="won">Won</option>
           <option value="lost">Lost</option>
+          <option value="accepted">Accepted (Sold)</option>
         </select>
 
-        {/* Priority */}
+        {/* Priority Dropdown */}
         <select
           value={priorityFilter}
           onChange={(e) => {
             setPriorityFilter(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-700 focus:outline-hidden"
+          className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-800 focus:border-emerald-700 focus:outline-hidden"
         >
           <option value="all">All Priorities</option>
           <option value="low">Low</option>
@@ -202,14 +359,14 @@ export function OffersTable({
           <option value="urgent">Urgent</option>
         </select>
 
-        {/* Country */}
+        {/* Country Dropdown */}
         <select
           value={countryFilter}
           onChange={(e) => {
             setCountryFilter(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-700 focus:outline-hidden"
+          className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-800 focus:border-emerald-700 focus:outline-hidden"
         >
           <option value="all">All Countries</option>
           {uniqueCountries.map((c) => (
@@ -219,14 +376,14 @@ export function OffersTable({
           ))}
         </select>
 
-        {/* Team */}
+        {/* Team Dropdown */}
         <select
           value={teamFilter}
           onChange={(e) => {
             setTeamFilter(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-700 focus:outline-hidden"
+          className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-800 focus:border-emerald-700 focus:outline-hidden"
         >
           <option value="all">All Teams</option>
           {uniqueTeams.map((t) => (
@@ -236,42 +393,146 @@ export function OffersTable({
           ))}
         </select>
 
-        {(statusFilter !== "all" || priorityFilter !== "all" || countryFilter !== "all" || teamFilter !== "all" || onlyFavourites || search) && (
+        {(statusFilter !== "all" ||
+          priorityFilter !== "all" ||
+          countryFilter !== "all" ||
+          teamFilter !== "all" ||
+          onlyFavourites ||
+          search) && (
           <button
             type="button"
             onClick={resetFilters}
-            className="ml-auto rounded-lg px-2.5 py-1 text-xs font-semibold text-neutral-500 hover:text-neutral-900"
+            className="ml-auto rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:text-emerald-950 hover:bg-emerald-50 transition"
           >
             Reset Filters
           </button>
         )}
       </div>
 
-      {/* Main Responsive Table */}
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xs">
+      {/* Main Enterprise Responsive Data Table */}
+      <div className="overflow-hidden rounded-xl border border-neutral-200/90 bg-white shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="border-b border-neutral-200 bg-neutral-50 text-[11px] font-semibold text-neutral-600 uppercase tracking-wider">
+            <thead className="border-b border-neutral-200 bg-neutral-50/90 text-[11px] font-semibold text-neutral-600 uppercase tracking-wider select-none">
               <tr>
-                <th className="py-3 pl-3 pr-2 w-8 text-center">★</th>
-                <th className="py-3 px-3">Offer #</th>
-                <th className="py-3 px-3">Material & Grade</th>
-                <th className="py-3 px-3">Quantity</th>
-                <th className="py-3 px-3">Value</th>
-                <th className="py-3 px-3">Location</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3">Priority</th>
-                <th className="py-3 px-3">Team / Type</th>
-                <th className="py-3 px-3">Files</th>
-                <th className="py-3 px-3">Date</th>
+                {/* Select All Checkbox */}
+                <th className="py-3 pl-3 pr-2 w-8 text-center">
+                  <input
+                    type="checkbox"
+                    checked={allCurrentSelected}
+                    onChange={toggleSelectAllCurrent}
+                    className="h-3.5 w-3.5 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
+                    title="Select all on this page"
+                  />
+                </th>
+
+                {/* Star Header */}
+                <th className="py-3 px-1 w-6 text-center">★</th>
+
+                {/* Offer Number Column */}
+                <th
+                  className="py-3 px-3 cursor-pointer hover:text-neutral-950 transition-colors"
+                  onClick={() => handleSort("number")}
+                >
+                  <div className="flex items-center">
+                    <span>Offer Ref</span>
+                    {renderSortIcon("number")}
+                  </div>
+                </th>
+
+                {/* Selling mode: Linked PO Column */}
+                {mode === "selling" ? (
+                  <th className="py-3 px-3">Linked PO</th>
+                ) : null}
+
+                {/* Material & Grade */}
+                <th
+                  className="py-3 px-3 cursor-pointer hover:text-neutral-950 transition-colors"
+                  onClick={() => handleSort("material")}
+                >
+                  <div className="flex items-center">
+                    <span>Material &amp; Specs</span>
+                    {renderSortIcon("material")}
+                  </div>
+                </th>
+
+                {/* Counterparty: Supplier / Client */}
+                <th className="py-3 px-3">
+                  {mode === "purchasing" ? "Supplier / Source" : mode === "selling" ? "Client / Buyer" : "Counterparty"}
+                </th>
+
+                {/* Quantity */}
+                <th
+                  className="py-3 px-3 cursor-pointer hover:text-neutral-950 transition-colors"
+                  onClick={() => handleSort("quantity")}
+                >
+                  <div className="flex items-center">
+                    <span>Volume</span>
+                    {renderSortIcon("quantity")}
+                  </div>
+                </th>
+
+                {/* Price & Total Valuation */}
+                <th
+                  className="py-3 px-3 cursor-pointer hover:text-neutral-950 transition-colors"
+                  onClick={() => handleSort("totalValue")}
+                >
+                  <div className="flex items-center">
+                    <span>Valuation</span>
+                    {renderSortIcon("totalValue")}
+                  </div>
+                </th>
+
+                {/* Selling mode: Margin Indicator */}
+                {mode === "selling" ? (
+                  <th className="py-3 px-3">Est. Margin</th>
+                ) : null}
+
+                {/* Route / Location */}
+                <th className="py-3 px-3">
+                  {mode === "selling" ? "Logistics Route" : "Origin / Location"}
+                </th>
+
+                {/* Status Column */}
+                <th
+                  className="py-3 px-3 cursor-pointer hover:text-neutral-950 transition-colors"
+                  onClick={() => handleSort("status")}
+                >
+                  <div className="flex items-center">
+                    <span>Status</span>
+                    {renderSortIcon("status")}
+                  </div>
+                </th>
+
+                {/* Mode All: Kind badge */}
+                {mode === "all" ? (
+                  <th className="py-3 px-3">Kind</th>
+                ) : null}
+
+                {/* Files / Attachments */}
+                <th className="py-3 px-3 text-center">Docs</th>
+
+                {/* Created Date */}
+                <th
+                  className="py-3 px-3 cursor-pointer hover:text-neutral-950 transition-colors"
+                  onClick={() => handleSort("date")}
+                >
+                  <div className="flex items-center">
+                    <span>Date</span>
+                    {renderSortIcon("date")}
+                  </div>
+                </th>
+
+                {/* Actions */}
                 <th className="py-3 pl-3 pr-4 text-right">Actions</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-neutral-100">
               {paginatedOffers.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-xs text-neutral-500">
-                    No offers match the current filters.
+                  <td colSpan={14} className="py-12 text-center text-xs text-neutral-500">
+                    No offers match the current filters or search query.
                   </td>
                 </tr>
               ) : (
@@ -280,42 +541,133 @@ export function OffersTable({
                     label: offer.status,
                     className: "bg-neutral-100 text-neutral-700",
                   };
-                  const priorityBadge = PRIORITY_BADGES[offer.priorityKey] ?? {
-                    label: offer.priority,
-                    className: "bg-neutral-100 text-neutral-600",
-                  };
+                  const isSold =
+                    offer.statusKey === "accepted" || offer.statusKey === "sold" || Boolean(offer.soldAt);
+
                   const imgCount = offer.attachments.filter((a) => a.kind === "image").length;
                   const docCount = offer.attachments.filter((a) => a.kind === "document").length;
+                  const isSelected = selectedIds.has(offer.id);
+
+                  // Margin calculation for selling offers
+                  let marginInfo: { text: string; positive: boolean } | null = null;
+                  if (mode === "selling" && offer.poNumber) {
+                    const po = poMap.get(offer.poNumber);
+                    if (po && po.quantityKg && po.valueEur) {
+                      const poUnitCost = po.valueEur / po.quantityKg;
+                      const sellPrice = offer.pricePerUnit;
+                      if (sellPrice > 0 && poUnitCost > 0) {
+                        const diff = sellPrice - poUnitCost;
+                        const pct = ((sellPrice - poUnitCost) / poUnitCost) * 100;
+                        marginInfo = {
+                          text: `${diff >= 0 ? "+" : ""}${pct.toFixed(1)}% (€${diff.toFixed(2)}/kg)`,
+                          positive: diff >= 0,
+                        };
+                      }
+                    }
+                  }
 
                   return (
-                    <tr key={offer.id} className="hover:bg-neutral-50/80 transition-colors">
-                      <td className="py-3 pl-3 pr-2 text-center">
+                    <tr
+                      key={offer.id}
+                      onClick={() => onSelectOffer?.(offer)}
+                      className={cn(
+                        "group transition-colors cursor-pointer",
+                        isSelected
+                          ? "bg-emerald-50/40 hover:bg-emerald-50/70"
+                          : "hover:bg-neutral-50/80"
+                      )}
+                    >
+                      {/* Checkbox */}
+                      <td
+                        className="py-3 pl-3 pr-2 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOne(offer.id)}
+                          className="h-3.5 w-3.5 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                      </td>
+
+                      {/* Favourite Star */}
+                      <td
+                        className="py-3 px-1 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
                           type="button"
                           onClick={() => onToggleFavourite?.(offer.id)}
-                          className={`text-base leading-none transition ${
+                          className={cn(
+                            "text-sm leading-none transition",
                             offer.isFavourite ? "text-amber-500" : "text-neutral-300 hover:text-amber-400"
-                          }`}
+                          )}
                           title={offer.isFavourite ? "Starred" : "Star"}
                         >
                           ★
                         </button>
                       </td>
-                      <td className="py-3 px-3 font-semibold text-neutral-900">
-                        <Link href={`/offers/${offer.id}`} className="hover:underline text-neutral-950">
+
+                      {/* Offer Number & Approval badge */}
+                      <td className="py-3 px-3 font-semibold text-neutral-900 whitespace-nowrap">
+                        <Link
+                          href={`/offers/${offer.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-mono text-xs font-bold text-neutral-950 hover:text-emerald-800 hover:underline"
+                        >
                           {offer.number}
                         </Link>
                         {offer.approvalStatus === "approved" ? (
-                          <span className="ml-1.5 inline-block text-[10px] text-emerald-600 font-bold" title="Admin Approved">
+                          <span
+                            className="ml-1.5 inline-block text-[10px] text-emerald-600 font-bold"
+                            title="Admin Approved"
+                          >
                             ✓
                           </span>
                         ) : null}
                       </td>
+
+                      {/* Linked PO (Selling mode) */}
+                      {mode === "selling" ? (
+                        <td
+                          className="py-3 px-3 whitespace-nowrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {offer.poNumber ? (
+                            <Link
+                              href={`/purchases/${offer.poNumber}`}
+                              className="font-mono text-[11px] font-semibold text-indigo-700 hover:underline"
+                            >
+                              {offer.poNumber}
+                            </Link>
+                          ) : (
+                            <span className="text-neutral-400 font-mono text-[11px]">—</span>
+                          )}
+                        </td>
+                      ) : null}
+
+                      {/* Material & Grade */}
                       <td className="py-3 px-3">
-                        <p className="font-medium text-neutral-900">{offer.material}</p>
-                        <p className="text-[10px] text-neutral-500">{offer.materialGrade} &bull; {offer.materialType}</p>
+                        <p className="font-semibold text-neutral-900 truncate max-w-[180px]">
+                          {offer.material}
+                        </p>
+                        <p className="text-[10px] text-neutral-500 truncate max-w-[180px]">
+                          {offer.materialGrade || "Standard"} &bull; {offer.materialType || "Standard"}
+                        </p>
                       </td>
-                      <td className="py-3 px-3 font-medium text-neutral-800">
+
+                      {/* Counterparty: Supplier / Client */}
+                      <td className="py-3 px-3">
+                        <p className="font-medium text-neutral-800 truncate max-w-[140px]">
+                          {offer.clientName || offer.createdByName || "—"}
+                        </p>
+                        {offer.contactNumber ? (
+                          <p className="text-[10px] text-neutral-400 truncate">{offer.contactNumber}</p>
+                        ) : null}
+                      </td>
+
+                      {/* Volume & Truckloads */}
+                      <td className="py-3 px-3 whitespace-nowrap font-medium text-neutral-800">
                         {offer.quantity.toLocaleString()} {offer.unit}
                         {offer.truckLoads > 0 ? (
                           <span className="block text-[10px] text-neutral-400">
@@ -323,52 +675,135 @@ export function OffersTable({
                           </span>
                         ) : null}
                       </td>
-                      <td className="py-3 px-3 font-semibold text-neutral-900">
-                        {offer.currency} {offer.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        <span className="block text-[10px] font-normal text-neutral-500">
-                          {offer.currency} {offer.pricePerUnit}/{offer.unit}
+
+                      {/* Valuation */}
+                      <td className="py-3 px-3 whitespace-nowrap font-semibold text-neutral-900">
+                        <span className="font-mono">
+                          €{offer.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="block text-[10px] font-normal text-neutral-500 font-mono">
+                          €{offer.pricePerUnit}/{offer.unit}
                         </span>
                       </td>
+
+                      {/* Selling Margin Indicator */}
+                      {mode === "selling" ? (
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          {marginInfo ? (
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-mono font-bold",
+                                marginInfo.positive
+                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                  : "bg-rose-50 text-rose-800 border border-rose-200"
+                              )}
+                            >
+                              {marginInfo.text}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-neutral-400 font-mono">—</span>
+                          )}
+                        </td>
+                      ) : null}
+
+                      {/* Route / Location */}
                       <td className="py-3 px-3 text-neutral-700">
-                        <p className="font-medium">{offer.country}</p>
-                        {offer.location ? <p className="text-[10px] text-neutral-400">{offer.location}</p> : null}
+                        {mode === "selling" ? (
+                          <div className="text-[11px] max-w-[160px] truncate">
+                            <span className="font-medium">{offer.origin || offer.country}</span>
+                            <span className="text-neutral-400 mx-1">&rarr;</span>
+                            <span className="font-medium">{offer.destination || "Delivered"}</span>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-medium">{offer.country}</p>
+                            {offer.location ? (
+                              <p className="text-[10px] text-neutral-400 truncate max-w-[120px]">
+                                {offer.location}
+                              </p>
+                            ) : null}
+                          </div>
+                        )}
                       </td>
-                      <td className="py-3 px-3">
-                        <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold ${statusBadge.className}`}>
+
+                      {/* Status */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold",
+                            statusBadge.className
+                          )}
+                        >
                           {statusBadge.label}
                         </span>
+                        {isSold ? (
+                          <span className="ml-1 inline-flex items-center rounded-md bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-2xs">
+                            SOLD
+                          </span>
+                        ) : null}
                       </td>
-                      <td className="py-3 px-3">
-                        <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ${priorityBadge.className}`}>
-                          {priorityBadge.label}
-                        </span>
+
+                      {/* Kind (for unified table) */}
+                      {mode === "all" ? (
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span
+                            className={cn(
+                              "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+                              offer.kind === "purchasing"
+                                ? "bg-sky-50 text-sky-800 border border-sky-200"
+                                : "bg-teal-50 text-teal-800 border border-teal-200"
+                            )}
+                          >
+                            {offer.kind === "purchasing" ? "Buy" : "Sell"}
+                          </span>
+                        </td>
+                      ) : null}
+
+                      {/* Docs */}
+                      <td className="py-3 px-3 text-[11px] text-center text-neutral-600 whitespace-nowrap">
+                        {imgCount > 0 || docCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-600 bg-neutral-100 px-1.5 py-0.5 rounded">
+                            {imgCount > 0 ? `📷${imgCount}` : ""}
+                            {docCount > 0 ? `📄${docCount}` : ""}
+                          </span>
+                        ) : (
+                          <span className="text-neutral-300">—</span>
+                        )}
                       </td>
-                      <td className="py-3 px-3 text-neutral-600">
-                        <p className="font-medium text-neutral-800">{offer.team}</p>
-                        <p className="text-[10px] text-neutral-400">{offer.offerType}</p>
+
+                      {/* Date */}
+                      <td className="py-3 px-3 text-neutral-500 whitespace-nowrap font-mono text-[11px]">
+                        {offer.createdAt ? offer.createdAt.slice(0, 10) : "—"}
                       </td>
-                      <td className="py-3 px-3 text-[11px] text-neutral-600 whitespace-nowrap">
-                        {imgCount > 0 ? <span className="mr-1.5" title="Images">📷 {imgCount}</span> : null}
-                        {docCount > 0 ? <span title="Documents">📄 {docCount}</span> : null}
-                        {imgCount === 0 && docCount === 0 ? <span className="text-neutral-400">—</span> : null}
-                      </td>
-                      <td className="py-3 px-3 text-neutral-500 whitespace-nowrap">
-                        {offer.createdAt.slice(0, 10)}
-                      </td>
-                      <td className="py-3 pl-3 pr-4 text-right whitespace-nowrap">
+
+                      {/* Actions */}
+                      <td
+                        className="py-3 pl-3 pr-4 text-right whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onSelectOffer?.(offer)}
+                            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950 transition shadow-2xs"
+                            title="Quick View"
+                          >
+                            Quick View
+                          </button>
+
                           <Link
                             href={`/offers/${offer.id}`}
-                            className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-100"
+                            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950 transition shadow-2xs"
+                            title="Full Dossier"
                           >
-                            View
+                            Dossier
                           </Link>
 
-                          {isAdmin && offer.statusKey === "under_review" ? (
+                          {isAdmin && offer.statusKey === "under_review" && onDecide ? (
                             <button
                               type="button"
-                              onClick={() => onDecide?.(offer)}
-                              className="rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-600"
+                              onClick={() => onDecide(offer)}
+                              className="rounded-md bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-700 shadow-2xs transition"
                             >
                               Decide
                             </button>
@@ -379,7 +814,7 @@ export function OffersTable({
                               <button
                                 type="button"
                                 onClick={() => onEdit?.(offer)}
-                                className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-100"
+                                className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-100 transition shadow-2xs"
                               >
                                 Edit
                               </button>
@@ -390,7 +825,7 @@ export function OffersTable({
                                     onDelete?.(offer.id);
                                   }
                                 }}
-                                className="rounded-md border border-rose-200 px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
+                                className="rounded-md border border-rose-200 px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 transition"
                               >
                                 Delete
                               </button>
@@ -424,7 +859,7 @@ export function OffersTable({
             </select>
             <span className="text-neutral-400">|</span>
             <span>
-              Showing {totalItems === 0 ? 0 : startIndex + 1} to {Math.min(startIndex + pageSize, totalItems)} of {totalItems} offers
+              Showing {totalItems === 0 ? 0 : startIndex + 1} to {Math.min(startIndex + pageSize, totalItems)} of {totalItems} records
             </span>
           </div>
 
@@ -433,7 +868,7 @@ export function OffersTable({
               type="button"
               disabled={currentPage <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 disabled:opacity-40 hover:bg-neutral-50"
+              className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 disabled:opacity-40 hover:bg-neutral-50 transition"
             >
               &larr; Prev
             </button>
@@ -444,7 +879,7 @@ export function OffersTable({
               type="button"
               disabled={currentPage >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 disabled:opacity-40 hover:bg-neutral-50"
+              className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 disabled:opacity-40 hover:bg-neutral-50 transition"
             >
               Next &rarr;
             </button>
@@ -454,4 +889,3 @@ export function OffersTable({
     </div>
   );
 }
-

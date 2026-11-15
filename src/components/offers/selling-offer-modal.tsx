@@ -59,7 +59,7 @@ export function SellingOfferModal({
     }
     const trimmedMatName = materialName.trim();
     if (!trimmedMatName) {
-      setError("Field 3: Material Name is required.");
+      setError("Field 3: Material Name & Grade is required.");
       return;
     }
     const trimmedClient = clientName.trim();
@@ -84,12 +84,12 @@ export function SellingOfferModal({
     }
     const trimmedOrigin = origin.trim();
     if (!trimmedOrigin) {
-      setError("Field 8: Origin is required.");
+      setError("Field 8: Origin location is required.");
       return;
     }
     const trimmedDest = destination.trim();
     if (!trimmedDest) {
-      setError("Field 9: Destination is required.");
+      setError("Field 9: Destination location is required.");
       return;
     }
 
@@ -122,24 +122,27 @@ export function SellingOfferModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-2xl rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4 backdrop-blur-xs animate-in fade-in">
+      <div className="w-full max-w-2xl rounded-2xl border border-neutral-200/90 bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
           <div>
-            <span className="rounded bg-purple-100 px-2 py-0.5 text-xs font-bold text-purple-900">
-              New Selling Offer
-            </span>
-            <h2 className="mt-1 text-lg font-bold text-neutral-950">
-              Submit Selling Offer Linked to PO
+            <div className="flex items-center gap-2">
+              <span className="rounded-md border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-bold text-teal-800 uppercase">
+                Selling Proposal
+              </span>
+              <span className="text-[11px] font-mono text-neutral-400">9-Field Protocol</span>
+            </div>
+            <h2 className="mt-1.5 text-lg font-bold text-neutral-950">
+              Submit Selling Offer Linked to Purchase Order
             </h2>
             <p className="text-xs text-neutral-500">
-              All 9 fields are strictly validated before submission for Admin review.
+              All commercial parameters are recorded and sent directly to Admin for pricing clearance.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-neutral-400 hover:text-neutral-700 font-bold p-1"
+            className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 transition"
           >
             ✕
           </button>
@@ -152,7 +155,7 @@ export function SellingOfferModal({
             </div>
           ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3.5 sm:grid-cols-2">
             {/* Field 1: PO Number */}
             <div className="sm:col-span-2">
               <label className="block font-medium text-neutral-700">
@@ -163,7 +166,7 @@ export function SellingOfferModal({
                   <select
                     value={poNumber}
                     onChange={(e) => setPoNumber(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-950"
+                    className="h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
                   >
                     <option value="">Select a Purchase Order...</option>
                     {availableOrders.map((o) => (
@@ -176,8 +179,8 @@ export function SellingOfferModal({
                     type="text"
                     value={poNumber}
                     onChange={(e) => setPoNumber(e.target.value)}
-                    placeholder="Or type PO-..."
-                    className="h-10 w-44 rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                    placeholder="Or enter PO-..."
+                    className="h-9.5 w-44 rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono"
                   />
                 </div>
               ) : (
@@ -187,7 +190,7 @@ export function SellingOfferModal({
                   value={poNumber}
                   onChange={(e) => setPoNumber(e.target.value)}
                   placeholder="e.g. PO-2026-0001"
-                  className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono"
                 />
               )}
             </div>
@@ -203,14 +206,14 @@ export function SellingOfferModal({
                 value={materialType}
                 onChange={(e) => setMaterialType(e.target.value)}
                 placeholder="e.g. Plastics (LDPE), Scrap Metal, Paper"
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
               />
             </div>
 
             {/* Field 3: Material Name */}
             <div>
               <label className="block font-medium text-neutral-700">
-                3. Material Name & Grade <span className="text-rose-500">*</span>
+                3. Material Name &amp; Grade <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -218,7 +221,7 @@ export function SellingOfferModal({
                 value={materialName}
                 onChange={(e) => setMaterialName(e.target.value)}
                 placeholder="e.g. LDPE Film 98/2 Regranulate"
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
               />
             </div>
 
@@ -233,7 +236,7 @@ export function SellingOfferModal({
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
                 placeholder="e.g. Benelux Recycling BV"
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
               />
             </div>
 
@@ -248,7 +251,7 @@ export function SellingOfferModal({
                 value={contactNumber}
                 onChange={(e) => setContactNumber(e.target.value)}
                 placeholder="e.g. +32 3 888 1234"
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
               />
             </div>
 
@@ -263,14 +266,14 @@ export function SellingOfferModal({
                 value={emailAddress}
                 onChange={(e) => setEmailAddress(e.target.value)}
                 placeholder="e.g. purchasing@client.com"
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
               />
             </div>
 
             {/* Field 7: Price */}
             <div>
               <label className="block font-medium text-neutral-700">
-                7. Price (EUR) <span className="text-rose-500">*</span>
+                7. Selling Price (EUR) <span className="text-rose-500">*</span>
               </label>
               <input
                 type="number"
@@ -280,14 +283,14 @@ export function SellingOfferModal({
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="e.g. 1450.00"
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono"
               />
             </div>
 
             {/* Field 8: Origin */}
             <div>
               <label className="block font-medium text-neutral-700">
-                8. Origin Location <span className="text-rose-500">*</span>
+                8. Origin Loading Location <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -295,14 +298,14 @@ export function SellingOfferModal({
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
                 placeholder="e.g. Bornem Warehouse, Belgium"
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
               />
             </div>
 
             {/* Field 9: Destination */}
             <div>
               <label className="block font-medium text-neutral-700">
-                9. Destination Location <span className="text-rose-500">*</span>
+                9. Destination Delivery Location <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -310,20 +313,20 @@ export function SellingOfferModal({
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 placeholder="e.g. Rotterdam Port, Netherlands"
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm text-neutral-950"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
               />
             </div>
           </div>
 
           <div>
             <label className="block font-medium text-neutral-700">
-              Additional Details / Notes (optional)
+              Additional Commercial Terms &amp; Logistics Notes (optional)
               <textarea
                 rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Payment terms, delivery schedule, packaging requirements..."
-                className="mt-1 w-full rounded-lg border border-neutral-300 p-2.5 text-xs text-neutral-950"
+                placeholder="Payment terms, delivery schedules, trailer inspection requirements..."
+                className="mt-1 w-full rounded-lg border border-neutral-300 p-2.5 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
               />
             </label>
           </div>
@@ -333,14 +336,14 @@ export function SellingOfferModal({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="h-10 rounded-lg border border-neutral-300 px-4 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+              className="h-9.5 rounded-lg border border-neutral-300 px-4 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="h-10 rounded-lg bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 disabled:opacity-50"
+              className="h-9.5 rounded-lg bg-emerald-800 px-5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition"
             >
               {submitting ? "Submitting Offer…" : "Submit Selling Offer"}
             </button>
@@ -350,4 +353,3 @@ export function SellingOfferModal({
     </div>
   );
 }
-

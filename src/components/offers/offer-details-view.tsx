@@ -1,17 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { OfferView } from "@/domain/view";
 import type { Role } from "@/lib/permissions";
 import { compressImageIfNeeded, fileToBase64 } from "@/lib/client-image";
 import { AttachmentPreviewModal, type PreviewAttachmentItem } from "@/components/files/attachment-preview-modal";
 import { OfferFormModal } from "./offer-form-modal";
 import { OfferStatusModal } from "./offer-status-modal";
+import { cn } from "@/lib/cn";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-neutral-100 text-neutral-700 border-neutral-300" },
-  received: { label: "Received", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  received: { label: "Received", className: "bg-sky-50 text-sky-700 border-sky-200" },
   under_review: { label: "Under Review", className: "bg-amber-50 text-amber-700 border-amber-300" },
   negotiating: { label: "Negotiating", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   won: { label: "Won", className: "bg-emerald-50 text-emerald-700 border-emerald-300" },
@@ -91,6 +92,16 @@ export function OfferDetailsView({
     className: "bg-neutral-100 text-neutral-600",
   };
 
+  const isSold = offer.statusKey === "accepted" || offer.statusKey === "sold" || Boolean(offer.soldAt);
+
+  // Pipeline stage calculation
+  const currentPipelineStage = useMemo(() => {
+    if (isSold || offer.statusKey === "won") return 4;
+    if (offer.statusKey === "negotiating") return 3;
+    if (offer.statusKey === "under_review" || offer.approvalStatus === "approved") return 2;
+    return 1;
+  }, [offer, isSold]);
+
   async function handleAdminDecision(e: React.FormEvent) {
     e.preventDefault();
     if (!decisionNote.trim()) {
@@ -106,7 +117,7 @@ export function OfferDetailsView({
       } else {
         setShowDecisionInput(false);
         setDecisionNote("");
-        setActionNotice(`Offer marked as ${decisionType}.`);
+        setActionNotice(`Offer recorded as ${decisionType}.`);
       }
     } catch (caught) {
       setDecisionError(caught instanceof Error ? caught.message : "Failed to record decision.");
@@ -181,37 +192,47 @@ export function OfferDetailsView({
   return (
     <div className="space-y-6">
       {/* 1. Header & Navigation */}
-      <div className="flex flex-col gap-4 border-b border-neutral-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-neutral-200/90 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs text-neutral-500">
-            <Link href="/offers" className="hover:underline">
+          <div className="flex items-center gap-2 text-xs text-neutral-500 font-medium">
+            <Link href="/offers" className="hover:text-neutral-900 transition">
               Offers Portal
             </Link>
             <span>/</span>
-            <span className="capitalize">{offer.kind}</span>
+            <Link
+              href={offer.kind === "purchasing" ? "/offers/purchasing" : "/offers/selling"}
+              className="capitalize hover:text-neutral-900 transition"
+            >
+              {offer.kind} Offers
+            </Link>
             <span>/</span>
-            <span className="font-semibold text-neutral-900">{offer.number}</span>
+            <span className="font-mono font-semibold text-emerald-800">{offer.number}</span>
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-neutral-950">
+            <h1 className="text-2xl font-bold tracking-tight text-neutral-950 sm:text-3xl font-mono">
               {offer.number}
             </h1>
+
             <span
-              className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${
+              className={cn(
+                "rounded-md border px-2.5 py-1 text-xs font-semibold uppercase",
                 offer.kind === "purchasing"
                   ? "border-sky-200 bg-sky-50 text-sky-800"
-                  : "border-purple-200 bg-purple-50 text-purple-800"
-              }`}
+                  : "border-teal-200 bg-teal-50 text-teal-800"
+              )}
             >
               {offer.kindLabel}
             </span>
-            <span className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${statusBadge.className}`}>
+
+            <span className={cn("rounded-md border px-2.5 py-1 text-xs font-semibold", statusBadge.className)}>
               {statusBadge.label}
             </span>
-            <span className={`rounded-md px-2.5 py-1 text-xs font-medium ${priorityBadge.className}`}>
+
+            <span className={cn("rounded-md px-2.5 py-1 text-xs font-medium", priorityBadge.className)}>
               {priorityBadge.label} Priority
             </span>
+
             {offer.approvalStatus === "approved" ? (
               <span className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
                 ✓ Admin Approved
@@ -225,14 +246,16 @@ export function OfferDetailsView({
                 ● Pending Admin Approval
               </span>
             )}
-            {offer.statusKey === "accepted" || offer.soldAt ? (
-              <span className="rounded-md border border-emerald-400 bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow-xs">
+
+            {isSold ? (
+              <span className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-bold text-white shadow-xs">
                 ★ Commercially Accepted (SOLD)
               </span>
             ) : null}
           </div>
+
           <p className="mt-1 text-xs text-neutral-500">
-            Submitted by <strong>{offer.createdByName}</strong> on {offer.createdAt.slice(0, 10)}
+            Registered by <strong className="text-neutral-800">{offer.createdByName}</strong> on {offer.createdAt.slice(0, 10)}
             {offer.soldAt ? ` · Sold on ${offer.soldAt.slice(0, 10)}` : ""}
           </p>
         </div>
@@ -244,11 +267,12 @@ export function OfferDetailsView({
             <button
               type="button"
               onClick={() => void onToggleFavourite?.(offer.id)}
-              className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition ${
+              className={cn(
+                "flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition shadow-2xs",
                 offer.isFavourite
                   ? "border-amber-400 bg-amber-50 text-amber-800"
                   : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
-              }`}
+              )}
             >
               <span className={offer.isFavourite ? "text-amber-500" : "text-neutral-300"}>★</span>
               {offer.isFavourite ? "Starred" : "Star"}
@@ -263,19 +287,19 @@ export function OfferDetailsView({
                 setShowDecisionInput(true);
                 setDecisionType("approved");
               }}
-              className="flex h-9 items-center gap-1.5 rounded-lg bg-neutral-950 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800"
+              className="flex h-9 items-center gap-1.5 rounded-lg bg-emerald-800 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition"
             >
               Review / Decide Offer
             </button>
           ) : null}
 
           {/* Commercial Acceptance -> Move to Sold (Admin or Moderator when approved) */}
-          {(isAdmin || isModerator) && offer.approvalStatus === "approved" && offer.statusKey !== "accepted" ? (
+          {(isAdmin || isModerator) && offer.approvalStatus === "approved" && !isSold ? (
             <button
               type="button"
               disabled={acceptingSubmitting}
               onClick={handleCommercialAccept}
-              className="flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
+              className="flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition"
             >
               {acceptingSubmitting ? "Processing…" : "Accept Offer (Mark Sold)"}
             </button>
@@ -292,7 +316,7 @@ export function OfferDetailsView({
                     if (err) setActionError(err);
                     else setActionNotice("Submitted offer for Admin review.");
                   }}
-                  className="flex h-9 items-center gap-1.5 rounded-lg bg-neutral-900 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800"
+                  className="flex h-9 items-center gap-1.5 rounded-lg bg-neutral-900 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 transition"
                 >
                   Submit for Admin Review
                 </button>
@@ -300,14 +324,14 @@ export function OfferDetailsView({
               <button
                 type="button"
                 onClick={() => setStatusModalOpen(true)}
-                className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 shadow-2xs transition"
               >
                 Update Status
               </button>
               <button
                 type="button"
                 onClick={() => setEditModalOpen(true)}
-                className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 shadow-2xs transition"
               >
                 Edit
               </button>
@@ -318,7 +342,7 @@ export function OfferDetailsView({
                     await onDeleteOffer?.(offer.id);
                   }
                 }}
-                className="flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
               >
                 Delete
               </button>
@@ -328,7 +352,7 @@ export function OfferDetailsView({
       </div>
 
       {actionNotice ? (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-800 shadow-2xs">
           <span>{actionNotice}</span>
           <button type="button" onClick={() => setActionNotice(null)} className="font-bold">
             &times;
@@ -336,7 +360,7 @@ export function OfferDetailsView({
         </div>
       ) : null}
       {actionError ? (
-        <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+        <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-800 shadow-2xs">
           <span>{actionError}</span>
           <button type="button" onClick={() => setActionError(null)} className="font-bold">
             &times;
@@ -344,14 +368,66 @@ export function OfferDetailsView({
         </div>
       ) : null}
 
+      {/* 2. Visual Deal Progress Tracker Pipeline */}
+      <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
+        <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider mb-4">
+          Commercial Deal Lifecycle Stage
+        </h3>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { step: 1, title: "1. Submission", desc: "Registered & Draft" },
+            { step: 2, title: "2. Admin Appraisal", desc: "Verification & Review" },
+            { step: 3, title: "3. Trade Negotiation", desc: "Terms & Margins" },
+            { step: 4, title: "4. Final Execution", desc: "Accepted (Sold Deal)" },
+          ].map((s) => {
+            const isPassed = currentPipelineStage > s.step;
+            const isCurrent = currentPipelineStage === s.step;
+            return (
+              <div
+                key={s.step}
+                className={cn(
+                  "rounded-lg border p-3 transition-colors",
+                  isCurrent
+                    ? "border-emerald-600 bg-emerald-50/60 ring-1 ring-emerald-600/30"
+                    : isPassed
+                    ? "border-neutral-200 bg-neutral-50/70"
+                    : "border-neutral-200/60 bg-white opacity-60"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className={cn(
+                      "text-xs font-bold",
+                      isCurrent
+                        ? "text-emerald-900"
+                        : isPassed
+                        ? "text-neutral-900"
+                        : "text-neutral-400"
+                    )}
+                  >
+                    {s.title}
+                  </span>
+                  {isPassed ? (
+                    <span className="text-emerald-600 text-xs font-bold">✓</span>
+                  ) : isCurrent ? (
+                    <span className="h-2 w-2 rounded-full bg-emerald-600 animate-pulse" />
+                  ) : null}
+                </div>
+                <p className="mt-1 text-[11px] text-neutral-500">{s.desc}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Admin Decision Inline Panel */}
       {showDecisionInput && isAdmin ? (
         <form
           onSubmit={handleAdminDecision}
-          className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 shadow-sm"
+          className="rounded-xl border border-amber-300 bg-amber-50/70 p-5 shadow-sm"
         >
           <div className="flex items-center justify-between border-b border-amber-200 pb-2">
-            <h3 className="text-sm font-semibold text-neutral-900">Admin Offer Decision</h3>
+            <h3 className="text-sm font-semibold text-neutral-900">Admin Offer Decision &amp; Pricing Clearance</h3>
             <button
               type="button"
               onClick={() => setShowDecisionInput(false)}
@@ -362,7 +438,7 @@ export function OfferDetailsView({
           </div>
           <div className="mt-3 space-y-3">
             <div className="flex items-center gap-4">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 cursor-pointer">
                 <input
                   type="radio"
                   name="decision"
@@ -371,7 +447,7 @@ export function OfferDetailsView({
                 />
                 Approve Offer
               </label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-rose-800">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-rose-800 cursor-pointer">
                 <input
                   type="radio"
                   name="decision"
@@ -390,7 +466,7 @@ export function OfferDetailsView({
                   value={decisionNote}
                   onChange={(e) => setDecisionNote(e.target.value)}
                   placeholder="Enter notes, pricing approval comments, or rejection explanation..."
-                  className="mt-1 w-full rounded-lg border border-neutral-300 bg-white p-2 text-xs text-neutral-900"
+                  className="mt-1 w-full rounded-lg border border-neutral-300 bg-white p-2.5 text-xs text-neutral-900 focus:border-emerald-700 focus:outline-hidden"
                 />
               </label>
             </div>
@@ -399,11 +475,12 @@ export function OfferDetailsView({
               <button
                 type="submit"
                 disabled={decisionSubmitting}
-                className={`rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs ${
+                className={cn(
+                  "rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs transition disabled:opacity-50",
                   decisionType === "approved"
                     ? "bg-emerald-600 hover:bg-emerald-700"
                     : "bg-rose-600 hover:bg-rose-700"
-                } disabled:opacity-50`}
+                )}
               >
                 {decisionSubmitting ? "Submitting…" : `Confirm ${decisionType === "approved" ? "Approval" : "Rejection"}`}
               </button>
@@ -414,37 +491,37 @@ export function OfferDetailsView({
 
       {/* Admin Decision History Note if present */}
       {offer.adminDecisionNote ? (
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-xs">
+        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
           <p className="text-xs font-bold text-neutral-900">
             Admin Decision &bull; {offer.approvalLabel}
           </p>
-          <p className="mt-1 text-xs text-neutral-700 whitespace-pre-wrap">{offer.adminDecisionNote}</p>
+          <p className="mt-1.5 text-xs text-neutral-700 whitespace-pre-wrap leading-relaxed">{offer.adminDecisionNote}</p>
           <p className="mt-2 text-[11px] text-neutral-400">
             Decided by {offer.decidedByName || "Admin"} on {offer.decidedAt?.slice(0, 10)}
           </p>
         </div>
       ) : null}
 
-      {/* 2. COMPLETE DOSSIER — ONE FULL PAGE WITHOUT NESTED TABS */}
+      {/* 3. COMPLETE DOSSIER CARDS (2/3 + 1/3 Grid) */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Column (2/3 width) */}
         <div className="space-y-6 lg:col-span-2">
           {/* Linked PO Banner */}
           {offer.poNumber ? (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 shadow-xs">
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 shadow-2xs">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[11px] font-bold tracking-wider text-indigo-700 uppercase">
                     Associated Purchase Order
                   </span>
-                  <p className="mt-1 text-sm font-bold text-neutral-950">
+                  <p className="mt-1 text-sm font-bold text-neutral-950 font-mono">
                     Linked to PO: {offer.poNumber}
                   </p>
                 </div>
                 {!isOffersUser ? (
                   <Link
                     href={`/purchases/${offer.poNumber}`}
-                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                    className="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition shadow-2xs"
                   >
                     View Purchase Order &rarr;
                   </Link>
@@ -454,9 +531,9 @@ export function OfferDetailsView({
           ) : null}
 
           {/* Material Specifications Card */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-xs">
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
             <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Material & Quantity Specifications
+              Material &amp; Quantity Specifications
             </h2>
             <dl className="mt-4 grid grid-cols-2 gap-4 text-xs sm:grid-cols-3">
               <div>
@@ -473,13 +550,13 @@ export function OfferDetailsView({
               </div>
               <div>
                 <dt className="text-neutral-500">Quantity</dt>
-                <dd className="mt-1 text-sm font-semibold text-neutral-900">
+                <dd className="mt-1 text-sm font-semibold text-neutral-900 font-mono">
                   {offer.quantity.toLocaleString()} {offer.unit}
                 </dd>
               </div>
               <div>
                 <dt className="text-neutral-500">Truck Loads</dt>
-                <dd className="mt-1 text-sm font-semibold text-neutral-900">{offer.truckLoads} loads</dd>
+                <dd className="mt-1 text-sm font-semibold text-neutral-900 font-mono">{offer.truckLoads} loads</dd>
               </div>
               <div>
                 <dt className="text-neutral-500">Packaging Type</dt>
@@ -488,7 +565,7 @@ export function OfferDetailsView({
             </dl>
             {offer.description ? (
               <div className="mt-4 border-t border-neutral-100 pt-3">
-                <span className="text-xs text-neutral-500">Description & Technical Details</span>
+                <span className="text-xs text-neutral-500">Description &amp; Technical Details</span>
                 <p className="mt-1 text-xs text-neutral-800 leading-relaxed whitespace-pre-wrap">
                   {offer.description}
                 </p>
@@ -496,14 +573,14 @@ export function OfferDetailsView({
             ) : null}
           </div>
 
-          {/* Client & Contact Information (Strict requirement for selling offers) */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-xs">
+          {/* Client & Counterparty Information */}
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
             <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Client & Counterparty Information
+              Commercial Counterparty &amp; Contacts
             </h2>
             <dl className="mt-4 grid grid-cols-1 gap-4 text-xs sm:grid-cols-3">
               <div>
-                <dt className="text-neutral-500">Client / Company Name</dt>
+                <dt className="text-neutral-500">Company / Client Name</dt>
                 <dd className="mt-1 text-sm font-semibold text-neutral-900">
                   {offer.clientName || "Not specified"}
                 </dd>
@@ -512,7 +589,7 @@ export function OfferDetailsView({
                 <dt className="text-neutral-500">Contact Number</dt>
                 <dd className="mt-1 text-sm font-semibold text-neutral-900">
                   {offer.contactNumber ? (
-                    <a href={`tel:${offer.contactNumber}`} className="text-indigo-600 hover:underline">
+                    <a href={`tel:${offer.contactNumber}`} className="text-emerald-800 hover:underline">
                       {offer.contactNumber}
                     </a>
                   ) : (
@@ -524,7 +601,7 @@ export function OfferDetailsView({
                 <dt className="text-neutral-500">Email Address</dt>
                 <dd className="mt-1 text-sm font-semibold text-neutral-900">
                   {offer.emailAddress ? (
-                    <a href={`mailto:${offer.emailAddress}`} className="text-indigo-600 hover:underline">
+                    <a href={`mailto:${offer.emailAddress}`} className="text-emerald-800 hover:underline">
                       {offer.emailAddress}
                     </a>
                   ) : (
@@ -535,19 +612,19 @@ export function OfferDetailsView({
             </dl>
           </div>
 
-          {/* Logistics: Origin & Destination */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-xs">
+          {/* Logistics & Routing */}
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
             <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Logistics & Routing
+              Logistics &amp; Routing
             </h2>
             <dl className="mt-4 grid grid-cols-2 gap-4 text-xs">
-              <div className="rounded-lg bg-neutral-50 p-3">
+              <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-100">
                 <dt className="text-neutral-500">Origin / Loading Location</dt>
                 <dd className="mt-1 text-sm font-bold text-neutral-900">
                   📍 {offer.origin || offer.location || offer.country || "Not specified"}
                 </dd>
               </div>
-              <div className="rounded-lg bg-neutral-50 p-3">
+              <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-100">
                 <dt className="text-neutral-500">Destination / Delivery Location</dt>
                 <dd className="mt-1 text-sm font-bold text-neutral-900">
                   🏁 {offer.destination || offer.country || "Not specified"}
@@ -557,14 +634,14 @@ export function OfferDetailsView({
           </div>
 
           {/* Attached Photos & Documents (with Preview) */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-xs">
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
               <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide">
-                Attached Photos & Documents ({offer.attachments.length})
+                Attached Evidence &amp; Photos ({offer.attachments.length})
               </h2>
               {/* Upload trigger */}
               <div className="flex items-center gap-2">
-                <label className="cursor-pointer rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50">
+                <label className="cursor-pointer rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 shadow-2xs transition">
                   <span>+ Add Photo</span>
                   <input
                     type="file"
@@ -574,7 +651,7 @@ export function OfferDetailsView({
                     onChange={(e) => void handleFileUpload(e, "image")}
                   />
                 </label>
-                <label className="cursor-pointer rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50">
+                <label className="cursor-pointer rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 shadow-2xs transition">
                   <span>+ Add Document</span>
                   <input
                     type="file"
@@ -608,7 +685,7 @@ export function OfferDetailsView({
                         <span className="text-xl shrink-0">{isImg ? "🖼️" : "📄"}</span>
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-neutral-900 truncate">{att.name}</p>
-                          <p className="text-[10px] text-neutral-500">
+                          <p className="text-[10px] text-neutral-500 font-mono">
                             {Math.round((att.byteSize || 0) / 1024)} KB &bull; {att.createdAt.slice(0, 10)}
                           </p>
                         </div>
@@ -628,7 +705,7 @@ export function OfferDetailsView({
                               category: isImg ? "Photo" : "Document",
                             })
                           }
-                          className="rounded bg-white px-2.5 py-1 text-xs font-medium text-neutral-900 border border-neutral-300 hover:bg-neutral-50 shadow-2xs"
+                          className="rounded bg-white px-2.5 py-1 text-xs font-medium text-neutral-900 border border-neutral-300 hover:bg-neutral-50 shadow-2xs transition"
                         >
                           Preview
                         </button>
@@ -636,7 +713,7 @@ export function OfferDetailsView({
                           <button
                             type="button"
                             onClick={() => void onDeleteAttachment?.(att.id)}
-                            className="text-neutral-400 hover:text-rose-600 p-1"
+                            className="text-neutral-400 hover:text-rose-600 p-1 transition"
                             title="Delete attachment"
                           >
                             ✕
@@ -654,21 +731,21 @@ export function OfferDetailsView({
         {/* Right Column (1/3 width) */}
         <div className="space-y-6">
           {/* Commercial Pricing Card */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-xs">
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
             <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Commercial Pricing
+              Commercial Valuation
             </h2>
             <div className="mt-4 space-y-3">
               <div>
                 <span className="text-xs text-neutral-500">Unit Price</span>
-                <p className="text-xl font-bold text-neutral-950">
-                  {offer.pricePerUnit} {offer.currency} / {offer.unit}
+                <p className="text-xl font-bold text-neutral-950 font-mono">
+                  €{offer.pricePerUnit} / {offer.unit}
                 </p>
               </div>
               <div className="border-t border-neutral-100 pt-3">
-                <span className="text-xs text-neutral-500">Total Value</span>
-                <p className="text-2xl font-black text-emerald-700">
-                  {offer.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })} {offer.currency}
+                <span className="text-xs text-neutral-500">Total Sourced Value</span>
+                <p className="text-2xl font-black text-emerald-800 font-mono">
+                  €{offer.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 border-t border-neutral-100 pt-3 text-xs">
@@ -677,7 +754,7 @@ export function OfferDetailsView({
                   <p className="font-semibold text-neutral-900">{offer.offerType}</p>
                 </div>
                 <div>
-                  <span className="text-neutral-500">Trading Team:</span>
+                  <span className="text-neutral-500">Trading Desk:</span>
                   <p className="font-semibold text-neutral-900">{offer.team}</p>
                 </div>
               </div>
@@ -685,34 +762,34 @@ export function OfferDetailsView({
           </div>
 
           {/* Submitter & Audit Info */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-xs">
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
             <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Dossier Metadata & Submitter
+              Audit Trail &amp; Submitter
             </h2>
             <dl className="mt-4 space-y-2.5 text-xs">
               <div>
-                <dt className="text-neutral-500">Submitter Name</dt>
+                <dt className="text-neutral-500">Submitter</dt>
                 <dd className="font-semibold text-neutral-900">{offer.createdByName}</dd>
               </div>
               <div>
                 <dt className="text-neutral-500">Date Created</dt>
-                <dd className="font-semibold text-neutral-900">{offer.createdAt.slice(0, 16).replace("T", " ")}</dd>
+                <dd className="font-mono text-neutral-800">{offer.createdAt.slice(0, 16).replace("T", " ")}</dd>
               </div>
               <div>
                 <dt className="text-neutral-500">Last Updated</dt>
-                <dd className="font-semibold text-neutral-900">{offer.updatedAt.slice(0, 16).replace("T", " ")}</dd>
+                <dd className="font-mono text-neutral-800">{offer.updatedAt.slice(0, 16).replace("T", " ")}</dd>
               </div>
               <div>
-                <dt className="text-neutral-500">Approval Status</dt>
+                <dt className="text-neutral-500">Approval State</dt>
                 <dd className="font-semibold capitalize text-neutral-900">{offer.approvalStatus}</dd>
               </div>
             </dl>
           </div>
 
           {/* Discussion & Comments */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-xs">
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
             <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Discussion & Notes ({offer.comments.length})
+              Discussion &amp; Notes ({offer.comments.length})
             </h2>
 
             <div className="mt-3 space-y-2.5 max-h-60 overflow-y-auto">
@@ -720,10 +797,10 @@ export function OfferDetailsView({
                 <p className="text-xs text-neutral-400 italic">No notes yet.</p>
               ) : (
                 offer.comments.map((c) => (
-                  <div key={c.id} className="rounded-lg bg-neutral-50 p-2.5 text-xs">
+                  <div key={c.id} className="rounded-lg bg-neutral-50 p-2.5 text-xs border border-neutral-100">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-neutral-900">{c.authorName}</span>
-                      <span className="text-[10px] text-neutral-400">{c.createdAt.slice(0, 10)}</span>
+                      <span className="text-[10px] text-neutral-400 font-mono">{c.createdAt.slice(0, 10)}</span>
                     </div>
                     <p className="mt-1 text-neutral-700 whitespace-pre-wrap">{c.comment}</p>
                   </div>
@@ -736,15 +813,15 @@ export function OfferDetailsView({
                 rows={2}
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment or note..."
-                className="w-full rounded-lg border border-neutral-300 p-2 text-xs text-neutral-900"
+                placeholder="Add an internal note or discussion update..."
+                className="w-full rounded-lg border border-neutral-300 p-2 text-xs text-neutral-900 focus:border-emerald-700 focus:outline-hidden"
               />
               {commentError ? <p className="text-xs text-rose-600 mt-1">{commentError}</p> : null}
               <div className="mt-2 flex justify-end">
                 <button
                   type="submit"
                   disabled={commentSubmitting || !newComment.trim()}
-                  className="rounded-lg bg-neutral-950 px-3 py-1 text-xs font-semibold text-white hover:bg-neutral-800 disabled:opacity-50"
+                  className="rounded-lg bg-emerald-800 px-3.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition"
                 >
                   {commentSubmitting ? "Posting…" : "Add Note"}
                 </button>
