@@ -3659,7 +3659,7 @@ function removePoSoNumber(store: StoreData, actor: UserRecord, body: Record<stri
   if (!number) return { error: "Order number is required." };
   const order = orderByNumber(store, number);
   if (!order) return { error: `Order ${number} does not exist.` };
-  if (order.isRemoved) return { error: `Order ${number} has already been removed.` };
+  if (order.isRemoved || (typeof order.notes === "string" && order.notes.includes("[REMOVED]"))) return { error: `Order ${number} has already been removed.` };
 
   order.isRemoved = true;
   order.removedAt = now;

@@ -118,6 +118,13 @@ function mapPackagingType(row: Record<string, unknown>): PackagingType {
 }
 
 function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
+  const notesStr = String(row.notes ?? "");
+  const isRemoved = Boolean(
+    row.is_removed ??
+    row.isRemoved ??
+    notesStr.includes("[REMOVED]")
+  );
+
   return {
     id: String(row.id),
     number: String(row.number),
@@ -125,14 +132,14 @@ function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
     companyId: String(row.company_id),
     status: (row.status as PurchaseOrder["status"]) ?? "submitted",
     valueEur: Number(row.value_eur ?? 0),
-    notes: String(row.notes ?? ""),
+    notes: notesStr,
     createdBy: String(row.created_by),
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
     type: (row.type as "PO" | "SO") || (String(row.number).toUpperCase().startsWith("SO") ? "SO" : "PO"),
     warehouseId: typeof row.warehouse_id === "string" ? row.warehouse_id : (typeof row.warehouseId === "string" ? row.warehouseId : null),
-    isRemoved: Boolean(row.is_removed ?? row.isRemoved ?? false),
-    removedAt: typeof row.removed_at === "string" ? row.removed_at : (typeof row.removedAt === "string" ? row.removedAt : null),
+    isRemoved,
+    removedAt: typeof row.removed_at === "string" ? row.removed_at : (typeof row.removedAt === "string" ? row.removedAt : (isRemoved ? String(row.updated_at ?? row.created_at) : null)),
     removedBy: typeof row.removed_by === "string" ? row.removed_by : (typeof row.removedBy === "string" ? row.removedBy : null),
     assignedWorkerId: typeof row.assigned_worker_id === "string" ? row.assigned_worker_id : (typeof row.assignedWorkerId === "string" ? row.assignedWorkerId : null),
     assignedBy: typeof row.assigned_by === "string" ? row.assigned_by : (typeof row.assignedBy === "string" ? row.assignedBy : null),
@@ -1239,8 +1246,25 @@ export class SupabaseAdapter {
               },
               token
             );
-            if (!updRes.ok && !updRes.error?.includes("No matching record")) {
-              error = updRes.error;
+            if (!updRes.ok) {
+              // Backward-compatible fallback: if is_removed column is not yet in PostgREST schema cache,
+              // update status to 'declined' and append '[REMOVED]' marker to notes.
+              // This strictly uses standard columns (status, notes, updated_at) available in all schema versions.
+              const fallbackRes = await this.client.update(
+                "purchase_orders",
+                `number=eq.${encodeURIComponent(numVal)}`,
+                {
+                  status: "declined",
+                  notes: `[REMOVED] Order number entry removed by ${profile.name} on ${this.now()}. Operational records preserved.`,
+                  updated_at: this.now(),
+                },
+                token
+              );
+              if (!fallbackRes.ok && !fallbackRes.error?.includes("No matching record")) {
+                error = fallbackRes.error;
+              } else {
+                notice = `${numVal} number entry has been removed. Operational history preserved.`;
+              }
             } else {
               notice = `${numVal} number entry has been removed. Operational history preserved.`;
             }

@@ -94,7 +94,7 @@ export function PurchaseList() {
   const rows = useMemo(() => {
     return allOrders.filter((order) => {
       // Exclude removed number entries
-      if (order.isRemoved) return false;
+      if (order.isRemoved || (typeof order.notes === "string" && order.notes.includes("[REMOVED]"))) return false;
 
       // Status filter
       if (statusFilter !== "All" && order.status !== statusFilter) return false;
