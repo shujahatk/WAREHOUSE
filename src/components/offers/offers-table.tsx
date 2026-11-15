@@ -241,8 +241,8 @@ export function OffersTable({
                 mode === "purchasing"
                   ? "Search by offer #, material, supplier, location..."
                   : mode === "selling"
-                  ? "Search by offer #, client, linked PO, route..."
-                  : "Search offer #, material, company, country, specs..."
+                    ? "Search by offer #, client, linked PO, route..."
+                    : "Search offer #, material, company, country, specs..."
               }
               className="h-9.5 w-full rounded-lg border border-neutral-300 bg-white pl-9 pr-8 text-xs text-neutral-900 placeholder-neutral-400 focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700/20 focus:outline-hidden transition shadow-2xs"
             />
@@ -399,14 +399,14 @@ export function OffersTable({
           teamFilter !== "all" ||
           onlyFavourites ||
           search) && (
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="ml-auto rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:text-emerald-950 hover:bg-emerald-50 transition"
-          >
-            Reset Filters
-          </button>
-        )}
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="ml-auto rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:text-emerald-950 hover:bg-emerald-50 transition"
+            >
+              Reset Filters
+            </button>
+          )}
       </div>
 
       {/* Main Enterprise Responsive Data Table */}

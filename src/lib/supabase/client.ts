@@ -244,7 +244,7 @@ export class SupabaseRestClient {
       email: string,
       password: string,
       metadata?: Record<string, unknown>,
-    ): Promise<Result<{ id: string; email: string; session?: { accessToken: string } }>> => {
+    ): Promise<Result<{ id: string; email: string; isExistingUser?: boolean; session?: { accessToken: string } }>> => {
       const url = `${this.config.url}/auth/v1/signup`;
       try {
         const response = await this.fetchImpl(url, {
@@ -266,12 +266,15 @@ export class SupabaseRestClient {
         if (!id) {
           return { ok: false, error: extractErrorMessage(data, "Failed to create user account.") };
         }
+        const identities = userObj.identities;
+        const isExistingUser = Array.isArray(identities) && identities.length === 0;
         const accessToken = typeof data.access_token === "string" ? data.access_token : undefined;
         return {
           ok: true,
           value: {
             id,
             email: typeof userObj.email === "string" ? userObj.email : email,
+            isExistingUser,
             session: accessToken ? { accessToken } : undefined,
           },
         };

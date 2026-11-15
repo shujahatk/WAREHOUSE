@@ -523,7 +523,7 @@ export class SupabaseAdapter {
       return authRes;
     }
     const accessToken = authRes.value.accessToken;
-    const profile = await this.current(accessToken);
+    let profile = await this.current(accessToken);
     if (!profile) {
       // User is either pending, rejected, inactive, or not found in public.users
       const statusRes = await this.client.rpc<{
@@ -534,35 +534,43 @@ export class SupabaseAdapter {
         active?: boolean;
       }>("rpc_get_auth_account_status", {}, accessToken);
 
-      await this.client.auth.signOut(accessToken);
-
       if (statusRes.ok && statusRes.value) {
         const status = statusRes.value;
         if (status.role === "offers_user" && status.approval_status === "pending") {
+          await this.client.auth.signOut(accessToken);
           return fail("Your account is pending administrator approval. You will receive access once approved.");
         }
         if (status.approval_status === "rejected") {
+          await this.client.auth.signOut(accessToken);
           return fail("Your registration request has been declined. Please contact the administrator.");
+        }
+        if (status.active && (status.approval_status === "approved" || !status.approval_status)) {
+          // Profile was auto-provisioned or activated by rpc_get_auth_account_status
+          profile = await this.current(accessToken);
         }
       }
 
-      // Fallback query directly on users table if RPC returned nothing
-      const checkRes = await this.client.select<Record<string, unknown>>(
-        "users",
-        `select=approval_status,role&email=eq.${encodeURIComponent(email)}`,
-        accessToken,
-      );
-      if (checkRes.ok && checkRes.value.length > 0) {
-        const u = checkRes.value[0];
-        if (u.role === "offers_user" && u.approval_status === "pending") {
-          return fail("Your account is pending administrator approval. You will receive access once approved.");
-        }
-        if (u.approval_status === "rejected") {
-          return fail("Your registration request has been declined. Please contact the administrator.");
-        }
-      }
+      if (!profile) {
+        await this.client.auth.signOut(accessToken);
 
-      return fail("This account is inactive or not linked to an active RM profile.");
+        // Fallback query directly on users table if RPC returned nothing
+        const checkRes = await this.client.select<Record<string, unknown>>(
+          "users",
+          `select=approval_status,role&email=eq.${encodeURIComponent(email)}`,
+          accessToken,
+        );
+        if (checkRes.ok && checkRes.value.length > 0) {
+          const u = checkRes.value[0];
+          if (u.role === "offers_user" && u.approval_status === "pending") {
+            return fail("Your account is pending administrator approval. You will receive access once approved.");
+          }
+          if (u.approval_status === "rejected") {
+            return fail("Your registration request has been declined. Please contact the administrator.");
+          }
+        }
+
+        return fail("This account is inactive or not linked to an active RM profile.");
+      }
     }
     this.tokenByActorId.set(profile.id, accessToken);
     this.lastAccessToken = accessToken;
@@ -880,10 +888,12 @@ export class SupabaseAdapter {
         return { state: emptyWorkspace(), actor: null, error: signUpRes.error };
       }
 
+      const authUserIdToPass = signUpRes.value.isExistingUser ? null : signUpRes.value.id;
+
       const rpcRes = await this.client.rpc<Record<string, unknown>>(
         "rpc_register_offers_user",
         {
-          p_auth_user_id: signUpRes.value.id,
+          p_auth_user_id: authUserIdToPass,
           p_email: emailVal,
           p_name: nameVal,
           p_company: companyVal || null,
@@ -903,7 +913,15 @@ export class SupabaseAdapter {
             state: emptyWorkspace(),
             actor: null,
             error:
-              "Database migration required: The function 'public.rpc_register_offers_user' is not installed in Supabase. Please apply migration 0007_worker_assignments_and_offers_portal.sql in the Supabase Dashboard SQL Editor.",
+              "Database migration required: The function 'public.rpc_register_offers_user' is not installed in Supabase. Please apply the migration script in the Supabase Dashboard SQL Editor.",
+          };
+        }
+        if (rawErr.includes("users_auth_user_id_fkey") || rawErr.includes("foreign key constraint")) {
+          return {
+            state: emptyWorkspace(),
+            actor: null,
+            error:
+              "This email is already registered in the system. Please sign in with your email and password, or run the updated migration in the Supabase Dashboard SQL editor.",
           };
         }
         return { state: emptyWorkspace(), actor: null, error: rawErr };
@@ -912,7 +930,9 @@ export class SupabaseAdapter {
       return {
         state: emptyWorkspace(),
         actor: null,
-        notice: "Registration submitted. Pending admin approval.",
+        notice: signUpRes.value.isExistingUser
+          ? "Account verified. Your Offers User profile is ready. You can now sign in."
+          : "Registration submitted. Pending admin approval.",
       };
     }
 

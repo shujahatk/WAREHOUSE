@@ -178,6 +178,55 @@ async function test() {
   });
 
   console.log('ALL isolated tests for Migration 0007 PASSED cleanly!');
+
+  // Additional test: Fake auth UUID when email exists in auth.users
+  const existingRealAuthId = '22222222-2222-2222-2222-222222222222';
+  await db.query(`insert into auth.users (id, email) values ('${existingRealAuthId}'::uuid, 'shujahatk17@gmail.com')`);
+  
+  // Register with dummy fake UUID (like Supabase Auth returns when user already exists)
+  const fakeUuid = '0dfb7909-1111-2222-3333-444444444444';
+  const dummyRes = await db.query(`
+    select public.rpc_register_offers_user(
+      '${fakeUuid}'::uuid,
+      'shujahatk17@gmail.com',
+      'Shujahat Khan',
+      'minetech',
+      'Test dummy UUID handling'
+    ) as result;
+  `);
+  console.log('rpc_register_offers_user with fake UUID result:', dummyRes.rows[0].result);
+  const shujahatRow = await db.query(`select * from public.users where email = 'shujahatk17@gmail.com'`);
+  console.log('Shujahat user record in public.users:', {
+    id: shujahatRow.rows[0].id,
+    auth_user_id: shujahatRow.rows[0].auth_user_id,
+    expected_real_auth_id: existingRealAuthId,
+    email: shujahatRow.rows[0].email,
+    approval_status: shujahatRow.rows[0].approval_status
+  });
+  if (shujahatRow.rows[0].auth_user_id !== existingRealAuthId) {
+    throw new Error('Expected auth_user_id to be resolved to genuine auth.users ID!');
+  }
+
+  // Additional test: Register with null auth UUID when email doesn't exist
+  const nullAuthRes = await db.query(`
+    select public.rpc_register_offers_user(
+      null,
+      'newpartner@example.com',
+      'New Partner',
+      'New Corp',
+      'No auth account yet'
+    ) as result;
+  `);
+  console.log('rpc_register_offers_user with null auth UUID result:', nullAuthRes.rows[0].result);
+  const newPartnerRow = await db.query(`select * from public.users where email = 'newpartner@example.com'`);
+  console.log('New partner record in public.users:', {
+    id: newPartnerRow.rows[0].id,
+    auth_user_id: newPartnerRow.rows[0].auth_user_id,
+    email: newPartnerRow.rows[0].email
+  });
+  if (newPartnerRow.rows[0].auth_user_id !== null) {
+    throw new Error('Expected auth_user_id to be null when not in auth.users!');
+  }
 }
 
 test().catch((err) => {

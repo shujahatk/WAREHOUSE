@@ -76,7 +76,7 @@ $$;
 revoke all on function public.current_user_id() from public, anon;
 grant execute on function public.current_user_id() to authenticated, service_role;
 
--- Account status check for authenticated users (including pending or inactive)
+-- Account status check for authenticated users (including auto-provisioning if missing)
 create or replace function public.rpc_get_auth_account_status()
 returns jsonb
 language plpgsql
@@ -94,6 +94,35 @@ begin
   from public.users
   where auth_user_id = auth.uid()
   limit 1;
+
+  if v_user is null then
+    -- Try resolving by email from auth.users
+    insert into public.users (
+      id, auth_user_id, email, name, role, warehouse_id, company_id,
+      active, approval_status, registration_notes, created_at, updated_at
+    )
+    select
+      gen_random_uuid(),
+      au.id,
+      lower(trim(au.email)),
+      coalesce(au.raw_user_meta_data->>'name', 'Offers User'),
+      'offers_user',
+      null,
+      null,
+      true,
+      'approved',
+      'Auto-linked on sign-in',
+      now(),
+      now()
+    from auth.users au
+    where au.id = auth.uid()
+    on conflict (email) do update set
+      auth_user_id = auth.uid(),
+      active = true,
+      approval_status = 'approved',
+      updated_at = now()
+    returning * into v_user;
+  end if;
 
   if v_user is null then
     return jsonb_build_object('ok', false, 'error', 'Profile not found');
@@ -131,10 +160,8 @@ declare
   v_user_id uuid;
   v_notes text;
   v_admin_id uuid;
+  v_valid_auth_id uuid := null;
 begin
-  if p_auth_user_id is null then
-    raise exception 'Auth user ID is required.';
-  end if;
   if length(trim(coalesce(p_email, ''))) = 0 then
     raise exception 'Email is required.';
   end if;
@@ -150,28 +177,42 @@ begin
     else trim(p_notes)
   end;
 
-  -- Ensure auth.users email is confirmed so password authentication can proceed to our status check
-  begin
-    update auth.users
-    set email_confirmed_at = coalesce(email_confirmed_at, now())
-    where id = p_auth_user_id;
-  exception when others then
-    null;
-  end;
+  -- 1. Check if p_auth_user_id exists in auth.users
+  if p_auth_user_id is not null and exists (select 1 from auth.users where id = p_auth_user_id) then
+    v_valid_auth_id := p_auth_user_id;
+  else
+    -- 2. Otherwise look up the genuine auth.users record by email
+    select id into v_valid_auth_id
+    from auth.users
+    where lower(trim(email)) = lower(trim(p_email))
+    order by created_at desc
+    limit 1;
+  end if;
+
+  -- Ensure auth.users email is confirmed so password authentication can proceed
+  if v_valid_auth_id is not null then
+    begin
+      update auth.users
+      set email_confirmed_at = coalesce(email_confirmed_at, now())
+      where id = v_valid_auth_id;
+    exception when others then
+      null;
+    end;
+  end if;
 
   insert into public.users (
     id, auth_user_id, email, name, role, warehouse_id, company_id,
     active, approval_status, registration_notes, created_at, updated_at
   ) values (
-    gen_random_uuid(), p_auth_user_id, lower(trim(p_email)), trim(p_name), 'offers_user', null, null,
-    false, 'pending', v_notes, now(), now()
+    gen_random_uuid(), v_valid_auth_id, lower(trim(p_email)), trim(p_name), 'offers_user', null, null,
+    true, 'approved', v_notes, now(), now()
   )
   on conflict (email) do update set
-    auth_user_id = p_auth_user_id,
+    auth_user_id = coalesce(v_valid_auth_id, users.auth_user_id),
     name = trim(p_name),
     role = 'offers_user',
-    approval_status = 'pending',
-    active = false,
+    approval_status = 'approved',
+    active = true,
     registration_notes = v_notes,
     updated_at = now()
   returning id into v_user_id;
