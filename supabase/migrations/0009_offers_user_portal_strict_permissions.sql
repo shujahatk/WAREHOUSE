@@ -390,3 +390,4 @@ grant execute on function public.rpc_register_offers_user(uuid, text, text, text
 
 -- 7. Explicitly reload PostgREST schema cache
 notify pgrst, 'reload schema';
+

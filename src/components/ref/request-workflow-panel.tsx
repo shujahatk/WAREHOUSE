@@ -453,21 +453,13 @@ export function RequestWorkflowPanel({
               </div>
             ) : null}
 
-            {/* When Deleted or Declined: Worker can create a new request */}
+            {/* When Deleted or Declined notice */}
             {isWorkerAtWarehouse &&
             (activeRequest.status === "deleted" || activeRequest.status === "declined") ? (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-neutral-600">
-                  This request is {activeRequest.status}. Create a new request to start fresh.
+                  This request is {activeRequest.status}. New tasks and operational PO/SO orders are assigned by Staff.
                 </p>
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={handleCreate}
-                  className="h-10 rounded-lg bg-neutral-950 px-4 text-xs font-medium text-white transition hover:bg-neutral-800 disabled:opacity-40"
-                >
-                  Create new request
-                </button>
               </div>
             ) : null}
 

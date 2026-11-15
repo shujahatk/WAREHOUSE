@@ -57,7 +57,6 @@ test("Worker can create requests across all 6 categories with attachments", asyn
     const categories = [
       "materials_packaging",
       "stock_issue",
-      "loading_unloading",
       "equipment_maintenance",
       "missing_documents",
       "other",
@@ -83,8 +82,17 @@ test("Worker can create requests across all 6 categories with attachments", asyn
       assert.ok(res.notice?.includes("submitted"));
     }
 
+    // Workers cannot create loading_unloading (PO/SO) requests; moved to Staff
+    const posoRes = await store.run(bobSign.value.sessionId, "createGeneralRequest", {
+      category: "loading_unloading",
+      priority: "high",
+      description: "Worker attempt to create PO/SO request",
+    });
+    assert.ok(posoRes.error);
+    assert.match(posoRes.error, /Workers cannot create PO\/SO requests/i);
+
     const view = await store.view(bobSign.value.sessionId);
-    assert.equal(view.state.generalRequests.length, 6);
+    assert.equal(view.state.generalRequests.length, 5);
     for (const req of view.state.generalRequests) {
       assert.equal(req.createdByName, "Bob Worker");
       assert.equal(req.warehouse, "Bornem");
@@ -288,7 +296,7 @@ test("Admin lifecycle & operational read-only enforcement: Admin can approve and
       category: "other",
       description: "Admin attempting to create worker request",
     });
-    assert.ok(adminSubmit.error?.includes("Only a Worker"));
+    assert.ok(adminSubmit.error?.includes("Worker"));
 
     // Admin rejects without reason -> must fail
     const rejectNoReason = await store.run(ownerSign.value.sessionId, "decideGeneralRequest", {

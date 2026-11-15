@@ -129,6 +129,11 @@ function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
     createdBy: String(row.created_by),
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
+    type: (row.type as "PO" | "SO") || (String(row.number).toUpperCase().startsWith("SO") ? "SO" : "PO"),
+    warehouseId: typeof row.warehouse_id === "string" ? row.warehouse_id : (typeof row.warehouseId === "string" ? row.warehouseId : null),
+    isRemoved: Boolean(row.is_removed ?? row.isRemoved ?? false),
+    removedAt: typeof row.removed_at === "string" ? row.removed_at : (typeof row.removedAt === "string" ? row.removedAt : null),
+    removedBy: typeof row.removed_by === "string" ? row.removed_by : (typeof row.removedBy === "string" ? row.removedBy : null),
     assignedWorkerId: typeof row.assigned_worker_id === "string" ? row.assigned_worker_id : (typeof row.assignedWorkerId === "string" ? row.assignedWorkerId : null),
     assignedBy: typeof row.assigned_by === "string" ? row.assigned_by : (typeof row.assignedBy === "string" ? row.assignedBy : null),
     assignedAt: typeof row.assigned_at === "string" ? row.assigned_at : (typeof row.assignedAt === "string" ? row.assignedAt : null),
@@ -1128,16 +1133,48 @@ export class SupabaseAdapter {
 
     try {
       switch (name) {
-        case "createPurchase": {
+        case "createPurchase":
+        case "createOrder": {
+          if (profile.role !== "manager") {
+            error = "Only Staff can create PO/SO orders.";
+            break;
+          }
+          const orderType = (text(body.type) || (text(body.number).toUpperCase().startsWith("SO") ? "SO" : "PO")).toUpperCase() as "PO" | "SO";
+          const partner = text(body.partner || body.supplier || body.customer);
+          const material = text(body.material);
+          const quantityKg = num(body.quantityKg);
+          const valueEur = num(body.valueEur);
+          const customNumber = text(body.number);
+          const warehouseId = text(body.warehouseId) || null;
+
+          if (!partner || !material || quantityKg < 0 || valueEur < 0) {
+            error = `${orderType === "SO" ? "Customer" : "Supplier"}, material, quantity, and value are required.`;
+            break;
+          }
+
+          const compRes = await this.client.insert<Record<string, unknown>>(
+            "companies",
+            { name: partner, kind: orderType === "SO" ? "customer" : "supplier", active: true },
+            token,
+            { upsert: true, onConflict: "name,kind" },
+          );
+          if (!compRes.ok) {
+            error = compRes.error;
+            break;
+          }
+
           const res = await svc.purchaseOrders.create({
-            supplier: text(body.supplier),
-            material: text(body.material),
-            quantityKg: num(body.quantityKg),
-            valueEur: num(body.valueEur),
+            supplier: partner,
+            material,
+            quantityKg,
+            valueEur,
             actorId: profile.id,
           });
-          if (!res.ok) error = res.error;
-          else notice = `${res.value.number} was submitted for approval.`;
+          if (!res.ok) {
+            error = res.error;
+          } else {
+            notice = `${res.value.number} was submitted for approval.`;
+          }
           break;
         }
         case "approve": {
@@ -1152,10 +1189,19 @@ export class SupabaseAdapter {
           else notice = `${res.value.number} is declined.`;
           break;
         }
-        case "editPurchase": {
+        case "editPurchase":
+        case "editOrder": {
+          if (profile.role !== "manager") {
+            error = "Only Staff can edit a PO/SO order.";
+            break;
+          }
+          if (body.workerId !== undefined || body.assignedWorker !== undefined || body.assignedWorkerId !== undefined) {
+            error = "Staff cannot change the Worker assigned to an operation.";
+            break;
+          }
           const res = await svc.purchaseOrders.edit({
             number: text(body.number),
-            supplier: text(body.supplier),
+            supplier: text(body.partner || body.supplier || body.customer),
             material: text(body.material),
             quantityKg: num(body.quantityKg),
             valueEur: num(body.valueEur),
@@ -1163,6 +1209,44 @@ export class SupabaseAdapter {
           });
           if (!res.ok) error = res.error;
           else notice = `${res.value.number} was updated.`;
+          break;
+        }
+        case "removePoSoNumber":
+        case "removeOrder": {
+          if (profile.role !== "manager") {
+            error = "Only Staff can remove a PO/SO number.";
+            break;
+          }
+          const numVal = text(body.number || body.poNumber);
+          if (!numVal) {
+            error = "Order number is required.";
+            break;
+          }
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_remove_poso_number",
+            { p_number: numVal },
+            token
+          );
+          if (!rpcRes.ok) {
+            const updRes = await this.client.update(
+              "purchase_orders",
+              `number=eq.${encodeURIComponent(numVal)}`,
+              {
+                is_removed: true,
+                removed_at: this.now(),
+                removed_by: profile.id,
+                updated_at: this.now(),
+              },
+              token
+            );
+            if (!updRes.ok && !updRes.error?.includes("No matching record")) {
+              error = updRes.error;
+            } else {
+              notice = `${numVal} number entry has been removed. Operational history preserved.`;
+            }
+          } else {
+            notice = `${numVal} number entry has been removed. Operational history preserved.`;
+          }
           break;
         }
         case "deletePurchase":
@@ -2365,7 +2449,9 @@ export class SupabaseAdapter {
             if (
               rawErr.includes("rpc_delete_user_account") ||
               rawErr.includes("schema cache") ||
-              rawErr.includes("PGRST202")
+              rawErr.includes("PGRST202") ||
+              rawErr.includes("permission denied") ||
+              rawErr.includes("42501")
             ) {
               if (targetUserId === profile.id) {
                 error = "You cannot delete your own administrator account.";
@@ -2376,51 +2462,19 @@ export class SupabaseAdapter {
                 error = "The last active administrator account cannot be deleted.";
                 break;
               }
-              const [poRes, reqRes, docRes] = await Promise.all([
-                this.client.select<Record<string, unknown>>("purchase_orders", `select=id&created_by=eq.${targetUserId}&limit=1`, token),
-                this.client.select<Record<string, unknown>>("worker_general_requests", `select=id&created_by=eq.${targetUserId}&limit=1`, token),
-                this.client.select<Record<string, unknown>>("documents", `select=id&created_by=eq.${targetUserId}&limit=1`, token),
-              ]);
-              const hasRecords = (poRes.ok && poRes.value.length > 0) ||
-                                 (reqRes.ok && reqRes.value.length > 0) ||
-                                 (docRes.ok && docRes.value.length > 0);
-
-              if (hasRecords) {
-                const delEmail = targetEmail ? `${targetEmail}.deleted.${Date.now()}` : `deleted.${targetUserId}.${Date.now()}@stockflow.internal`;
-                const updRes = await this.client.update("users", `id=eq.${targetUserId}`, {
-                  auth_user_id: null,
-                  active: false,
-                  approval_status: "rejected",
-                  email: delEmail,
-                  registration_notes: `Account deactivated and credentials unlinked by ${profile.name} on ${this.now()} (operational records preserved)`,
-                  updated_at: this.now(),
-                }, token);
-                if (!updRes.ok) {
-                  error = updRes.error;
-                } else {
-                  notice = "User account deactivated and credentials unlinked (historical operational records preserved).";
-                }
+              const delEmail = targetEmail ? `${targetEmail}.deleted.${Date.now()}` : `deleted.${targetUserId}.${Date.now()}@stockflow.internal`;
+              const updRes = await this.client.update("users", `id=eq.${targetUserId}`, {
+                auth_user_id: null,
+                active: false,
+                approval_status: "rejected",
+                email: delEmail,
+                registration_notes: `Account deleted and credentials unlinked by ${profile.name} on ${this.now()} (operational records preserved)`,
+                updated_at: this.now(),
+              }, token);
+              if (!updRes.ok && !updRes.error?.includes("No matching record")) {
+                error = updRes.error;
               } else {
-                const delRes = await this.client.delete("users", `id=eq.${targetUserId}`, token);
-                if (!delRes.ok) {
-                  // Fallback: If delete fails (permission denied on direct table DELETE), unlink credentials and scramble email
-                  const delEmail = targetEmail ? `${targetEmail}.deleted.${Date.now()}` : `deleted.${targetUserId}.${Date.now()}@stockflow.internal`;
-                  const updRes = await this.client.update("users", `id=eq.${targetUserId}`, {
-                    auth_user_id: null,
-                    active: false,
-                    approval_status: "rejected",
-                    email: delEmail,
-                    registration_notes: `Account deleted and credentials unlinked by ${profile.name} on ${this.now()}`,
-                    updated_at: this.now(),
-                  }, token);
-                  if (!updRes.ok) {
-                    error = updRes.error;
-                  } else {
-                    notice = "User account permanently removed.";
-                  }
-                } else {
-                  notice = "User account permanently deleted.";
-                }
+                notice = "User account permanently removed.";
               }
             } else {
               error = rpcRes.error;

@@ -187,6 +187,11 @@ function ensureOrder(store: StoreData, number: string, companyId: string, actorI
     status: "draft",
     valueEur: 0,
     notes: "",
+    type: (number.startsWith("SO-") ? "SO" : "PO") as "PO" | "SO",
+    warehouseId: null,
+    isRemoved: false,
+    removedAt: null,
+    removedBy: null,
     assignedWorkerId: null,
     assignedBy: null,
     assignedAt: null,
@@ -243,6 +248,24 @@ export function nextPurchaseOrderNumber(store: StoreData, now: string): string {
   const numStr = `PO-${currentYear}-${String(seq.next).padStart(4, "0")}`;
   seq.next += 1;
   return numStr;
+}
+
+export function nextSalesOrderNumber(store: StoreData, now: string): string {
+  const currentYear = new Date(now).getUTCFullYear() || new Date().getUTCFullYear();
+  let highest = 0;
+  const regex = new RegExp(`^SO-${currentYear}-(\\d{4,})$`, "i");
+  for (const po of store.purchaseOrders) {
+    const match = po.number.match(regex);
+    if (match) {
+      const val = parseInt(match[1], 10);
+      if (val > highest) highest = val;
+    }
+  }
+  let next = highest + 1;
+  while (store.purchaseOrders.some((po) => same(po.number, `SO-${currentYear}-${String(next).padStart(4, "0")}`))) {
+    next += 1;
+  }
+  return `SO-${currentYear}-${String(next).padStart(4, "0")}`;
 }
 
 export function cleanupExpiredPendingUploads(store: StoreData, now: string): number {
@@ -426,16 +449,20 @@ export function createGeneralRequest(
   payload: Record<string, unknown>,
   now: string
 ): Result<WorkerGeneralRequest> {
-  if (actor.role !== "worker") {
-    return fail("Only a Worker can submit a warehouse request.");
+  if (actor.role !== "worker" && actor.role !== "manager") {
+    return fail("Only Staff or a Worker can submit a warehouse request.");
   }
-  if (!actor.warehouseId) {
+  if (actor.role === "worker" && !actor.warehouseId) {
     return fail("A worker must be assigned to one warehouse.");
   }
 
   const categoryResult = generalRequestCategorySchema.safeParse(payload.category);
   if (!categoryResult.success) {
     return fail("Choose a valid request category.");
+  }
+
+  if (actor.role === "worker" && categoryResult.data === "loading_unloading") {
+    return fail("Workers cannot create PO/SO requests. PO and SO request management has been moved to Staff.");
   }
 
   const priorityResult = generalRequestPrioritySchema.safeParse(payload.priority || "normal");
@@ -517,7 +544,7 @@ export function createGeneralRequest(
     category: categoryResult.data,
     priority,
     description: finalDescription,
-    warehouseId: actor.warehouseId,
+    warehouseId: actor.warehouseId || store.warehouses[0]?.id || "",
     shipmentId,
     purchaseOrderId,
     createdBy: actor.id,
@@ -774,7 +801,7 @@ export function createStaffOperationalRequest(
   const partner = upsertCompany(store, partnerName, operationType === "loading" ? "customer" : "supplier", randomUUID);
   let existingPo = store.purchaseOrders.find((p) => p.number === poSoNumber);
   if (!existingPo) {
-    existingPo = {
+    const newPo: PurchaseOrder = {
       id: randomUUID(),
       number: poSoNumber,
       title: `${operationType === "loading" ? "Sales Order" : "Purchase Order"} - ${partnerName}`,
@@ -782,6 +809,11 @@ export function createStaffOperationalRequest(
       status: "draft",
       valueEur: (price || 1) * quantity,
       notes: instructions || "",
+      type: (operationType === "loading" || poSoNumber.startsWith("SO-") ? "SO" : "PO") as "PO" | "SO",
+      warehouseId: wh.id,
+      isRemoved: false,
+      removedAt: null,
+      removedBy: null,
       assignedWorkerId,
       assignedBy: actor.id,
       assignedAt: now,
@@ -794,7 +826,8 @@ export function createStaffOperationalRequest(
       updatedAt: now,
       createdBy: actor.id,
     };
-    store.purchaseOrders.push(existingPo);
+    existingPo = newPo;
+    store.purchaseOrders.push(newPo);
   } else {
     existingPo.assignedWorkerId = assignedWorkerId;
     existingPo.scheduledDate = scheduledDate;
@@ -3223,6 +3256,7 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
   const body = record(payload);
   switch (name) {
     case "createPurchase":
+    case "createOrder":
       return createPurchase(store, actor, body, now);
     case "submitOrder":
       return submitOrder(store, actor, body, now);
@@ -3231,7 +3265,11 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
     case "reject":
       return setOrderStatus(store, actor, text(body.number), "declined", now);
     case "editPurchase":
+    case "editOrder":
       return editPurchase(store, actor, body, now);
+    case "removePoSoNumber":
+    case "removeOrder":
+      return removePoSoNumber(store, actor, body, now);
     case "deletePurchase":
     case "deleteOrder":
       return asCommand(deletePurchaseOrder(store, text(body.number), actor, now), "Purchase order was deleted.");
@@ -3462,20 +3500,27 @@ function asCommand(result: Result<unknown>, defaultNotice = "Saved."): CommandRe
 function createPurchase(store: StoreData, actor: UserRecord, body: Record<string, unknown>, now: string): CommandResult {
   const blocked = deny(actor.role, "create-order", "Only Staff can create a PO/SO order.");
   if (blocked) return blocked;
-  const supplier = text(body.supplier);
+  const orderType = (text(body.type) || (text(body.number).toUpperCase().startsWith("SO") ? "SO" : "PO")).toUpperCase() as "PO" | "SO";
+  const partner = text(body.partner || body.supplier || body.customer);
   const material = text(body.material);
   const quantityKg = num(body.quantityKg);
   const valueEur = num(body.valueEur);
-  if (!supplier || !material || !Number.isFinite(quantityKg) || quantityKg < 0 || !Number.isFinite(valueEur) || valueEur < 0) {
-    return { error: "Supplier, material, quantity, and value are required." };
+  const warehouseId = text(body.warehouseId) || null;
+
+  if (!partner || !material || !Number.isFinite(quantityKg) || quantityKg < 0 || !Number.isFinite(valueEur) || valueEur < 0) {
+    return { error: `${orderType === "SO" ? "Customer" : "Supplier"}, material, quantity, and value are required.` };
   }
   const requestedNumber = text(body.number);
-  if (requestedNumber && orderByNumber(store, requestedNumber)) {
-    return { error: "That purchase order number already exists." };
+  if (requestedNumber) {
+    const existing = orderByNumber(store, requestedNumber);
+    if (existing && !existing.isRemoved) {
+      return { error: `That order number (${requestedNumber}) already exists.` };
+    }
   }
-  const number = requestedNumber || nextPurchaseOrderNumber(store, now);
-  const title = text(body.title) || `${supplier} - ${material}`;
-  const company = upsertCompany(store, supplier, "supplier", randomUUID);
+  const number = requestedNumber || (orderType === "SO" ? nextSalesOrderNumber(store, now) : nextPurchaseOrderNumber(store, now));
+  const title = text(body.title) || `${partner} - ${material}`;
+  const companyKind = orderType === "SO" ? "customer" : "supplier";
+  const company = upsertCompany(store, partner, companyKind, randomUUID);
   const order: PurchaseOrder = {
     id: randomUUID(),
     number,
@@ -3484,6 +3529,11 @@ function createPurchase(store: StoreData, actor: UserRecord, body: Record<string
     status: "submitted",
     valueEur,
     notes: text(body.notes),
+    type: orderType,
+    warehouseId,
+    isRemoved: false,
+    removedAt: null,
+    removedBy: null,
     assignedWorkerId: null,
     assignedBy: null,
     assignedAt: null,
@@ -3525,6 +3575,11 @@ function submitOrder(store: StoreData, actor: UserRecord, body: Record<string, u
     status: "submitted",
     valueEur: 0,
     notes,
+    type: "PO",
+    warehouseId: null,
+    isRemoved: false,
+    removedAt: null,
+    removedBy: null,
     assignedWorkerId: null,
     assignedBy: null,
     assignedAt: null,
@@ -3558,20 +3613,22 @@ function setOrderStatus(store: StoreData, actor: UserRecord, number: string, sta
 function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, unknown>, now: string): CommandResult {
   const blocked = deny(actor.role, "edit-order", "Only Staff can edit a PO/SO order.");
   if (blocked) return blocked;
-  if (body.workerId !== undefined || body.assignedWorker !== undefined) {
-    return { error: "Staff cannot assign or change the responsible worker." };
+  if (body.workerId !== undefined || body.assignedWorker !== undefined || body.assignedWorkerId !== undefined) {
+    return { error: "Staff cannot change the Worker assigned to an operation." };
   }
   const order = orderByNumber(store, text(body.number));
   if (!order) return { error: "That purchase order does not exist." };
+  if (order.isRemoved) return { error: "A removed PO/SO number entry cannot be edited." };
   if (order.status === "declined") return { error: "A declined purchase order cannot be edited." };
-  const supplier = text(body.supplier);
+  const partner = text(body.partner || body.supplier || body.customer);
   const material = text(body.material);
   const quantityKg = num(body.quantityKg);
   const valueEur = num(body.valueEur);
-  if (!supplier || !material || !Number.isFinite(quantityKg) || quantityKg < 0 || !Number.isFinite(valueEur) || valueEur < 0) {
-    return { error: "Supplier, material, quantity, and value are required." };
+  if (!partner || !material || !Number.isFinite(quantityKg) || quantityKg < 0 || !Number.isFinite(valueEur) || valueEur < 0) {
+    return { error: "Partner, material, quantity, and value are required." };
   }
-  const company = upsertCompany(store, supplier, "supplier", randomUUID);
+  const isSalesOrder = order.type === "SO" || order.number.toUpperCase().startsWith("SO");
+  const company = upsertCompany(store, partner, isSalesOrder ? "customer" : "supplier", randomUUID);
   order.companyId = company.id;
   order.valueEur = valueEur;
   if (body.title !== undefined) {
@@ -3579,6 +3636,9 @@ function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, 
   }
   if (body.notes !== undefined) {
     order.notes = text(body.notes);
+  }
+  if (body.warehouseId !== undefined) {
+    order.warehouseId = text(body.warehouseId) || null;
   }
   order.updatedAt = now;
   const line = store.purchaseOrderLines.find((item) => item.purchaseOrderId === order.id);
@@ -3590,6 +3650,32 @@ function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, 
   }
   audit(store, actor.id, "order-edited", "purchase-order", order.id, `${order.number} was edited.`, now);
   return { notice: `${order.number} was updated.` };
+}
+
+function removePoSoNumber(store: StoreData, actor: UserRecord, body: Record<string, unknown>, now: string): CommandResult {
+  const blocked = deny(actor.role, "remove-order", "Only Staff can remove a PO/SO number.");
+  if (blocked) return blocked;
+  const number = text(body.number || body.poNumber);
+  if (!number) return { error: "Order number is required." };
+  const order = orderByNumber(store, number);
+  if (!order) return { error: `Order ${number} does not exist.` };
+  if (order.isRemoved) return { error: `Order ${number} has already been removed.` };
+
+  order.isRemoved = true;
+  order.removedAt = now;
+  order.removedBy = actor.id;
+  order.updatedAt = now;
+
+  audit(
+    store,
+    actor.id,
+    "poso-number-removed",
+    "purchase-order",
+    order.id,
+    `${order.number} number entry was removed by ${actor.name}. Historical operational records, shipments, evidence, and audit logs are strictly preserved.`,
+    now
+  );
+  return { notice: `${order.number} number entry has been removed. Operational history preserved.` };
 }
 
 function addShipment(store: StoreData, actor: UserRecord, direction: "inbound" | "outbound", body: Record<string, unknown>, now: string): CommandResult {

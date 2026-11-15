@@ -112,8 +112,7 @@ export function DashboardBoard() {
             <div className="mt-3 grid gap-2">
               {currentRole === "worker" ? (
                 <>
-                  <PrimaryLink href="/tasks?new=true">+ Add New Request</PrimaryLink>
-                  <PrimaryLink href="/tasks">My Requests</PrimaryLink>
+                  <PrimaryLink href="/tasks">My Assigned Tasks</PrimaryLink>
                 </>
               ) : (
                 <PrimaryLink href="/tasks">All Requests</PrimaryLink>

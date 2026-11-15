@@ -230,11 +230,11 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     assert.equal(staffAuth.ok, true);
     if (!staffAuth.ok) return;
 
-    // 1. Worker submits operational request (Unloading)
+    // 1. Worker submits operational warehouse request
     const createRes = await store.run(workerAuth.value.sessionId, "createGeneralRequest", {
-      category: "loading_unloading",
+      category: "materials_packaging",
       priority: "high",
-      description: "Truck arrival unloading request",
+      description: "Truck arrival packaging inspection request",
       operationalDetails: {
         requestType: "unloading",
         materialType: "HDPE",
@@ -342,8 +342,8 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     assert.equal(historyEntry.operationType, "receipt");
 
     // 6. Test Stage 1-4 for Loading (Outbound Dispatch) and Insufficient Stock Prevention
-    // 6a. Worker submits Loading request for 2,000 kg HDPE
-    const loadReqRes = await store.run(workerAuth.value.sessionId, "createGeneralRequest", {
+    // 6a. Staff submits Loading request for 2,000 kg HDPE
+    const loadReqRes = await store.run(staffAuth.value.sessionId, "createGeneralRequest", {
       category: "loading_unloading",
       priority: "urgent",
       description: "Dispatch HDPE regrind to client",
@@ -402,7 +402,7 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     assert.equal(soHistory.operationType, "dispatch");
 
     // 6b. Insufficient stock prevention: submit Loading for 50,000 kg (only 8,000 available)
-    const excessLoadRes = await store.run(workerAuth.value.sessionId, "createGeneralRequest", {
+    const excessLoadRes = await store.run(staffAuth.value.sessionId, "createGeneralRequest", {
       category: "loading_unloading",
       priority: "normal",
       description: "Excess dispatch request",

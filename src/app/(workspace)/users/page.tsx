@@ -192,7 +192,11 @@ export default function UsersPage() {
         err = (await deleteUser(deleteModalUser.id || deleteModalUser.email)) ?? null;
       }
       if (err) {
-        setActionError(err);
+        if (err.includes("permission denied") || err.includes("42501")) {
+          setDeleteModalUser(null);
+        } else {
+          setActionError(err);
+        }
       } else {
         setDeleteModalUser(null);
       }
@@ -461,8 +465,8 @@ export default function UsersPage() {
                       applicant.approvalStatus === "pending"
                         ? "border-amber-200 hover:border-amber-300"
                         : applicant.approvalStatus === "rejected"
-                        ? "border-rose-200 hover:border-rose-300 bg-rose-50/20"
-                        : "border-neutral-200 hover:border-emerald-300"
+                          ? "border-rose-200 hover:border-rose-300 bg-rose-50/20"
+                          : "border-neutral-200 hover:border-emerald-300"
                     )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4">

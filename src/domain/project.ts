@@ -58,7 +58,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     const company = companyById.get(order.companyId);
     const lines = store.purchaseOrderLines.filter((line) => line.purchaseOrderId === order.id);
     const linked = store.shipments.find((item) => item.purchaseOrderId === order.id);
-    const warehouse = linked ? (warehouseName.get(linked.warehouseId) ?? "") : "";
+    const warehouse = (order.warehouseId && warehouseName.get(order.warehouseId)) || (linked ? (warehouseName.get(linked.warehouseId) ?? "") : "");
     const title = order.title || (company ? `${company.name} - ${lines[0]?.description || "Order"}` : order.number);
     const assignedWorker = order.assignedWorkerId ? userById.get(order.assignedWorkerId) : null;
     const assigner = order.assignedBy ? userById.get(order.assignedBy) : null;
@@ -93,9 +93,14 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     return {
       number: order.number,
       title,
+      type: order.type || (order.number.toUpperCase().startsWith("SO") ? "SO" : "PO"),
+      warehouseId: order.warehouseId ?? linked?.warehouseId ?? null,
+      warehouse: warehouse || "—",
+      isRemoved: Boolean(order.isRemoved),
+      removedAt: order.removedAt ?? null,
+      removedBy: order.removedBy ?? null,
       supplier: company?.kind === "supplier" ? company.name : "",
       material: lines.map((line) => line.description).filter(Boolean).join(", ") || "—",
-      warehouse: warehouse || "—",
       quantityKg: lines.reduce((sum, line) => sum + line.quantityKg, 0),
       valueEur: order.valueEur,
       unitPrice: "",

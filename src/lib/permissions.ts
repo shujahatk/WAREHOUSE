@@ -81,6 +81,7 @@ export type AppAction =
   | "delete-order"
   | "edit-order"
   | "create-order"
+  | "remove-order"
   | "submit-order"
   | "approve-request"
   | "reject-request"
@@ -136,6 +137,7 @@ const ACTION_ROLES: Record<AppAction, Role[]> = {
   "delete-order": [],
   "edit-order": ["manager"],
   "create-order": ["manager"],
+  "remove-order": ["manager"],
   "submit-order": [],
   "approve-request": ["owner"],
   "reject-request": ["owner"],

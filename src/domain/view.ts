@@ -158,6 +158,11 @@ export type DemoOrder = {
   supplier: string;
   material: string;
   warehouse: string;
+  warehouseId?: string | null;
+  type?: "PO" | "SO";
+  isRemoved?: boolean;
+  removedAt?: string | null;
+  removedBy?: string | null;
   quantityKg: number;
   valueEur: number;
   unitPrice: string;
