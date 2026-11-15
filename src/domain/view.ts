@@ -501,12 +501,14 @@ export type PublicUser = {
   id?: string;
   email: string;
   name: string;
+  phone?: string | null;
   role: Role;
   warehouse: string | null;
   company: string | null;
   status: "Active" | "Inactive";
   approvalStatus?: "pending" | "approved" | "rejected";
   registrationNotes?: string | null;
+  createdAt?: string;
 };
 
 export type DemoIdentity = PublicUser;

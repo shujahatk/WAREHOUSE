@@ -79,6 +79,7 @@ function mapUserProfile(row: Record<string, unknown>): UserProfile {
     id: String(row.id),
     email: String(row.email),
     name: String(row.name),
+    phone: typeof row.phone === "string" ? row.phone : (typeof row.phone_number === "string" ? row.phone_number : null),
     role: (row.role as DomainRole) ?? "worker",
     warehouseId: typeof row.warehouse_id === "string" ? row.warehouse_id : null,
     companyId: typeof row.company_id === "string" ? row.company_id : null,
@@ -536,13 +537,13 @@ export class SupabaseAdapter {
 
       if (statusRes.ok && statusRes.value) {
         const status = statusRes.value;
-        if (status.role === "offers_user" && status.approval_status === "pending") {
+        if (status.approval_status === "pending") {
           await this.client.auth.signOut(accessToken);
-          return fail("Your account is pending administrator approval. You will receive access once approved.");
+          return fail("Your account is pending administrator approval. Please wait for an administrator to review your request.");
         }
         if (status.approval_status === "rejected") {
           await this.client.auth.signOut(accessToken);
-          return fail("Your registration request has been declined. Please contact the administrator.");
+          return fail("Your registration request has been rejected (declined). Please contact the administrator.");
         }
         if (status.active && (status.approval_status === "approved" || !status.approval_status)) {
           // Profile was auto-provisioned or activated by rpc_get_auth_account_status
@@ -864,6 +865,79 @@ export class SupabaseAdapter {
   }
 
   async run(sessionId: string | null, name: string, payload: unknown): Promise<WorkspaceResponse> {
+    if (name === "signUpUser" || name === "registerUser") {
+      const body = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+      const nameVal = text(body.name);
+      const emailVal = text(body.email).toLowerCase();
+      const phoneVal = text(body.phone);
+      const passwordVal = text(body.password);
+      const confirmVal = text(body.confirmPassword || body.passwordConfirmation);
+      const notesVal = text(body.notes);
+      const requestedRole = text(body.requestedRole || body.role) || "worker";
+
+      if (!nameVal || !emailVal || !passwordVal) {
+        return { state: emptyWorkspace(), actor: null, error: "Name, email, and password are required." };
+      }
+      if (!phoneVal || phoneVal.length < 6) {
+        return { state: emptyWorkspace(), actor: null, error: "A valid phone number is required." };
+      }
+      if (passwordVal.length < 8) {
+        return { state: emptyWorkspace(), actor: null, error: "Password must be at least 8 characters long." };
+      }
+      if (confirmVal && passwordVal !== confirmVal) {
+        return { state: emptyWorkspace(), actor: null, error: "Passwords do not match." };
+      }
+
+      const signUpRes = await this.client.auth.signUp(emailVal, passwordVal, {
+        name: nameVal,
+        phone: phoneVal,
+        role: requestedRole,
+      });
+      if (!signUpRes.ok) {
+        return { state: emptyWorkspace(), actor: null, error: signUpRes.error };
+      }
+
+      const authUserIdToPass = signUpRes.value.isExistingUser ? null : signUpRes.value.id;
+
+      const rpcRes = await this.client.rpc<Record<string, unknown>>(
+        "rpc_register_user",
+        {
+          p_auth_user_id: authUserIdToPass,
+          p_email: emailVal,
+          p_name: nameVal,
+          p_phone: phoneVal,
+          p_notes: notesVal || null,
+          p_requested_role: requestedRole,
+        },
+        null,
+      );
+
+      if (!rpcRes.ok) {
+        // Fall back to rpc_register_offers_user if migration 0008 is pending
+        const fallbackRpc = await this.client.rpc<Record<string, unknown>>(
+          "rpc_register_offers_user",
+          {
+            p_auth_user_id: authUserIdToPass,
+            p_email: emailVal,
+            p_name: nameVal,
+            p_company: phoneVal ? `Phone: ${phoneVal}` : null,
+            p_notes: notesVal || null,
+          },
+          null,
+        );
+        if (!fallbackRpc.ok) {
+          return { state: emptyWorkspace(), actor: null, error: rpcRes.error || fallbackRpc.error };
+        }
+      }
+
+      return {
+        state: emptyWorkspace(),
+        actor: null,
+        notice: "Registration submitted successfully. Your account is pending administrator approval.",
+      };
+    }
+
     if (name === "registerOffersUser") {
       const body = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
       const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -1937,6 +2011,181 @@ export class SupabaseAdapter {
           );
           if (!rpcRes.ok) error = rpcRes.error;
           else notice = `Offer accepted and marked as sold.`;
+          break;
+        }
+        case "approveRegistration": {
+          if (profile.role !== "owner") {
+            error = "Only Admin can approve account registrations.";
+            break;
+          }
+          const targetUserId = text(body.userId || body.id);
+          const targetRole = text(body.role) || "worker";
+          let targetWhId: string | null = null;
+          if (targetRole === "worker") {
+            const whName = text(body.warehouse || body.warehouseName) || "Bornem";
+            const whRes = await this.client.select<Record<string, unknown>>(
+              "warehouses",
+              `select=id&name=eq.${encodeURIComponent(whName)}`,
+              token
+            );
+            if (whRes.ok && whRes.value.length > 0) {
+              targetWhId = String(whRes.value[0].id);
+            }
+          }
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_approve_user_registration",
+            {
+              p_user_id: targetUserId,
+              p_role: targetRole,
+              p_warehouse_id: targetWhId,
+              p_note: text(body.notes) || null,
+            },
+            token
+          );
+          if (!rpcRes.ok) {
+            // Fallback to rpc_decide_offers_user_registration
+            const fallbackRes = await this.client.rpc<Record<string, unknown>>(
+              "rpc_decide_offers_user_registration",
+              {
+                p_user_id: targetUserId,
+                p_decision: "approved",
+                p_note: text(body.notes) || null,
+              },
+              token
+            );
+            if (!fallbackRes.ok) error = rpcRes.error || fallbackRes.error;
+            else notice = "User registration approved.";
+          } else {
+            notice = "User registration approved.";
+          }
+          break;
+        }
+        case "rejectRegistration": {
+          if (profile.role !== "owner") {
+            error = "Only Admin can reject account registrations.";
+            break;
+          }
+          const targetUserId = text(body.userId || body.id);
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_reject_user_registration",
+            {
+              p_user_id: targetUserId,
+              p_reason: text(body.reason || body.notes) || null,
+            },
+            token
+          );
+          if (!rpcRes.ok) {
+            const fallbackRes = await this.client.rpc<Record<string, unknown>>(
+              "rpc_decide_offers_user_registration",
+              {
+                p_user_id: targetUserId,
+                p_decision: "rejected",
+                p_note: text(body.reason || body.notes) || null,
+              },
+              token
+            );
+            if (!fallbackRes.ok) error = rpcRes.error || fallbackRes.error;
+            else notice = "User registration rejected.";
+          } else {
+            notice = "User registration rejected.";
+          }
+          break;
+        }
+        case "deleteRegistrationRequest": {
+          if (profile.role !== "owner") {
+            error = "Only Admin can delete registration requests.";
+            break;
+          }
+          const targetUserId = text(body.userId || body.id);
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_delete_user_account",
+            { p_user_id: targetUserId },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = "Registration request removed.";
+          break;
+        }
+        case "deactivateUser": {
+          if (profile.role !== "owner") {
+            error = "Only Admin can deactivate accounts.";
+            break;
+          }
+          let targetUserId = text(body.userId || body.id);
+          const targetEmail = text(body.email).toLowerCase();
+          if (!targetUserId && targetEmail) {
+            const uRes = await this.client.select<Record<string, unknown>>("users", `select=id&email=eq.${encodeURIComponent(targetEmail)}`, token);
+            if (uRes.ok && uRes.value.length > 0) targetUserId = String(uRes.value[0].id);
+          }
+          if (!targetUserId) {
+            error = "User not found.";
+            break;
+          }
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_toggle_user_active",
+            { p_user_id: targetUserId, p_active: false },
+            token
+          );
+          if (!rpcRes.ok) {
+            const upd = await this.client.update("users", `id=eq.${encodeURIComponent(targetUserId)}`, { active: false }, token);
+            if (!upd.ok) error = rpcRes.error || upd.error;
+            else notice = "User account deactivated.";
+          } else {
+            notice = "User account deactivated.";
+          }
+          break;
+        }
+        case "reactivateUser": {
+          if (profile.role !== "owner") {
+            error = "Only Admin can reactivate accounts.";
+            break;
+          }
+          let targetUserId = text(body.userId || body.id);
+          const targetEmail = text(body.email).toLowerCase();
+          if (!targetUserId && targetEmail) {
+            const uRes = await this.client.select<Record<string, unknown>>("users", `select=id&email=eq.${encodeURIComponent(targetEmail)}`, token);
+            if (uRes.ok && uRes.value.length > 0) targetUserId = String(uRes.value[0].id);
+          }
+          if (!targetUserId) {
+            error = "User not found.";
+            break;
+          }
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_toggle_user_active",
+            { p_user_id: targetUserId, p_active: true },
+            token
+          );
+          if (!rpcRes.ok) {
+            const upd = await this.client.update("users", `id=eq.${encodeURIComponent(targetUserId)}`, { active: true, approval_status: "approved" }, token);
+            if (!upd.ok) error = rpcRes.error || upd.error;
+            else notice = "User account reactivated.";
+          } else {
+            notice = "User account reactivated.";
+          }
+          break;
+        }
+        case "deleteUser": {
+          if (profile.role !== "owner") {
+            error = "Only Admin can delete user accounts.";
+            break;
+          }
+          let targetUserId = text(body.userId || body.id);
+          const targetEmail = text(body.email).toLowerCase();
+          if (!targetUserId && targetEmail) {
+            const uRes = await this.client.select<Record<string, unknown>>("users", `select=id&email=eq.${encodeURIComponent(targetEmail)}`, token);
+            if (uRes.ok && uRes.value.length > 0) targetUserId = String(uRes.value[0].id);
+          }
+          if (!targetUserId) {
+            error = "User not found.";
+            break;
+          }
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_delete_user_account",
+            { p_user_id: targetUserId },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = "User account deleted.";
           break;
         }
         case "decideOffersUserRegistration":

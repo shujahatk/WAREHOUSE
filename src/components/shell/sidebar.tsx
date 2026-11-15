@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { useDemo } from "@/components/providers/workspace-provider";
 import { cn } from "@/lib/cn";
 import type { Role } from "@/lib/permissions";
 import { navActive, navSections, type NavItem } from "@/lib/navigation";
@@ -32,10 +33,14 @@ export function Mark({ light = false }: { light?: boolean }) {
 }
 
 function ItemList({ items, pathname, onNavigate }: { items: NavItem[]; pathname: string; onNavigate?: () => void }) {
+  const { state } = useDemo();
+  const pendingRequests = (state.accounts || []).filter((u) => u.approvalStatus === "pending").length;
+
   return (
     <ul className="space-y-0.5">
       {items.map((item) => {
         const active = navActive(pathname, item.href);
+        const hasPendingBadge = item.href === "/users" && pendingRequests > 0;
         return (
           <li key={item.href}>
             <Link
@@ -55,9 +60,16 @@ function ItemList({ items, pathname, onNavigate }: { items: NavItem[]; pathname:
                 </span>
                 {item.label}
               </span>
-              {active ? (
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              ) : null}
+              <div className="flex items-center gap-1.5">
+                {hasPendingBadge ? (
+                  <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[10px] font-bold text-amber-300 border border-amber-400/40">
+                    {pendingRequests}
+                  </span>
+                ) : null}
+                {active ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                ) : null}
+              </div>
             </Link>
           </li>
         );

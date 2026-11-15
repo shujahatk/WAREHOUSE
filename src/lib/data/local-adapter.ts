@@ -122,11 +122,12 @@ export class LocalAdapter {
       await this.edit((store) => {
         const user = sessionId ? userFromSession(store, sessionId, now) : null;
         if (!user) {
-          if (name === "registerOffersUser") {
+          if (name === "registerOffersUser" || name === "signUpUser" || name === "registerUser") {
             const fakeSystemActor: UserRecord = {
               id: "system",
               email: "system@internal",
               name: "System",
+              phone: null,
               role: "owner",
               warehouseId: null,
               companyId: null,

@@ -41,6 +41,7 @@ const userFields = {
   id,
   email: z.email(),
   name: label,
+  phone: z.string().nullable().default(null),
   role: domainRoleSchema,
   warehouseId: id.nullable(),
   companyId: id.nullable(),
@@ -51,8 +52,8 @@ const userFields = {
   updatedAt: stamp,
 };
 
-function refineUser(user: { role: string; warehouseId: string | null; companyId: string | null }, ctx: z.RefinementCtx) {
-  if (user.role === "worker" && !user.warehouseId) {
+function refineUser(user: { role: string; warehouseId: string | null; companyId: string | null; approvalStatus?: string }, ctx: z.RefinementCtx) {
+  if (user.role === "worker" && !user.warehouseId && user.approvalStatus === "approved") {
     ctx.addIssue({ code: "custom", message: "A worker must be assigned to one warehouse.", path: ["warehouseId"] });
   }
   if (user.role !== "worker" && user.warehouseId) {

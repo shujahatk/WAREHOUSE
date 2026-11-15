@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useLayoutEffect, useState, type FormEvent } from "react";
 import { notifyAuthChanged } from "@/components/providers/workspace-provider";
 import { signInAction } from "@/domain/actions";
+import { cn } from "@/lib/cn";
 
 export function LoginForm() {
   const router = useRouter();
@@ -94,9 +95,29 @@ export function LoginForm() {
         </span>
       </label>
       {error ? (
-        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className={cn(
+            "rounded-lg p-3 text-sm leading-relaxed border",
+            error.toLowerCase().includes("pending")
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-red-200 bg-red-50 text-red-900",
+          )}
+        >
+          {error.toLowerCase().includes("pending") ? (
+            <div className="flex items-start gap-2.5">
+              <svg className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <p className="font-semibold text-amber-950">Account Pending Approval</p>
+                <p className="mt-0.5 text-xs text-amber-800">{error}</p>
+              </div>
+            </div>
+          ) : (
+            error
+          )}
+        </div>
       ) : null}
       <button
         type="submit"
@@ -108,10 +129,16 @@ export function LoginForm() {
       <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs leading-5 text-neutral-600">
         <p>Sign in with your configured warehouse or offers account.</p>
       </div>
-      <div className="text-center pt-2">
+      <div className="pt-2 text-center space-y-2">
         <p className="text-sm text-neutral-600">
+          Don&apos;t have an account?{" "}
+          <Link href="/signup" className="font-semibold text-neutral-950 underline hover:text-neutral-800">
+            Sign up
+          </Link>
+        </p>
+        <p className="text-xs text-neutral-500">
           Trading or Purchasing Partner?{" "}
-          <Link href="/register" className="font-medium text-neutral-950 underline hover:text-neutral-800">
+          <Link href="/register" className="font-medium text-neutral-800 underline hover:text-neutral-950">
             Register for Offers Portal
           </Link>
         </p>

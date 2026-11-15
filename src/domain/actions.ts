@@ -44,6 +44,24 @@ export async function signInAction(email: string, password: string): Promise<{ e
   }
 }
 
+export async function signUpAction(payload: {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword?: string;
+  notes?: string;
+  requestedRole?: string;
+}): Promise<{ error: string | null; ok: boolean }> {
+  try {
+    const res = await getAdapter().run(null, "signUpUser", payload);
+    if (res.error) return { error: res.error, ok: false };
+    return { error: null, ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Sign up failed.", ok: false };
+  }
+}
+
 export async function registerOffersUserAction(payload: {
   name: string;
   email: string;

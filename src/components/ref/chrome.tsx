@@ -42,12 +42,14 @@ export function StatusPill({ label }: { label: string }) {
 export function Surface({
   children,
   className,
+  onClick,
 }: {
   children: ReactNode;
   className?: string;
+  onClick?: () => void;
 }) {
   return (
-    <section className={cn("rounded-xl border border-neutral-200 bg-white", className)}>
+    <section onClick={onClick} className={cn("rounded-xl border border-neutral-200 bg-white", className)}>
       {children}
     </section>
   );

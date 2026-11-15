@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { canOperateWarehouse, canPerform, isActiveRole, normalizeRole, type Role } from "../lib/permissions.ts";
+import { canOperateWarehouse, canPerform, isActiveRole, normalizeRole, roleLabel, type Role } from "../lib/permissions.ts";
 import { can } from "../lib/data/permissions.ts";
 import { checkUploadRateLimit } from "../lib/security/rate-limit.ts";
 import { detectFileType, MAX_FILE_SIZE_BYTES } from "../lib/security/file-validation.ts";
@@ -56,6 +56,7 @@ export function profile(user: UserRecord): UserProfile {
     id: user.id,
     email: user.email,
     name: user.name,
+    phone: user.phone ?? null,
     role: user.role,
     warehouseId: user.warehouseId,
     companyId: user.companyId,
@@ -1848,6 +1849,7 @@ export function registerOffersUser(
     id: userId,
     email,
     name,
+    phone: null,
     role: "offers_user",
     warehouseId: null,
     companyId: null,
@@ -1916,6 +1918,234 @@ export function decideOffersUserRegistration(
   audit(store, actor.id, `user-registration-${decision}`, "user", target.id, `Registration ${decision} for ${target.email}`, now);
 
   return ok(profile(target));
+}
+
+export function signUpUser(
+  store: StoreData,
+  payload: Record<string, unknown>,
+  now: string
+): Result<UserProfile> {
+  const name = text(payload.name);
+  const email = text(payload.email).toLowerCase();
+  const phone = text(payload.phone);
+  const password = text(payload.password);
+  const confirmPassword = text(payload.confirmPassword || payload.passwordConfirmation);
+  const notes = text(payload.notes || payload.registrationNotes);
+  const requestedRole = text(payload.requestedRole || payload.role).toLowerCase();
+
+  if (!name || name.length < 2) return fail("Please enter your full name.");
+  if (!email || !email.includes("@")) return fail("Please enter a valid email address.");
+  if (!phone || phone.length < 6) return fail("Please enter a valid phone number.");
+  if (!password || password.length < 8) return fail("Password must be at least 8 characters long.");
+  if (confirmPassword && password !== confirmPassword) return fail("Passwords do not match.");
+
+  const existing = store.users.find((u) => u.email.toLowerCase() === email);
+  if (existing) {
+    if (existing.approvalStatus === "approved" && existing.active) {
+      return fail("An account with this email address already exists. Please sign in.");
+    }
+    return fail("A registration with this email address is already pending approval.");
+  }
+
+  const userId = randomUUID();
+  const role: Role = requestedRole === "offers_user" ? "offers_user" : "worker";
+
+  const newUser: UserRecord = {
+    id: userId,
+    email,
+    name,
+    phone,
+    role,
+    warehouseId: null,
+    companyId: null,
+    active: false,
+    approvalStatus: "pending",
+    registrationNotes: notes || null,
+    passwordHash: hashPassword(password),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.users.push(newUser);
+
+  notifyRole(
+    store,
+    "owner",
+    "user_registration",
+    `New User Registration: ${name}`,
+    `${name} (${email}, Phone: ${phone}) submitted a registration request.`,
+    now,
+    { targetType: "user", targetId: userId, link: "/users" }
+  );
+
+  audit(store, userId, "user-registration-submitted", "user", userId, `Public signup submitted for ${email} (Phone: ${phone})`, now);
+
+  return ok(profile(newUser));
+}
+
+export function approveRegistration(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<UserProfile> {
+  if (actor.role !== "owner") {
+    return fail("Only Admin can approve account registrations.");
+  }
+  const userId = text(payload.userId || payload.id);
+  const target = store.users.find((u) => u.id === userId);
+  if (!target) return fail("User not found.");
+
+  const role = normalizeRole(text(payload.role || target.role));
+  if (!role) return fail("Valid role is required (worker, manager, moderator, offers_user, owner).");
+
+  let warehouseId: string | null = null;
+  if (role === "worker") {
+    const whName = text(payload.warehouse || payload.warehouseName) || "Bornem";
+    const wh = upsertWarehouse(store, whName, "Not recorded", randomUUID);
+    warehouseId = wh.id;
+  }
+
+  target.role = role;
+  target.warehouseId = warehouseId;
+  target.companyId = null;
+  target.approvalStatus = "approved";
+  target.active = true;
+  if (payload.notes) target.registrationNotes = text(payload.notes);
+  target.updatedAt = now;
+
+  notify(
+    store,
+    target.id,
+    "account_approved",
+    "Registration Approved",
+    `Your account registration has been approved as ${roleLabel(role)}. You can now log in.`,
+    now,
+    { targetType: "user", targetId: target.id, link: "/login" }
+  );
+
+  audit(store, actor.id, "user-registration-approved", "user", target.id, `Registration approved by ${actor.name} for ${target.email} as ${role}.`, now);
+
+  return ok(profile(target));
+}
+
+export function rejectRegistration(
+  store: StoreData,
+  actor: UserRecord,
+  payload: Record<string, unknown>,
+  now: string
+): Result<UserProfile> {
+  if (actor.role !== "owner") {
+    return fail("Only Admin can reject account registrations.");
+  }
+  const userId = text(payload.userId || payload.id);
+  const target = store.users.find((u) => u.id === userId);
+  if (!target) return fail("User not found.");
+
+  const reason = text(payload.reason || payload.notes);
+  target.approvalStatus = "rejected";
+  target.active = false;
+  if (reason) target.registrationNotes = reason;
+  target.updatedAt = now;
+
+  notify(
+    store,
+    target.id,
+    "account_rejected",
+    "Registration Declined",
+    `Your account registration was declined.${reason ? ` Reason: ${reason}` : ""}`,
+    now,
+    { targetType: "user", targetId: target.id, link: "/login" }
+  );
+
+  audit(store, actor.id, "user-registration-rejected", "user", target.id, `Registration rejected by ${actor.name} for ${target.email}${reason ? `: ${reason}` : ""}.`, now);
+
+  return ok(profile(target));
+}
+
+export function deactivateUser(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  if (actor.role !== "owner") return { error: "Only the owner can deactivate an account." };
+  const user = store.users.find((u) => same(u.email, text(body.email)) || u.id === text(body.userId || body.id));
+  if (!user) return { error: "User not found." };
+  if (user.id === actor.id) return { error: "You cannot deactivate your own account." };
+  if (user.role === "owner" && store.users.filter((u) => u.role === "owner" && u.active).length <= 1) {
+    return { error: "The last active owner cannot be deactivated." };
+  }
+
+  user.active = false;
+  user.updatedAt = now;
+  audit(store, actor.id, "user-deactivated", "user", user.id, `Account deactivated for ${user.email} by ${actor.name}.`, now);
+  return { notice: `${user.name} has been deactivated.` };
+}
+
+export function reactivateUser(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  if (actor.role !== "owner") return { error: "Only the owner can reactivate an account." };
+  const user = store.users.find((u) => same(u.email, text(body.email)) || u.id === text(body.userId || body.id));
+  if (!user) return { error: "User not found." };
+
+  user.active = true;
+  user.approvalStatus = "approved";
+  user.updatedAt = now;
+  audit(store, actor.id, "user-reactivated", "user", user.id, `Account reactivated for ${user.email} by ${actor.name}.`, now);
+  return { notice: `${user.name} has been reactivated.` };
+}
+
+export function deleteUser(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  if (actor.role !== "owner") return { error: "Only the owner can delete an account." };
+  const user = store.users.find((u) => same(u.email, text(body.email)) || u.id === text(body.userId || body.id));
+  if (!user) return { error: "User not found." };
+  if (user.id === actor.id) return { error: "You cannot delete your own account." };
+  if (user.role === "owner" && store.users.filter((u) => u.role === "owner" && u.active).length <= 1) {
+    return { error: "The last active owner cannot be deleted." };
+  }
+
+  const hasRecords = store.requests.some((r) => r.createdBy === user.id) ||
+                     store.purchaseOrders.some((po) => po.createdBy === user.id) ||
+                     (store.workerGeneralRequests || []).some((gr) => gr.createdBy === user.id);
+
+  if (hasRecords) {
+    // Preserve operational records, unlink and deactivate credentials
+    user.active = false;
+    user.approvalStatus = "rejected";
+    user.email = `${user.email}.deleted.${Date.now()}`;
+    user.updatedAt = now;
+    audit(store, actor.id, "user-deleted-unlinked", "user", user.id, `Account credentials unlinked and deactivated for ${user.name} (operational records preserved).`, now);
+  } else {
+    store.users = store.users.filter((u) => u.id !== user.id);
+    audit(store, actor.id, "user-deleted", "user", user.id, `Account permanently deleted for ${user.name} by ${actor.name}.`, now);
+  }
+
+  return { notice: `${user.name} account has been deleted.` };
+}
+
+export function deleteRegistrationRequest(
+  store: StoreData,
+  actor: UserRecord,
+  userId: string,
+  now: string
+): Result<void> {
+  if (actor.role !== "owner") return fail("Only Admin can delete registration requests.");
+  const idx = store.users.findIndex((u) => u.id === userId && u.approvalStatus === "pending");
+  if (idx === -1) return fail("Pending registration request not found.");
+  const target = store.users[idx];
+  store.users.splice(idx, 1);
+  audit(store, actor.id, "user-registration-deleted", "user", userId, `Pending registration for ${target.email} removed by ${actor.name}.`, now);
+  return ok(undefined);
 }
 
 export function assignRequestWorker(
@@ -2628,6 +2858,20 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
       return addUser(store, actor, body, now);
     case "changeRole":
       return changeRole(store, actor, body, now);
+    case "deactivateUser":
+      return deactivateUser(store, actor, body, now);
+    case "reactivateUser":
+      return reactivateUser(store, actor, body, now);
+    case "deleteUser":
+      return deleteUser(store, actor, body, now);
+    case "signUpUser":
+      return asCommand(signUpUser(store, record(body), now), "Registration submitted. Pending admin approval.");
+    case "approveRegistration":
+      return asCommand(approveRegistration(store, actor, record(body), now), "Registration approved.");
+    case "rejectRegistration":
+      return asCommand(rejectRegistration(store, actor, record(body), now), "Registration rejected.");
+    case "deleteRegistrationRequest":
+      return asCommand(deleteRegistrationRequest(store, actor, text(body.userId || body.id), now), "Registration request removed.");
     case "attachFile":
       return attachOne(store, actor, body, now);
     case "attachFiles":
@@ -3813,13 +4057,11 @@ export function sessionProfile(store: StoreData, sessionId: string, now: string)
 export function signInUser(store: StoreData, email: string, password: string, now: string): Result<{ sessionId: string; profile: UserProfile }> {
   const user = store.users.find((item) => same(item.email, email));
   if (!user || !verifyPassword(password, user.passwordHash)) return fail("Those credentials were not recognized.");
-  if (user.role === "offers_user") {
-    if (user.approvalStatus === "pending") {
-      return fail("Your account is pending administrator approval. You will receive access once approved.");
-    }
-    if (user.approvalStatus === "rejected") {
-      return fail("Your registration request has been rejected. Please contact the administrator.");
-    }
+  if (user.approvalStatus === "pending") {
+    return fail("Your account is pending administrator approval. Please wait for an administrator to review your request.");
+  }
+  if (user.approvalStatus === "rejected") {
+    return fail("Your registration request has been rejected (declined). Please contact the administrator.");
   }
   if (!user.active) return fail("This account is inactive.");
   if (!isActiveRole(user.role) && user.role !== "offers_user") return fail("This account role is no longer active.");
