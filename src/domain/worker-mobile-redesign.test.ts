@@ -22,14 +22,14 @@ import {
 } from "../domain/view.ts";
 
 describe("StockFlow – Worker Mobile Module Comprehensive Verification", () => {
-  test("1. Design tokens conform to dark navy & purple visual language", () => {
-    assert.equal(WORKER_THEME.bg, "bg-[#080D1C]");
-    assert.match(WORKER_THEME.card, /bg-\[#202A3D\]/);
-    assert.match(WORKER_THEME.btnPrimary, /bg-\[#6655E8\]/);
+  test("1. Design tokens conform to Admin Console green enterprise design language", () => {
+    assert.equal(WORKER_THEME.bg, "bg-[#F8FAFC]");
+    assert.match(WORKER_THEME.card, /bg-white/);
+    assert.match(WORKER_THEME.btnPrimary, /bg-emerald-800/);
     assert.match(WORKER_THEME.btnPrimary, /min-h-\[48px\]/);
     assert.match(WORKER_THEME.input, /h-12/);
     assert.match(WORKER_THEME.select, /h-12/);
-    assert.match(WORKER_THEME.btnDanger, /bg-rose-500/);
+    assert.match(WORKER_THEME.btnDanger, /bg-rose-50/);
   });
 
   test("2. Worker Permissions & Strict Boundaries", () => {

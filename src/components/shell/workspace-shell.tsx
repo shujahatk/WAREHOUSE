@@ -12,10 +12,10 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   // If session is still initializing, render sleek dark loading state to prevent flash
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#080D1C] text-white">
+      <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] text-neutral-900">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#6655E8] border-t-transparent" />
-          <p className="text-xs font-semibold tracking-wider text-slate-400 uppercase">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-700 border-t-transparent" />
+          <p className="text-xs font-semibold tracking-wider text-neutral-500 uppercase">
             Loading StockFlow…
           </p>
         </div>

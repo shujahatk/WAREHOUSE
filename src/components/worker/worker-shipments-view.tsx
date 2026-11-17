@@ -71,21 +71,21 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
   });
 
   return (
-    <div className="space-y-4 pb-10">
+    <div className="space-y-4 pb-12">
       {/* Title & Warehouse Pill */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+          <h1 className="text-xl font-bold tracking-tight text-neutral-900 sm:text-2xl">
             {isInbound ? "Inbound Containers" : "Outbound Shipments"}
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-neutral-500">
             {identity.warehouse ? `${identity.warehouse} Depot` : "All Warehouses"} ·{" "}
             {filteredItems.length} {isInbound ? "container(s)" : "shipment(s)"} listed
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-700/60 bg-[#202A3D] px-3 py-1 text-xs font-semibold text-[#8B7DF0]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#6655E8]" />
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
             {isInbound ? "Unloading Operations" : "Loading Operations"}
           </span>
         </div>
@@ -98,14 +98,14 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search ${isInbound ? "PO, container, supplier..." : "SO, customer, container..."}`}
+            placeholder={`Search ${isInbound ? "PO, container number, supplier..." : "SO, customer, equipment ID..."}`}
             className={WORKER_THEME.input}
           />
           {search ? (
             <button
               type="button"
               onClick={() => setSearch("")}
-              className="absolute right-3 top-3.5 text-xs text-slate-400 hover:text-white"
+              className="absolute right-3 top-3.5 text-xs text-neutral-500 hover:text-neutral-800"
             >
               Clear
             </button>
@@ -117,21 +117,21 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
-            className={`min-h-[38px] whitespace-nowrap rounded-xl px-3.5 py-2 font-medium transition ${
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
               statusFilter === "all"
-                ? "bg-[#6655E8] text-white shadow-sm"
-                : "border border-slate-700/60 bg-[#202A3D] text-slate-300 hover:text-white"
+                ? "bg-emerald-800 text-white shadow-xs"
+                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
             }`}
           >
-            All Shipments
+            All Shipments ({isInbound ? containers.length : outboundList.length})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("active")}
-            className={`min-h-[38px] whitespace-nowrap rounded-xl px-3.5 py-2 font-medium transition ${
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
               statusFilter === "active"
-                ? "bg-[#6655E8] text-white shadow-sm"
-                : "border border-slate-700/60 bg-[#202A3D] text-slate-300 hover:text-white"
+                ? "bg-emerald-800 text-white shadow-xs"
+                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
             }`}
           >
             Open / Pending
@@ -139,10 +139,10 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
           <button
             type="button"
             onClick={() => setStatusFilter("in-progress")}
-            className={`min-h-[38px] whitespace-nowrap rounded-xl px-3.5 py-2 font-medium transition ${
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
               statusFilter === "in-progress"
-                ? "bg-[#6655E8] text-white shadow-sm"
-                : "border border-slate-700/60 bg-[#202A3D] text-slate-300 hover:text-white"
+                ? "bg-emerald-800 text-white shadow-xs"
+                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
             }`}
           >
             {isInbound ? "Unloading Now" : "Loading Now"}
@@ -150,10 +150,10 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
           <button
             type="button"
             onClick={() => setStatusFilter("done")}
-            className={`min-h-[38px] whitespace-nowrap rounded-xl px-3.5 py-2 font-medium transition ${
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
               statusFilter === "done"
-                ? "bg-[#6655E8] text-white shadow-sm"
-                : "border border-slate-700/60 bg-[#202A3D] text-slate-300 hover:text-white"
+                ? "bg-emerald-800 text-white shadow-xs"
+                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
             }`}
           >
             Completed
@@ -163,12 +163,12 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
 
       {/* Shipment Cards List */}
       {filteredItems.length === 0 ? (
-        <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#162032] text-slate-400 border border-slate-700/50">
+        <div className="rounded-xl border border-neutral-200/90 bg-white p-8 text-center shadow-2xs">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500">
             <Icon name={isInbound ? "containers" : "outbound"} />
           </div>
-          <h3 className="mt-3 text-sm font-semibold text-white">No shipments found</h3>
-          <p className="mt-1 text-xs text-slate-400">
+          <h3 className="mt-3 text-sm font-bold text-neutral-900">No shipments found</h3>
+          <p className="mt-1 text-xs text-neutral-500">
             {search ? "Try adjusting your search query." : "No operations matching the selected filter."}
           </p>
         </div>
@@ -191,12 +191,12 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
             return (
               <div
                 key={item.number}
-                className={`overflow-hidden rounded-2xl border transition-all shadow-sm ${
+                className={`overflow-hidden rounded-xl border bg-white transition-all shadow-2xs ${
                   isDemurrageWarning
-                    ? "border-rose-500/60 bg-rose-500/10"
+                    ? "border-rose-300 bg-rose-50/40"
                     : isWorking
-                    ? "border-[#6655E8]/50 bg-[#202A3D]"
-                    : "border-slate-700/60 bg-[#202A3D]"
+                    ? "border-blue-300 bg-blue-50/30"
+                    : "border-neutral-200/90"
                 }`}
               >
                 {/* Main Card Header */}
@@ -205,73 +205,73 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
                     <div>
                       {/* PO / SO Reference Badge */}
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm font-bold text-white tracking-tight">
+                        <span className="font-mono text-sm font-bold text-neutral-900 tracking-tight">
                           {item.number}
                         </span>
                         {item.po ? (
-                          <span className="rounded-md border border-[#6655E8]/30 bg-[#6655E8]/15 px-2 py-0.5 text-xs font-semibold text-[#8B7DF0]">
+                          <span className="rounded bg-neutral-100 border border-neutral-300 px-2 py-0.5 text-xs font-semibold text-neutral-800">
                             {item.po}
                           </span>
                         ) : null}
                         {hasAnnex ? (
-                          <span className="rounded-md border border-blue-500/30 bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-blue-300">
+                          <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
                             Annex VII
                           </span>
                         ) : null}
                       </div>
 
                       {/* Party (Supplier / Customer) */}
-                      <p className="mt-1.5 text-sm font-semibold text-slate-100">
+                      <p className="mt-1.5 text-sm font-bold text-neutral-900">
                         {party || (isInbound ? "Supplier Not Recorded" : "Customer Not Recorded")}
                       </p>
                     </div>
 
                     {/* Status Pill */}
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold tracking-tight ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tracking-tight ${
                         isCompleted
-                          ? "border border-emerald-500/30 bg-emerald-500/20 text-emerald-400"
+                          ? "border border-emerald-300 bg-emerald-100 text-emerald-800"
                           : isWorking
-                          ? "border border-[#6655E8]/40 bg-[#6655E8]/20 text-[#8B7DF0]"
-                          : "border border-slate-700 bg-[#162032] text-slate-300"
+                          ? "border border-blue-300 bg-blue-100 text-blue-800"
+                          : "border border-neutral-300 bg-neutral-100 text-neutral-700"
                       }`}
                     >
                       {isCompleted ? "✔" : isWorking ? "●" : "○"} {item.status}
                     </span>
                   </div>
 
-                  {/* Route & Equipment Info */}
-                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-[#162032] border border-slate-700/50 p-3 text-xs">
+                  {/* Route & Equipment Info Block */}
+                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-neutral-50/90 border border-neutral-200/70 p-3 text-xs">
                     <div>
-                      <span className="text-slate-400 block text-[10px] uppercase font-medium">
+                      <span className="text-neutral-500 block text-[10px] uppercase font-bold">
                         {isInbound ? "Origin & Pickup" : "Destination"}
                       </span>
-                      <p className="font-medium text-slate-200 truncate mt-0.5">
+                      <p className="font-semibold text-neutral-800 truncate mt-0.5">
                         {isInbound ? (item as DemoContainer).origin || "Origin not set" : item.warehouse}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-neutral-500 mt-0.5">
                         {isInbound ? `ETA: ${(item as DemoContainer).eta || "Pending"}` : (item as DemoOutbound).date}
                       </p>
                     </div>
 
                     <div>
-                      <span className="text-slate-400 block text-[10px] uppercase font-medium">
+                      <span className="text-neutral-500 block text-[10px] uppercase font-bold">
                         Equipment / Container
                       </span>
-                      <p className="font-mono font-medium text-slate-200 truncate mt-0.5">
+                      <p className="font-mono font-bold text-neutral-800 truncate mt-0.5">
                         {equip || "No equipment ID"}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Depot: {item.warehouse}</p>
+                      <p className="text-[11px] text-neutral-500 mt-0.5">Depot: {item.warehouse}</p>
                     </div>
                   </div>
 
                   {/* Demurrage Notice Banner if applicable */}
                   {isInbound && containerItem?.status === "Unloading" ? (
                     <div
-                      className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium ${
+                      className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold ${
                         isDemurrageWarning
-                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
-                          : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                          ? "bg-rose-100 text-rose-900 border border-rose-300"
+                          : "bg-amber-100 text-amber-900 border border-amber-300"
                       }`}
                     >
                       <span className="flex items-center gap-1.5">
@@ -279,7 +279,7 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
                         {demurrageLabel(containerItem, now)}
                       </span>
                       {demurrageSnap?.chargeEUR && demurrageSnap.chargeEUR > 0 ? (
-                        <span className="font-bold text-rose-400">
+                        <span className="font-bold text-rose-700">
                           {formatEuro(demurrageSnap.chargeEUR)}
                         </span>
                       ) : null}
@@ -287,14 +287,14 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
                   ) : null}
 
                   {/* Materials Preview & Toggle */}
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-slate-700/60 pt-2.5">
-                    <span>
+                  <div className="mt-3 flex items-center justify-between text-xs text-neutral-600 border-t border-neutral-200/80 pt-2.5">
+                    <span className="font-medium">
                       {item.sections?.length || 0} Material Section(s) recorded
                     </span>
                     <button
                       type="button"
                       onClick={() => setExpandedId(isExpanded ? null : item.number)}
-                      className="text-[#8B7DF0] hover:text-[#a599f5] font-medium flex items-center gap-1"
+                      className="text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1"
                     >
                       {isExpanded ? "Hide Details ▲" : "View Details ▼"}
                     </button>
@@ -303,8 +303,8 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
 
                 {/* Expandable Details Drawer */}
                 {isExpanded ? (
-                  <div className="border-t border-slate-700/60 bg-[#162032] p-4 text-xs space-y-3">
-                    <p className="font-semibold text-slate-300 uppercase tracking-wider text-[10px]">
+                  <div className="border-t border-neutral-200 bg-neutral-50/70 p-4 text-xs space-y-3">
+                    <p className="font-bold text-neutral-700 uppercase tracking-wider text-[10px]">
                       Recorded Cargo Sections
                     </p>
                     {item.sections && item.sections.length > 0 ? (
@@ -312,45 +312,44 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
                         {item.sections.map((sec, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center justify-between rounded-lg bg-[#202A3D] border border-slate-700/50 p-2.5 text-slate-200"
+                            className="flex items-center justify-between rounded-lg bg-white border border-neutral-200 p-2.5 text-neutral-800 shadow-2xs"
                           >
                             <div>
-                              <p className="font-semibold text-white">{sec.material}</p>
-                              <p className="text-[11px] text-slate-400">
+                              <p className="font-bold text-neutral-900">{sec.material}</p>
+                              <p className="text-[11px] text-neutral-500">
                                 {sec.packagingId} · Qty: {sec.packagingQty || "N/A"}
                               </p>
                             </div>
                             <div className="text-right">
                               {sec.netKg != null ? (
-                                <p className="font-bold text-emerald-400">{formatKg(sec.netKg)} Net</p>
+                                <p className="font-bold text-emerald-800">{formatKg(sec.netKg)} Net</p>
                               ) : (
-                                <p className="font-bold text-[#8B7DF0]">{sec.count} Units</p>
+                                <p className="font-bold text-blue-800">{sec.count} Units</p>
                               )}
                               {sec.grossKg ? (
-                                <p className="text-[10px] text-slate-400">{formatKg(sec.grossKg)} Gross</p>
+                                <p className="text-[10px] text-neutral-500">{formatKg(sec.grossKg)} Gross</p>
                               ) : null}
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-slate-400 italic">No materials recorded yet.</p>
+                      <p className="text-neutral-500 italic">No materials recorded yet.</p>
                     )}
 
-                    {/* Operational Safety Guarantee */}
-                    <div className="rounded-lg border border-slate-700/50 bg-[#202A3D]/70 p-2 text-[11px] text-slate-400">
-                      ℹ Warehouse Worker permissions active: Tap below to record materials, weigh cargo, capture photos, and finalize operations.
+                    <div className="rounded-lg border border-neutral-200 bg-white p-2.5 text-[11px] text-neutral-600">
+                      ℹ Ready to work? Tap the action button below to record scale weights and inspection photos.
                     </div>
                   </div>
                 ) : null}
 
                 {/* Primary Action Button (min 48px touch target) */}
-                <div className="border-t border-slate-700/60 p-3 bg-[#162032]">
+                <div className="border-t border-neutral-200 p-3 bg-neutral-50/60">
                   <Link
                     href={isInbound ? `/containers/${item.number}` : `/outbound/${item.number}`}
                     className={WORKER_THEME.btnPrimary}
                   >
-                    {isInbound ? "Open Unloading Workflow →" : "Open Loading Workflow →"}
+                    {isInbound ? "Start Unloading / View Operation →" : "Start Loading / View Operation →"}
                   </Link>
                 </div>
               </div>

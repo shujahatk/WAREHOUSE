@@ -18,7 +18,7 @@ export function WorkerLayout({ children }: { children: ReactNode }) {
 
   return (
     <WorkspaceSearch.Provider value={query}>
-      <div className="min-h-screen bg-[#080D1C] text-white flex flex-col font-sans antialiased overflow-x-hidden selection:bg-[#6655E8] selection:text-white">
+      <div className="min-h-screen bg-[#F8FAFC] text-neutral-900 flex flex-col font-sans antialiased overflow-x-hidden">
         {/* Fixed Top Header for Workers */}
         <WorkerHeader />
 
@@ -27,12 +27,12 @@ export function WorkerLayout({ children }: { children: ReactNode }) {
           {allowed ? (
             children
           ) : (
-            <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-6 text-center text-white shadow-md mt-6">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xl font-bold">
+            <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-neutral-900 shadow-2xs mt-6">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-lg font-bold">
                 ✕
               </div>
-              <h2 className="mt-3 text-lg font-bold">Access Restricted</h2>
-              <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+              <h2 className="mt-3 text-lg font-bold text-neutral-900">Access Restricted</h2>
+              <p className="mt-2 text-xs text-neutral-600 leading-relaxed">
                 Your Warehouse Worker account is limited to depot operations, shipments, and inventory.
                 Administrative and purchasing portals are reserved for Staff and Admin.
               </p>
