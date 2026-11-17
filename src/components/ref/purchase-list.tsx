@@ -347,11 +347,10 @@ export function PurchaseList() {
                   key={t}
                   type="button"
                   onClick={() => setTypeFilter(t)}
-                  className={`rounded-md px-3 py-1 font-medium transition ${
-                    typeFilter === t
-                      ? "bg-white text-neutral-950 shadow-xs"
-                      : "text-neutral-600 hover:text-neutral-900"
-                  }`}
+                  className={`rounded-md px-3 py-1 font-medium transition ${typeFilter === t
+                    ? "bg-white text-neutral-950 shadow-xs"
+                    : "text-neutral-600 hover:text-neutral-900"
+                    }`}
                 >
                   {t === "All" ? "All Types" : t === "PO" ? "PO (Inbound)" : "SO (Outbound)"}
                 </button>
@@ -388,11 +387,10 @@ export function PurchaseList() {
                   key={st}
                   type="button"
                   onClick={() => setStatusFilter(st)}
-                  className={`h-7 rounded-full px-2.5 text-[11px] font-medium transition ${
-                    statusFilter === st
-                      ? "bg-neutral-950 text-white"
-                      : "border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
-                  }`}
+                  className={`h-7 rounded-full px-2.5 text-[11px] font-medium transition ${statusFilter === st
+                    ? "bg-neutral-950 text-white"
+                    : "border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
+                    }`}
                 >
                   {st} ({count})
                 </button>
@@ -425,9 +423,8 @@ export function PurchaseList() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                              isSo ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"
-                            }`}
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${isSo ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"
+                              }`}
                           >
                             {isSo ? "SO (Loading)" : "PO (Unloading)"}
                           </span>
@@ -514,9 +511,8 @@ export function PurchaseList() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <span
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                              isSo ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"
-                            }`}
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${isSo ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"
+                              }`}
                           >
                             {isSo ? "SO" : "PO"}
                           </span>
@@ -599,9 +595,8 @@ export function PurchaseList() {
             <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
               <div className="flex items-center gap-2">
                 <span
-                  className={`rounded px-2 py-0.5 text-xs font-bold ${
-                    addModalType === "PO" ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-800"
-                  }`}
+                  className={`rounded px-2 py-0.5 text-xs font-bold ${addModalType === "PO" ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-800"
+                    }`}
                 >
                   {addModalType === "PO" ? "INBOUND PO" : "OUTBOUND SO"}
                 </span>

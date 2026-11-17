@@ -12,6 +12,7 @@ import { calculateSection } from "@/lib/packaging";
 import { canOperateWarehouse, canPerform } from "@/lib/permissions";
 import { UploadCapture } from "@/components/files/upload-capture";
 import { FileGallery } from "@/components/files/file-gallery";
+import { WorkerWorkflowScreen } from "@/components/worker/worker-workflow-screen";
 
 type Direction = "inbound" | "outbound";
 
@@ -55,6 +56,10 @@ export function ShipmentDesk({ direction, number }: { direction: Direction; numb
         </Surface>
       </>
     );
+  }
+
+  if (identity.role === "worker") {
+    return <WorkerWorkflowScreen direction={direction} record={record} />;
   }
 
   return <ShipmentForm direction={direction} record={record} />;

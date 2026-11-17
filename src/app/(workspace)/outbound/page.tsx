@@ -7,16 +7,22 @@ import { PageTitle, StatusPill, Surface } from "@/components/ref/chrome";
 import { useSession } from "@/components/shell/auth-gate";
 import { handoverStatus, visibleOutbound } from "@/domain/view";
 import { canPerform } from "@/lib/permissions";
+import { WorkerShipmentsView } from "@/components/worker/worker-shipments-view";
 
 export default function OutboundPage() {
   const { state, addOutbound, notice } = useDemo();
   const { identity } = useSession();
+
+  if (identity.role === "worker") {
+    return <WorkerShipmentsView direction="outbound" />;
+  }
+
   const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
   const rows = visibleOutbound(state, actor);
 
   return (
     <>
-      <PageTitle title="Outgoing / Loading" subtitle={identity.role === "worker" ? `Loading operations at ${identity.warehouse}` : "Outgoing shipments and loading operations across warehouses"} />
+      <PageTitle title="Outgoing / Loading" subtitle="Outgoing shipments and loading operations across warehouses" />
       {notice ? <p className="mb-3 text-sm text-neutral-700">{notice}</p> : null}
       {canPerform(identity.role, "register-shipment") ? <OutboundCreate onCreate={addOutbound} /> : null}
       <ul className="space-y-2">

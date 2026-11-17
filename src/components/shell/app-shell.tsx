@@ -12,6 +12,8 @@ import { cn } from "@/lib/cn";
 import { mobileTabs, moreNav, navActive } from "@/lib/navigation";
 import { canAccess, roleLabel } from "@/lib/permissions";
 import { WorkspaceSearch } from "@/components/shell/search-context";
+import { WorkerHeader } from "@/components/worker/worker-header";
+import { WorkerBottomNav } from "@/components/worker/worker-bottom-nav";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -24,6 +26,36 @@ export function AppShell({ children }: { children: ReactNode }) {
   const allowed = !mounted || !ready || canAccess(identity.role, pathname);
   const tabs = mobileTabs.filter((item) => item.roles.includes(activeRole));
   const moreItems = moreNav.filter((item) => item.roles.includes(activeRole));
+
+  // Dedicated Mobile Warehouse Interface for Workers
+  if (mounted && ready && activeRole === "worker") {
+    return (
+      <WorkspaceSearch.Provider value={query}>
+        <div className="min-h-screen bg-[#0B0F19] text-white flex flex-col overflow-x-hidden">
+          <WorkerHeader />
+          <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-4">
+            {allowed ? (
+              children
+            ) : (
+              <section className="mx-auto max-w-lg rounded-2xl border border-slate-800 bg-[#121B2E] p-6 text-white text-center">
+                <h1 className="text-xl font-bold">Access Denied</h1>
+                <p className="mt-2 text-sm text-slate-400">
+                  Your worker account does not have permission to access this module.
+                </p>
+                <Link
+                  href="/dashboard"
+                  className="mt-4 inline-block rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-violet-500"
+                >
+                  Back to Dashboard
+                </Link>
+              </section>
+            )}
+          </main>
+          <WorkerBottomNav />
+        </div>
+      </WorkspaceSearch.Provider>
+    );
+  }
 
   return (
     <WorkspaceSearch.Provider value={query}>

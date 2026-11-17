@@ -9,10 +9,16 @@ import { useSession } from "@/components/shell/auth-gate";
 import { useWorkspaceSearch } from "@/components/shell/search-context";
 import { demurrageLabel, visibleContainers } from "@/domain/view";
 import { canPerform } from "@/lib/permissions";
+import { WorkerShipmentsView } from "@/components/worker/worker-shipments-view";
 
 export default function ContainersPage() {
   const { state, addInbound, notice } = useDemo();
   const { identity } = useSession();
+
+  if (identity.role === "worker") {
+    return <WorkerShipmentsView direction="inbound" />;
+  }
+
   const query = useWorkspaceSearch().trim().toLowerCase();
   const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
   const scoped = visibleContainers(state, actor);
@@ -23,7 +29,7 @@ export default function ContainersPage() {
     <>
       <PageTitle
         title="Incoming / Unloading"
-        subtitle={identity.role === "worker" ? `Assigned warehouse: ${identity.warehouse}` : "Incoming containers and unloading operations across warehouses"}
+        subtitle="Incoming containers and unloading operations across warehouses"
       />
       {notice ? <p className="mb-3 text-sm text-neutral-700">{notice}</p> : null}
       {canPerform(identity.role, "register-shipment") ? <InboundCreate onCreate={addInbound} /> : null}

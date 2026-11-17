@@ -7,6 +7,7 @@ import { useSession } from "@/components/shell/auth-gate";
 import { useWorkspaceSearch } from "@/components/shell/search-context";
 import { formatKg, stockStatus, visibleStock } from "@/domain/view";
 import { canPerform } from "@/lib/permissions";
+import { WorkerInventoryView } from "@/components/worker/worker-inventory-view";
 
 type TabKey = "stock" | "containers" | "history";
 type SortKey = "material" | "quantity" | "weight" | "warehouse";
@@ -14,6 +15,11 @@ type SortKey = "material" | "quantity" | "weight" | "warehouse";
 export default function InventoryPage() {
   const { state, setThreshold, notice, isSyncing, lastSyncedAt } = useDemo();
   const { identity } = useSession();
+
+  if (identity.role === "worker") {
+    return <WorkerInventoryView />;
+  }
+
   const query = useWorkspaceSearch().trim().toLowerCase();
 
   const [activeTab, setActiveTab] = useState<TabKey>("stock");
@@ -69,7 +75,7 @@ export default function InventoryPage() {
     <>
       <PageTitle
         title="Inventory"
-        subtitle={identity.role === "worker" ? `Showing ${identity.warehouse} only` : "Real-time warehouse stock, container cargo, and append-only audit history."}
+        subtitle="Real-time warehouse stock, container cargo, and append-only audit history."
         action={
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs shadow-xs">

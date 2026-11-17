@@ -159,14 +159,14 @@ export function RequestWorkflowPanel({
               activeRequest.status === "submitted"
                 ? "Pending Approval"
                 : activeRequest.status === "approved"
-                ? "Approved"
-                : activeRequest.status === "completed"
-                ? "Completed"
-                : activeRequest.status === "declined"
-                ? "Declined"
-                : activeRequest.status === "sent_back"
-                ? "Sent Back"
-                : "Deleted"
+                  ? "Approved"
+                  : activeRequest.status === "completed"
+                    ? "Completed"
+                    : activeRequest.status === "declined"
+                      ? "Declined"
+                      : activeRequest.status === "sent_back"
+                        ? "Sent Back"
+                        : "Deleted"
             }
           />
         ) : null}
@@ -325,7 +325,7 @@ export function RequestWorkflowPanel({
               }}
             />
             {isWorkerAtWarehouse &&
-            (activeRequest.status === "submitted" || activeRequest.status === "sent_back" || activeRequest.status === "declined") ? (
+              (activeRequest.status === "submitted" || activeRequest.status === "sent_back" || activeRequest.status === "declined") ? (
               <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                 <UploadCapture
                   kind="photo"
@@ -437,7 +437,7 @@ export function RequestWorkflowPanel({
 
             {/* Worker Actions */}
             {isWorkerAtWarehouse &&
-            (activeRequest.status === "submitted" || activeRequest.status === "declined" || activeRequest.status === "sent_back") ? (
+              (activeRequest.status === "submitted" || activeRequest.status === "declined" || activeRequest.status === "sent_back") ? (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-neutral-500">
                   Made a mistake or request was declined? Soft-delete this request to start fresh.
@@ -455,7 +455,7 @@ export function RequestWorkflowPanel({
 
             {/* When Deleted or Declined notice */}
             {isWorkerAtWarehouse &&
-            (activeRequest.status === "deleted" || activeRequest.status === "declined") ? (
+              (activeRequest.status === "deleted" || activeRequest.status === "declined") ? (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-neutral-600">
                   This request is {activeRequest.status}. New tasks and operational PO/SO orders are assigned by Staff.

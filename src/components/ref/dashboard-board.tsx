@@ -8,12 +8,18 @@ import { useLiveNow } from "@/components/ref/live-clock";
 import { useSession } from "@/components/shell/auth-gate";
 import { demurrageLabel, formatKg, visibleContainers, visibleOrders, visibleOutbound, visibleStock } from "@/domain/view";
 import { canAccess, canPerform, roleLabel } from "@/lib/permissions";
+import { WorkerDashboard } from "@/components/worker/worker-dashboard";
 
 export function DashboardBoard() {
   const { state } = useDemo();
   const { identity } = useSession();
   const mounted = useIsMounted();
   const currentRole = mounted ? identity.role : "worker";
+
+  if (currentRole === "worker") {
+    return <WorkerDashboard />;
+  }
+
   const actor = { name: identity.name, role: currentRole, warehouse: identity.warehouse, email: identity.email, company: identity.company };
   const stock = visibleStock(state, currentRole, identity.warehouse);
   const orders = visibleOrders(state, actor);
@@ -41,24 +47,11 @@ export function DashboardBoard() {
     <>
       <PageTitle
         title="Dashboard"
-        subtitle={
-          currentRole === "worker"
-            ? `${identity.name} · ${roleLabel(currentRole)} · ${identity.warehouse ?? "Assigned warehouse"}`
-            : `${identity.name} · ${roleLabel(currentRole)}`
-        }
+        subtitle={`${identity.name} · ${roleLabel(currentRole)}`}
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {currentRole === "worker" ? (
-          <>
-            <KpiCard label="Assigned stock" value={formatKg(stockWeight)} detail={identity.warehouse ?? "Warehouse"} />
-            <KpiCard label="My requests" value={String(myGeneralRequests.length)} detail={`${pendingMyRequests} pending / review`} />
-          </>
-        ) : (
-          <>
-            <KpiCard label="PO & SO orders" value={String(orders.length)} detail={`${pendingOrders} pending order(s)`} />
-            <KpiCard label="Pending requests" value={String(pendingRequests)} detail="Awaiting review & approval" />
-          </>
-        )}
+        <KpiCard label="PO & SO orders" value={String(orders.length)} detail={`${pendingOrders} pending order(s)`} />
+        <KpiCard label="Pending requests" value={String(pendingRequests)} detail="Awaiting review & approval" />
         <KpiCard label="Incoming open" value={String(inboundOpen)} detail="Not completed" />
         <KpiCard label="Outgoing open" value={String(outboundOpen)} detail="Not dispatched" />
       </div>
@@ -110,13 +103,7 @@ export function DashboardBoard() {
           <Surface className="p-4">
             <h2 className="text-sm font-semibold text-neutral-950">Quick actions</h2>
             <div className="mt-3 grid gap-2">
-              {currentRole === "worker" ? (
-                <>
-                  <PrimaryLink href="/tasks">My Assigned Tasks</PrimaryLink>
-                </>
-              ) : (
-                <PrimaryLink href="/tasks">All Requests</PrimaryLink>
-              )}
+              <PrimaryLink href="/tasks">All Requests</PrimaryLink>
               {canPerform(currentRole, "create-order") ? <PrimaryLink href="/purchases">PO & SO Orders</PrimaryLink> : null}
               {canPerform(currentRole, "create-transfer") ? <PrimaryLink href="/transfers">Create transfer</PrimaryLink> : null}
               <PrimaryLink href="/documents">Review documents</PrimaryLink>
