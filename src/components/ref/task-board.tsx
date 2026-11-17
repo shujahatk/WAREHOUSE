@@ -269,27 +269,24 @@ export function TaskBoard() {
             <button
               type="button"
               onClick={() => setWorkerActiveTab("today")}
-              className={`relative pb-3 px-4 text-sm font-semibold transition ${
-                workerActiveTab === "today"
-                  ? "border-b-2 border-neutral-950 text-neutral-950"
-                  : "text-neutral-500 hover:text-neutral-800"
-              }`}
+              className={`relative pb-3 px-4 text-sm font-semibold transition ${workerActiveTab === "today"
+                ? "border-b-2 border-neutral-950 text-neutral-950"
+                : "text-neutral-500 hover:text-neutral-800"
+                }`}
             >
               Today&apos;s Assignments
-              <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
-                todayAssignments.length > 0 ? "bg-amber-100 text-amber-800 font-bold" : "bg-neutral-100 text-neutral-600"
-              }`}>
+              <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${todayAssignments.length > 0 ? "bg-amber-100 text-amber-800 font-bold" : "bg-neutral-100 text-neutral-600"
+                }`}>
                 {todayAssignments.length}
               </span>
             </button>
             <button
               type="button"
               onClick={() => setWorkerActiveTab("upcoming")}
-              className={`relative pb-3 px-4 text-sm font-semibold transition ${
-                workerActiveTab === "upcoming"
-                  ? "border-b-2 border-neutral-950 text-neutral-950"
-                  : "text-neutral-500 hover:text-neutral-800"
-              }`}
+              className={`relative pb-3 px-4 text-sm font-semibold transition ${workerActiveTab === "upcoming"
+                ? "border-b-2 border-neutral-950 text-neutral-950"
+                : "text-neutral-500 hover:text-neutral-800"
+                }`}
             >
               Upcoming Assignments
               <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
@@ -299,11 +296,10 @@ export function TaskBoard() {
             <button
               type="button"
               onClick={() => setWorkerActiveTab("requests")}
-              className={`relative pb-3 px-4 text-sm font-semibold transition ${
-                workerActiveTab === "requests"
-                  ? "border-b-2 border-neutral-950 text-neutral-950"
-                  : "text-neutral-500 hover:text-neutral-800"
-              }`}
+              className={`relative pb-3 px-4 text-sm font-semibold transition ${workerActiveTab === "requests"
+                ? "border-b-2 border-neutral-950 text-neutral-950"
+                : "text-neutral-500 hover:text-neutral-800"
+                }`}
             >
               Loading / Unloading Requests
               <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
@@ -456,11 +452,10 @@ export function TaskBoard() {
                   key={tab.id}
                   type="button"
                   onClick={() => setStatusFilter(tab.id)}
-                  className={`rounded-md px-2.5 py-1 font-medium transition min-h-[36px] sm:min-h-0 ${
-                    statusFilter === tab.id
-                      ? "bg-neutral-950 text-white shadow-xs"
-                      : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-                  }`}
+                  className={`rounded-md px-2.5 py-1 font-medium transition min-h-[36px] sm:min-h-0 ${statusFilter === tab.id
+                    ? "bg-neutral-950 text-white shadow-xs"
+                    : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -529,11 +524,10 @@ export function TaskBoard() {
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 pb-2.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-sm font-bold text-neutral-950">{req.number}</span>
-                        <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold ${
-                          opParsed?.requestType === "loading"
-                            ? "bg-blue-50 text-blue-800 border border-blue-200"
-                            : "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold ${opParsed?.requestType === "loading"
+                          ? "bg-blue-50 text-blue-800 border border-blue-200"
+                          : "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                          }`}>
                           {opParsed?.requestType === "loading" ? "📤 Loading" : "📥 Unloading"}
                         </span>
                         {priorityInfo && priorityInfo.id !== "normal" ? (
@@ -678,15 +672,14 @@ export function TaskBoard() {
                     {/* Feedback / Decision Notes from Admin or Staff */}
                     {req.responseNote ? (
                       <div
-                        className={`rounded-lg p-3 text-xs border ${
-                          req.status === "declined"
-                            ? "bg-rose-50 border-rose-200 text-rose-900"
-                            : req.status === "sent_back"
-                              ? "bg-purple-50 border-purple-200 text-purple-900"
-                              : req.status === "approved"
-                                ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                                : "bg-neutral-50 border-neutral-200 text-neutral-900"
-                        }`}
+                        className={`rounded-lg p-3 text-xs border ${req.status === "declined"
+                          ? "bg-rose-50 border-rose-200 text-rose-900"
+                          : req.status === "sent_back"
+                            ? "bg-purple-50 border-purple-200 text-purple-900"
+                            : req.status === "approved"
+                              ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                              : "bg-neutral-50 border-neutral-200 text-neutral-900"
+                          }`}
                       >
                         <div className="font-semibold mb-0.5">
                           {req.status === "declined"
@@ -1107,13 +1100,12 @@ export function TaskBoard() {
                 type="button"
                 onClick={handleExecuteAction}
                 disabled={actionSubmitting}
-                className={`rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs transition min-h-[44px] disabled:opacity-50 ${
-                  actionTarget.decision === "declined" || actionTarget.decision === "delete"
-                    ? "bg-rose-600 hover:bg-rose-700"
-                    : actionTarget.decision === "approved" || actionTarget.decision === "completed"
-                      ? "bg-emerald-600 hover:bg-emerald-700"
-                      : "bg-neutral-950 hover:bg-neutral-800"
-                }`}
+                className={`rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs transition min-h-[44px] disabled:opacity-50 ${actionTarget.decision === "declined" || actionTarget.decision === "delete"
+                  ? "bg-rose-600 hover:bg-rose-700"
+                  : actionTarget.decision === "approved" || actionTarget.decision === "completed"
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-neutral-950 hover:bg-neutral-800"
+                  }`}
               >
                 {actionSubmitting
                   ? "Processing…"

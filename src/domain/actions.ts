@@ -27,6 +27,9 @@ export async function signInAction(email: string, password: string): Promise<{ e
       logger.warn("Sign-in authentication failed", { email, error: result.error });
       return { error: result.error };
     }
+    if (result.value.profile.approvalStatus !== "approved" || !result.value.profile.active) {
+      return { error: "Your account is awaiting admin approval. Please wait for an administrator to review your request." };
+    }
     resetRateLimit(`login:${email.trim().toLowerCase()}`);
     logger.info("User signed in successfully", { email, role: result.value.profile.role });
     const jar = await cookies();
@@ -98,11 +101,37 @@ export async function signOutAction(): Promise<void> {
 }
 
 export async function loadWorkspace() {
-  return getAdapter().view(await sessionId());
+  const sid = await sessionId();
+  const adapter = getAdapter();
+  if (sid) {
+    const cur = await adapter.current(sid);
+    if (!cur || cur.approvalStatus !== "approved" || !cur.active) {
+      return adapter.view(null);
+    }
+  }
+  return adapter.view(sid);
 }
 
 export async function runCommand(name: string, payload: unknown) {
-  return getAdapter().run(await sessionId(), name, payload);
+  // Allow unauthenticated signup / registration commands
+  if (name === "signUpUser" || name === "registerUser" || name === "registerOffersUser") {
+    return getAdapter().run(null, name, payload);
+  }
+  const sid = await sessionId();
+  if (!sid) {
+    const defaultView = await getAdapter().view(null);
+    return { state: defaultView.state, actor: null, error: "Sign in to continue." };
+  }
+  const cur = await getAdapter().current(sid);
+  if (!cur || cur.approvalStatus !== "approved" || !cur.active) {
+    const defaultView = await getAdapter().view(null);
+    return {
+      state: defaultView.state,
+      actor: null,
+      error: "Your account is awaiting admin approval or is inactive.",
+    };
+  }
+  return getAdapter().run(sid, name, payload);
 }
 
 import type { UploadTargetMetadata } from "@/lib/data/interfaces";

@@ -4565,7 +4565,7 @@ export function sessionProfile(store: StoreData, sessionId: string, now: string)
     return null;
   }
   const user = store.users.find((item) => item.id === session.userId && item.active);
-  if (!user || (!isActiveRole(user.role) && user.role !== "offers_user")) return null;
+  if (!user || user.approvalStatus !== "approved" || (!isActiveRole(user.role) && user.role !== "offers_user")) return null;
   return profile(user);
 }
 
@@ -4573,10 +4573,13 @@ export function signInUser(store: StoreData, email: string, password: string, no
   const user = store.users.find((item) => same(item.email, email));
   if (!user || !verifyPassword(password, user.passwordHash)) return fail("Those credentials were not recognized.");
   if (user.approvalStatus === "pending") {
-    return fail("Your account is pending administrator approval. Please wait for an administrator to review your request.");
+    return fail("Your account is awaiting admin approval. (pending administrator approval). Please wait for an administrator to review your request.");
   }
   if (user.approvalStatus === "rejected") {
-    return fail("Your registration request has been rejected (declined). Please contact the administrator.");
+    return fail("Your registration request has been rejected (declined). Please contact an administrator.");
+  }
+  if (user.approvalStatus !== "approved") {
+    return fail("Your account is awaiting admin approval. (pending administrator approval). Please wait for an administrator to review your request.");
   }
   if (!user.active) return fail("This account is inactive.");
   if (!isActiveRole(user.role) && user.role !== "offers_user") return fail("This account role is no longer active.");

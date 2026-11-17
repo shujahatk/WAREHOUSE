@@ -521,7 +521,7 @@ export class SupabaseAdapter {
       return null;
     }
     const profile = mapUserProfile(res.value);
-    if (!profile.active || (!isActiveRole(profile.role) && profile.role !== "offers_user")) {
+    if (!profile.active || profile.approvalStatus !== "approved" || (!isActiveRole(profile.role) && profile.role !== "offers_user")) {
       return null;
     }
     if (token) {
@@ -537,9 +537,38 @@ export class SupabaseAdapter {
       return authRes;
     }
     const accessToken = authRes.value.accessToken;
+
+    // 1. Direct users table verification first to inspect genuine database approval_status
+    const checkRes = await this.client.select<Record<string, unknown>>(
+      "users",
+      `select=approval_status,role,active,auth_user_id&email=eq.${encodeURIComponent(email)}`,
+      accessToken,
+    );
+    if (checkRes.ok && checkRes.value.length > 0) {
+      const u = checkRes.value[0];
+      if (u.approval_status === "pending") {
+        await this.client.auth.signOut(accessToken);
+        return fail("Your account is awaiting admin approval. (pending administrator approval). Please wait for an administrator to review your request.");
+      }
+      if (u.approval_status === "rejected") {
+        await this.client.auth.signOut(accessToken);
+        return fail("Your registration request has been rejected (declined). Please contact an administrator.");
+      }
+      if (u.approval_status && u.approval_status !== "approved") {
+        await this.client.auth.signOut(accessToken);
+        return fail("Your account is awaiting admin approval. (pending administrator approval). Please wait for an administrator to review your request.");
+      }
+      if (u.active === false) {
+        await this.client.auth.signOut(accessToken);
+        return fail("This account is inactive. Please contact an administrator.");
+      }
+    }
+
+    // 2. Fetch authenticated profile via current_app_user()
     let profile = await this.current(accessToken);
+
+    // 3. Fallback: only if profile is null and user record was not found or needs RPC resolution
     if (!profile) {
-      // User is either pending, rejected, inactive, or not found in public.users
       const statusRes = await this.client.rpc<{
         ok: boolean;
         error?: string;
@@ -552,40 +581,35 @@ export class SupabaseAdapter {
         const status = statusRes.value;
         if (status.approval_status === "pending") {
           await this.client.auth.signOut(accessToken);
-          return fail("Your account is pending administrator approval. Please wait for an administrator to review your request.");
+          return fail("Your account is awaiting admin approval. (pending administrator approval). Please wait for an administrator to review your request.");
         }
         if (status.approval_status === "rejected") {
           await this.client.auth.signOut(accessToken);
-          return fail("Your registration request has been rejected (declined). Please contact the administrator.");
+          return fail("Your registration request has been rejected (declined). Please contact an administrator.");
         }
-        if (status.active && (status.approval_status === "approved" || !status.approval_status)) {
-          // Profile was auto-provisioned or activated by rpc_get_auth_account_status
+        if (status.approval_status && status.approval_status !== "approved") {
+          await this.client.auth.signOut(accessToken);
+          return fail("Your account is awaiting admin approval. (pending administrator approval). Please wait for an administrator to review your request.");
+        }
+        if (status.active === false) {
+          await this.client.auth.signOut(accessToken);
+          return fail("This account is inactive. Please contact an administrator.");
+        }
+        if (status.active && status.approval_status === "approved") {
           profile = await this.current(accessToken);
         }
       }
-
-      if (!profile) {
-        await this.client.auth.signOut(accessToken);
-
-        // Fallback query directly on users table if RPC returned nothing
-        const checkRes = await this.client.select<Record<string, unknown>>(
-          "users",
-          `select=approval_status,role&email=eq.${encodeURIComponent(email)}`,
-          accessToken,
-        );
-        if (checkRes.ok && checkRes.value.length > 0) {
-          const u = checkRes.value[0];
-          if (u.role === "offers_user" && u.approval_status === "pending") {
-            return fail("Your account is pending administrator approval. You will receive access once approved.");
-          }
-          if (u.approval_status === "rejected") {
-            return fail("Your registration request has been declined. Please contact the administrator.");
-          }
-        }
-
-        return fail("This account is inactive or not linked to an active RM profile.");
-      }
     }
+
+    if (!profile) {
+      await this.client.auth.signOut(accessToken);
+      return fail("This account is inactive or awaiting admin approval.");
+    }
+    if (profile.approvalStatus !== "approved" || !profile.active) {
+      await this.client.auth.signOut(accessToken);
+      return fail("Your account is awaiting admin approval. (pending administrator approval). Please wait for an administrator to review your request.");
+    }
+
     this.tokenByActorId.set(profile.id, accessToken);
     this.lastAccessToken = accessToken;
     return ok({ sessionId: accessToken, profile });

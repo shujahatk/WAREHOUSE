@@ -251,13 +251,12 @@ export function CsvImportModal({
           ].map((s) => (
             <div key={s.num} className="flex items-center gap-1.5">
               <span
-                className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
-                  step === s.num
-                    ? "bg-neutral-950 text-white"
-                    : step > s.num
+                className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${step === s.num
+                  ? "bg-neutral-950 text-white"
+                  : step > s.num
                     ? "bg-emerald-600 text-white"
                     : "bg-neutral-100 text-neutral-500"
-                }`}
+                  }`}
               >
                 {step > s.num ? "✓" : s.num}
               </span>

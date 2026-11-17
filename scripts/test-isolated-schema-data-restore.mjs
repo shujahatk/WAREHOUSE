@@ -126,7 +126,7 @@ async function verifyFullReconstruction() {
 
   // 4. Restore All Data Rows from Backup
   console.log('\n[4/5] Restoring Relational Data Rows from JSON Backup:');
-  
+
   // Warehouses
   const warehouses = backup.tables['warehouses'] || [];
   for (const w of warehouses) {

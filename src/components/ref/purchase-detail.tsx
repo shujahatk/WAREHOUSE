@@ -140,11 +140,10 @@ export function PurchaseDetail({ number }: { number: string }) {
               </p>
             </div>
             {order.assignedWorkerName ? (
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                order.executionStatus === "completed"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-blue-100 text-blue-800"
-              }`}>
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${order.executionStatus === "completed"
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-blue-100 text-blue-800"
+                }`}>
                 ● {order.executionStatus === "completed" ? "Completed" : "Assigned"}: {order.assignedWorkerName}
                 {order.scheduledDate ? ` · ${order.scheduledDate}` : ""}
               </span>

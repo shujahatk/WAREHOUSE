@@ -103,7 +103,16 @@ describe("User Signup & Admin Approval System", () => {
 
       const loginRes = await store.signIn("alice@example.com", "Password123!");
       assert.equal(loginRes.ok, false);
+      // Strictly verify requirement 7: "Your account is awaiting admin approval."
+      assert.ok(loginRes.error?.includes("Your account is awaiting admin approval."));
       assert.ok(loginRes.error?.includes("pending administrator approval"));
+
+      // Verify requirement 2: Pending user cannot access protected routes or APIs
+      const currentRes = await store.current("alice-unapproved-session");
+      assert.equal(currentRes, null);
+
+      const viewRes = await store.view("alice-unapproved-session");
+      assert.equal(viewRes.actor, null);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -274,6 +283,90 @@ describe("User Signup & Admin Approval System", () => {
       const ownerRes = await store.signIn("owner@example.com", "owner-pass-1");
       assert.equal(ownerRes.ok, true);
       assert.equal(ownerRes.value.profile.role, "owner");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("9. Complete end-to-end signup, pending login, approval, rejection, and approved login verification", async () => {
+    const { dir, store } = createTestAdapter();
+    try {
+      // 1. User signs up -> account status is pending
+      const signupRes = await store.run(null, "signUpUser", {
+        name: "Elena Trader",
+        email: "elena@example.com",
+        phone: "+32470889900",
+        password: "ElenaPassword123!",
+        confirmPassword: "ElenaPassword123!",
+        notes: "Commodities trader",
+      });
+      assert.equal(signupRes.error, undefined);
+      assert.ok(signupRes.notice?.includes("Registration submitted"));
+
+      // 2. Pending user attempting to log in sees: "Your account is awaiting admin approval."
+      const pendingLogin = await store.signIn("elena@example.com", "ElenaPassword123!");
+      assert.equal(pendingLogin.ok, false);
+      assert.ok(pendingLogin.error?.includes("Your account is awaiting admin approval."));
+
+      // 3. Admin logs in and sees registration request in Admin Portal
+      const adminSign = await store.signIn("owner@example.com", "owner-pass-1");
+      assert.equal(adminSign.ok, true);
+      const snap1 = await store.snapshot(adminSign.value.sessionId);
+      const elenaInStore = snap1.users.find((u) => u.email === "elena@example.com");
+      assert.ok(elenaInStore);
+      assert.equal(elenaInStore.approvalStatus, "pending");
+      assert.equal(elenaInStore.active, false);
+
+      // 4. Admin rejects registration with reason
+      const rejectRes = await store.run(adminSign.value.sessionId, "rejectRegistration", {
+        userId: elenaInStore.id,
+        reason: "Verification credentials insufficient",
+      });
+      assert.equal(rejectRes.error, undefined);
+
+      // 5. Rejected user cannot log in and is shown rejection message
+      const rejectedLogin = await store.signIn("elena@example.com", "ElenaPassword123!");
+      assert.equal(rejectedLogin.ok, false);
+      assert.ok(rejectedLogin.error?.includes("rejected (declined)"));
+
+      // 6. Second user signs up -> approved path
+      const user2Signup = await store.run(null, "signUpUser", {
+        name: "Felix Approved",
+        email: "felix@example.com",
+        phone: "+32470443322",
+        password: "FelixPassword123!",
+        confirmPassword: "FelixPassword123!",
+      });
+      assert.equal(user2Signup.error, undefined);
+
+      // 7. Felix is pending and cannot log in
+      const felixPending = await store.signIn("felix@example.com", "FelixPassword123!");
+      assert.equal(felixPending.ok, false);
+      assert.ok(felixPending.error?.includes("Your account is awaiting admin approval."));
+
+      // 8. Admin approves Felix as worker in Bornem
+      const snap2 = await store.snapshot(adminSign.value.sessionId);
+      const felixInStore = snap2.users.find((u) => u.email === "felix@example.com");
+      assert.ok(felixInStore);
+
+      const approveRes = await store.run(adminSign.value.sessionId, "approveRegistration", {
+        userId: felixInStore.id,
+        role: "worker",
+        warehouse: "Bornem",
+      });
+      assert.equal(approveRes.error, undefined);
+
+      // 9. Approved Felix can now successfully log in
+      const felixLogin = await store.signIn("felix@example.com", "FelixPassword123!");
+      assert.equal(felixLogin.ok, true);
+      assert.equal(felixLogin.value.profile.role, "worker");
+      assert.equal(felixLogin.value.profile.approvalStatus, "approved");
+      assert.equal(felixLogin.value.profile.active, true);
+
+      // 10. Existing approved accounts continue working normally
+      const ownerCheck = await store.signIn("owner@example.com", "owner-pass-1");
+      assert.equal(ownerCheck.ok, true);
+      assert.equal(ownerCheck.value.profile.approvalStatus, "approved");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
