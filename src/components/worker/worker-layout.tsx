@@ -8,26 +8,26 @@ import { WorkspaceSearch } from "@/components/shell/search-context";
 import { canAccess } from "@/lib/permissions";
 import { WorkerHeader } from "./worker-header";
 import { WorkerBottomNav } from "./worker-bottom-nav";
+import { WORKER_THEME } from "./worker-theme";
 
 export function WorkerLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { identity } = useSession();
   const [query, setQuery] = useState("");
 
   const allowed = canAccess("worker", pathname);
 
   return (
     <WorkspaceSearch.Provider value={query}>
-      <div className="min-h-screen bg-[#0B0F19] text-white flex flex-col font-sans selection:bg-violet-600 selection:text-white antialiased">
+      <div className="min-h-screen bg-[#080D1C] text-white flex flex-col font-sans antialiased overflow-x-hidden selection:bg-[#6655E8] selection:text-white">
         {/* Fixed Top Header for Workers */}
         <WorkerHeader />
 
         {/* Main Operational Mobile Viewport */}
-        <main className="flex-1 w-full max-w-xl mx-auto px-3.5 pt-3 pb-36 sm:px-5 sm:pt-4">
+        <main className="flex-1 w-full max-w-lg mx-auto px-3.5 pt-3 pb-36 sm:px-4 sm:pt-4">
           {allowed ? (
             children
           ) : (
-            <div className="rounded-2xl border border-slate-800 bg-[#121B2E] p-6 text-center text-white shadow-xl mt-6">
+            <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-6 text-center text-white shadow-md mt-6">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xl font-bold">
                 ✕
               </div>
@@ -38,7 +38,7 @@ export function WorkerLayout({ children }: { children: ReactNode }) {
               </p>
               <Link
                 href="/dashboard"
-                className="mt-5 inline-flex h-11 items-center justify-center rounded-xl bg-violet-600 px-5 text-xs font-semibold text-white shadow-lg shadow-violet-900/40 hover:bg-violet-500 active:scale-95 transition"
+                className={`mt-5 inline-flex ${WORKER_THEME.btnPrimary}`}
               >
                 Back to Worker Dashboard
               </Link>

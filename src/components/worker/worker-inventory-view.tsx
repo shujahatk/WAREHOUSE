@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { useSession } from "@/components/shell/auth-gate";
 import { formatKg, visibleStock } from "@/domain/view";
-import { Icon } from "@/components/icons";
 import { WORKER_THEME } from "./worker-theme";
 
 export function WorkerInventoryView() {
@@ -43,7 +42,7 @@ export function WorkerInventoryView() {
   });
 
   return (
-    <div className="space-y-4 pb-28">
+    <div className="space-y-4 pb-10">
       {/* Title & Live Sync Indicator */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -55,7 +54,7 @@ export function WorkerInventoryView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-full border border-slate-800 bg-[#121B2E] px-3 py-1 text-xs text-slate-300">
+          <div className="flex items-center gap-1.5 rounded-full border border-slate-700/60 bg-[#202A3D] px-3 py-1 text-xs text-slate-300">
             <span
               className={`h-2 w-2 rounded-full ${
                 isSyncing ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
@@ -70,39 +69,39 @@ export function WorkerInventoryView() {
 
       {/* Summary KPI Banner */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
+        <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-3.5 sm:p-4 shadow-sm">
           <span className="text-xs text-slate-400">Total Net Stock</span>
           <p className="mt-1 text-2xl font-bold tracking-tight text-emerald-400">
             {formatKg(totalWeight)}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-500">{identity.warehouse} Depot</p>
+          <p className="mt-0.5 text-[11px] text-slate-400">{identity.warehouse} Depot</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
+        <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-3.5 sm:p-4 shadow-sm">
           <span className="text-xs text-slate-400">Materials Tracked</span>
           <p className="mt-1 text-2xl font-bold tracking-tight text-white">
             {scopedStock.length}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-500">Active SKUs</p>
+          <p className="mt-0.5 text-[11px] text-slate-400">Active SKUs</p>
         </div>
 
-        <div className="col-span-2 sm:col-span-1 rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
+        <div className="col-span-2 sm:col-span-1 rounded-2xl border border-slate-700/60 bg-[#202A3D] p-3.5 sm:p-4 shadow-sm">
           <span className="text-xs text-slate-400">Containers in Depot</span>
-          <p className="mt-1 text-2xl font-bold tracking-tight text-violet-400">
+          <p className="mt-1 text-2xl font-bold tracking-tight text-[#8B7DF0]">
             {containerRows.length}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-500">With cargo on site</p>
+          <p className="mt-0.5 text-[11px] text-slate-400">With cargo on site</p>
         </div>
       </div>
 
       {/* Tabs: Material Stock vs Container Cargo */}
-      <div className="flex rounded-xl border border-slate-800 bg-[#0E1626] p-1 text-xs">
+      <div className="flex rounded-xl border border-slate-700/60 bg-[#162032] p-1 text-xs">
         <button
           type="button"
           onClick={() => setActiveTab("stock")}
           className={`flex-1 rounded-lg py-2 font-semibold transition ${
             activeTab === "stock"
-              ? "bg-violet-600 text-white shadow-md shadow-violet-950/40"
+              ? "bg-[#6655E8] text-white shadow-sm"
               : "text-slate-400 hover:text-white"
           }`}
         >
@@ -113,7 +112,7 @@ export function WorkerInventoryView() {
           onClick={() => setActiveTab("containers")}
           className={`flex-1 rounded-lg py-2 font-semibold transition ${
             activeTab === "containers"
-              ? "bg-violet-600 text-white shadow-md shadow-violet-950/40"
+              ? "bg-[#6655E8] text-white shadow-sm"
               : "text-slate-400 hover:text-white"
           }`}
         >
@@ -145,22 +144,22 @@ export function WorkerInventoryView() {
       {activeTab === "stock" ? (
         <div className="space-y-2.5">
           {filteredStock.length === 0 ? (
-            <div className="rounded-2xl border border-slate-800 bg-[#121B2E] p-8 text-center text-xs text-slate-400">
+            <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-8 text-center text-xs text-slate-400 shadow-sm">
               No matching materials in inventory.
             </div>
           ) : (
             filteredStock.map((row) => (
               <div
                 key={row.id}
-                className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-sm"
+                className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-white">{row.material}</h3>
                     <p className="mt-0.5 text-xs text-slate-400">
-                      Category: <span className="text-slate-300 font-medium">{row.category}</span>
+                      Category: <span className="text-slate-200 font-medium">{row.category}</span>
                     </p>
-                    <p className="mt-0.5 text-[11px] text-slate-500">
+                    <p className="mt-0.5 text-[11px] text-slate-400">
                       Depot: {row.warehouse} · Bin: {row.location || "General Floor"}
                     </p>
                   </div>
@@ -188,14 +187,14 @@ export function WorkerInventoryView() {
       ) : (
         <div className="space-y-2.5">
           {containerRows.length === 0 ? (
-            <div className="rounded-2xl border border-slate-800 bg-[#121B2E] p-8 text-center text-xs text-slate-400">
+            <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-8 text-center text-xs text-slate-400 shadow-sm">
               No containers currently holding cargo in this warehouse.
             </div>
           ) : (
             containerRows.map((item) => (
               <div
                 key={item.id}
-                className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-sm space-y-2.5"
+                className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 shadow-sm space-y-2.5"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -204,7 +203,7 @@ export function WorkerInventoryView() {
                         {item.containerNumber}
                       </span>
                       {item.poNumber ? (
-                        <span className="rounded bg-violet-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300">
+                        <span className="rounded-md border border-[#6655E8]/30 bg-[#6655E8]/15 px-2 py-0.5 text-[10px] font-semibold text-[#8B7DF0]">
                           {item.poNumber}
                         </span>
                       ) : null}
@@ -213,14 +212,14 @@ export function WorkerInventoryView() {
                       Ref: {item.shipmentReference} · {item.warehouse}
                     </p>
                   </div>
-                  <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300 font-medium">
+                  <span className="rounded-full bg-[#162032] border border-slate-700/50 px-2.5 py-0.5 text-xs text-slate-300 font-medium">
                     Tare: {formatKg(item.containerTareKg)}
                   </span>
                 </div>
 
                 {/* Materials Breakdown */}
-                <div className="rounded-xl bg-[#0E1626] p-3 text-xs space-y-1.5">
-                  <span className="text-[10px] font-semibold uppercase text-slate-500 block">
+                <div className="rounded-xl bg-[#162032] border border-slate-700/50 p-3 text-xs space-y-1.5">
+                  <span className="text-[10px] font-semibold uppercase text-slate-400 block">
                     Cargo Materials
                   </span>
                   {item.materials.map((m, idx) => (
@@ -229,7 +228,7 @@ export function WorkerInventoryView() {
                       <span className="font-bold text-emerald-400">{formatKg(m.netWeightKg)} Net</span>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between border-t border-slate-800 pt-1 text-slate-400 font-medium">
+                  <div className="flex items-center justify-between border-t border-slate-700/50 pt-1 text-slate-400 font-medium">
                     <span>Gross Cargo Weight:</span>
                     <span className="text-white">{formatKg(item.grossPackedCargoWeightKg)}</span>
                   </div>

@@ -211,10 +211,10 @@ export function WorkerWorkflowScreen({
   return (
     <div className="space-y-4 pb-36">
       {/* 1. Header Bar with Back Link */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
         <Link
           href={isInbound ? "/containers" : "/outbound"}
-          className="flex items-center gap-2 text-xs font-semibold text-violet-400 hover:text-violet-300"
+          className="flex items-center gap-2 text-xs font-semibold text-[#8B7DF0] hover:text-[#a599f5]"
         >
           <span>←</span> Back to {isInbound ? "Inbound" : "Outbound"}
         </Link>
@@ -222,7 +222,7 @@ export function WorkerWorkflowScreen({
           className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
             isCompleted
               ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              : "bg-violet-600/20 text-violet-300 border border-violet-500/30"
+              : "bg-[#6655E8]/20 text-[#8B7DF0] border border-[#6655E8]/30"
           }`}
         >
           {record.status}
@@ -237,7 +237,7 @@ export function WorkerWorkflowScreen({
               {record.number}
             </h1>
             {record.po ? (
-              <span className="rounded-md border border-violet-500/30 bg-violet-500/15 px-2 py-0.5 text-xs font-semibold text-violet-300">
+              <span className="rounded-md border border-[#6655E8]/30 bg-[#6655E8]/15 px-2 py-0.5 text-xs font-semibold text-[#8B7DF0]">
                 {record.po}
               </span>
             ) : null}
@@ -258,36 +258,36 @@ export function WorkerWorkflowScreen({
 
       {/* Collapsible Shipment Details */}
       {detailsOpen ? (
-        <div className="rounded-2xl border border-slate-800 bg-[#121B2E] p-4 text-xs space-y-2">
-          <h3 className="font-semibold text-slate-200">Shipment Master Information</h3>
+        <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 text-xs space-y-2 shadow-sm">
+          <h3 className="font-semibold text-white">Shipment Master Information</h3>
           <div className="grid grid-cols-2 gap-2 text-slate-300">
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase">Order Number</span>
+              <span className="text-slate-400 block text-[10px] uppercase">Order Number</span>
               <p className="font-medium text-white">{record.po || "N/A"}</p>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase">Equipment / Container</span>
+              <span className="text-slate-400 block text-[10px] uppercase">Equipment / Container</span>
               <p className="font-medium font-mono text-white">{equipNumber || "N/A"}</p>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase">
+              <span className="text-slate-400 block text-[10px] uppercase">
                 {isInbound ? "Supplier" : "Customer"}
               </span>
               <p className="font-medium text-white">{partyName || "N/A"}</p>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase">Depot</span>
+              <span className="text-slate-400 block text-[10px] uppercase">Depot</span>
               <p className="font-medium text-white">{record.warehouse}</p>
             </div>
           </div>
-          <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-800">
+          <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-700/60">
             Note: Worker accounts operate with operational permissions. Master records are managed by Staff.
           </p>
         </div>
       ) : null}
 
       {/* 2. Four-Step Progress Indicator */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
+      <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 shadow-sm">
         <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">
           Operation Progress
         </p>
@@ -308,15 +308,15 @@ export function WorkerWorkflowScreen({
                     isPast
                       ? "bg-emerald-500 text-white"
                       : isCurrent
-                      ? "bg-violet-600 text-white ring-4 ring-violet-500/20 animate-pulse"
-                      : "bg-slate-800 text-slate-500 border border-slate-700"
+                      ? "bg-[#6655E8] text-white ring-2 ring-[#6655E8]/40"
+                      : "bg-[#162032] text-slate-400 border border-slate-700/60"
                   }`}
                 >
                   {isPast ? "✔" : item.step}
                 </div>
                 <span
                   className={`mt-1.5 text-[10px] font-medium leading-tight ${
-                    isCurrent ? "text-violet-300 font-semibold" : isPast ? "text-emerald-400" : "text-slate-500"
+                    isCurrent ? "text-[#8B7DF0] font-semibold" : isPast ? "text-emerald-400" : "text-slate-400"
                   }`}
                 >
                   {item.label}
@@ -330,12 +330,12 @@ export function WorkerWorkflowScreen({
       {/* 3. Demurrage Timer Card (for Inbound) */}
       {isInbound && container ? (
         <div
-          className={`rounded-2xl border p-4 shadow-md transition-all ${
+          className={`rounded-2xl border p-4 shadow-sm transition-all ${
             isDemurrageOvertime
-              ? "border-rose-500/60 bg-gradient-to-br from-rose-950/40 via-[#18101E] to-[#121B2E]"
+              ? "border-rose-500/60 bg-rose-500/10 text-rose-300"
               : isDemurrageRunning
-              ? "border-amber-500/40 bg-gradient-to-br from-amber-950/30 via-[#161B2E] to-[#121B2E]"
-              : "border-slate-800 bg-[#121B2E]"
+              ? "border-amber-500/50 bg-amber-500/10 text-amber-300"
+              : "border-slate-700/60 bg-[#202A3D]"
           }`}
         >
           <div className="flex items-center justify-between">
@@ -346,7 +346,7 @@ export function WorkerWorkflowScreen({
                     ? "bg-rose-500 animate-ping"
                     : isDemurrageRunning
                     ? "bg-amber-400 animate-pulse"
-                    : "bg-slate-600"
+                    : "bg-slate-500"
                 }`}
               />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
@@ -362,19 +362,19 @@ export function WorkerWorkflowScreen({
 
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div>
-              <span className="text-slate-500 block text-[10px]">Timer Status</span>
+              <span className="text-slate-400 block text-[10px]">Timer Status</span>
               <p className="font-bold text-white mt-0.5">{demurrageLabel(container, now)}</p>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px]">Free Allowance</span>
+              <span className="text-slate-400 block text-[10px]">Free Allowance</span>
               <p className="font-semibold text-slate-200 mt-0.5">120 Minutes (2 hrs)</p>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px]">Rate</span>
+              <span className="text-slate-400 block text-[10px]">Rate</span>
               <p className="font-semibold text-slate-200 mt-0.5">€1.00 / minute</p>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px]">Current Charges</span>
+              <span className="text-slate-400 block text-[10px]">Current Charges</span>
               <p className={`font-bold mt-0.5 ${isDemurrageOvertime ? "text-rose-400" : "text-emerald-400"}`}>
                 {demurrageSnap ? formatEuro(demurrageSnap.chargeEUR) : "€0.00"}
               </p>
@@ -384,15 +384,15 @@ export function WorkerWorkflowScreen({
       ) : null}
 
       {/* 4. Material Sections List & Mobile Entry Form */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
           <div>
             <h2 className="text-sm font-bold text-white">Material Sections</h2>
             <p className="text-[11px] text-slate-400">
               Record gross weight and packaging. Net weight is calculated automatically.
             </p>
           </div>
-          <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
+          <span className="rounded-full bg-[#162032] border border-slate-700/50 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
             {record.sections?.length || 0} section(s)
           </span>
         </div>
@@ -403,13 +403,13 @@ export function WorkerWorkflowScreen({
             {record.sections.map((section, idx) => (
               <div
                 key={section.id || idx}
-                className="flex items-center justify-between rounded-xl border border-slate-800 bg-[#0E1626] p-3 text-xs"
+                className="flex items-center justify-between rounded-xl border border-slate-700/60 bg-[#162032] p-3 text-xs"
               >
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-white text-sm">{section.material}</span>
                     {section.mode === "count" ? (
-                      <span className="rounded bg-violet-600/20 px-1.5 py-0.5 text-[10px] font-bold text-violet-300">
+                      <span className="rounded bg-[#6655E8]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#8B7DF0]">
                         Count Only
                       </span>
                     ) : null}
@@ -429,14 +429,14 @@ export function WorkerWorkflowScreen({
                     {section.netKg != null ? (
                       <p className="text-sm font-bold text-emerald-400">{formatKg(section.netKg)} Net</p>
                     ) : (
-                      <p className="text-sm font-bold text-violet-300">{section.count} Units</p>
+                      <p className="text-sm font-bold text-[#8B7DF0]">{section.count} Units</p>
                     )}
                   </div>
                   {!isCompleted ? (
                     <button
                       type="button"
                       onClick={() => demo.deleteMaterial(direction, record.number, section.id)}
-                      className="rounded-lg border border-rose-500/30 p-1.5 text-rose-400 hover:bg-rose-500/10 active:scale-95"
+                      className="rounded-lg border border-rose-500/30 p-1.5 text-rose-400 hover:bg-rose-500/10 active:scale-95 transition"
                       aria-label="Remove section"
                     >
                       ✕
@@ -447,21 +447,21 @@ export function WorkerWorkflowScreen({
             ))}
           </div>
         ) : (
-          <div className="mt-3 rounded-xl border border-dashed border-slate-800 p-4 text-center text-xs text-slate-500">
+          <div className="mt-3 rounded-xl border border-dashed border-slate-700/60 p-4 text-center text-xs text-slate-400">
             No material sections added yet. Use the form below to enter materials.
           </div>
         )}
 
         {/* Add Material Section Form (Only if not completed) */}
         {!isCompleted ? (
-          <form onSubmit={handleAddMaterial} className="mt-4 border-t border-slate-800 pt-3 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-violet-400">
+          <form onSubmit={handleAddMaterial} className="mt-4 border-t border-slate-700/60 pt-3 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#8B7DF0]">
               + Add Material Section
             </h3>
 
             {/* Material Presets Pills */}
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Material Name / Type</label>
+              <label className="text-xs text-slate-300 block mb-1">Material Name / Type</label>
               <input
                 type="text"
                 value={material}
@@ -476,7 +476,7 @@ export function WorkerWorkflowScreen({
                       key={preset}
                       type="button"
                       onClick={() => setMaterial(preset)}
-                      className="rounded-lg border border-slate-800 bg-[#0E1626] px-2 py-0.5 text-slate-300 hover:border-violet-500 hover:text-white"
+                      className="rounded-lg border border-slate-700/60 bg-[#162032] px-2 py-0.5 text-slate-300 hover:border-slate-500 hover:text-white transition"
                     >
                       {preset}
                     </button>
@@ -487,15 +487,15 @@ export function WorkerWorkflowScreen({
 
             {/* Mode Switch: Weight vs Count */}
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Measurement Type</label>
+              <label className="text-xs text-slate-300 block mb-1">Measurement Type</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setMode("weight")}
                   className={`min-h-[44px] rounded-xl text-xs font-semibold transition ${
                     mode === "weight"
-                      ? "bg-violet-600 text-white shadow-md shadow-violet-950/40"
-                      : "border border-slate-800 bg-[#0E1626] text-slate-400 hover:text-white"
+                      ? "bg-[#6655E8] text-white shadow-sm"
+                      : "border border-slate-700/60 bg-[#162032] text-slate-300 hover:text-white"
                   }`}
                 >
                   ⚖ Weight in Kilograms
@@ -505,8 +505,8 @@ export function WorkerWorkflowScreen({
                   onClick={() => setMode("count")}
                   className={`min-h-[44px] rounded-xl text-xs font-semibold transition ${
                     mode === "count"
-                      ? "bg-violet-600 text-white shadow-md shadow-violet-950/40"
-                      : "border border-slate-800 bg-[#0E1626] text-slate-400 hover:text-white"
+                      ? "bg-[#6655E8] text-white shadow-sm"
+                      : "border border-slate-700/60 bg-[#162032] text-slate-300 hover:text-white"
                   }`}
                 >
                   🔢 Count Only (No Weight)
@@ -518,7 +518,7 @@ export function WorkerWorkflowScreen({
               <>
                 {/* Gross Weight */}
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">Gross Weight (kg)</label>
+                  <label className="text-xs text-slate-300 block mb-1">Gross Weight (kg)</label>
                   <input
                     type="number"
                     step="any"
@@ -533,7 +533,7 @@ export function WorkerWorkflowScreen({
                 {/* Packaging Selection */}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1">Packaging Type</label>
+                    <label className="text-xs text-slate-300 block mb-1">Packaging Type</label>
                     <select
                       value={packagingId}
                       onChange={(e) => {
@@ -552,7 +552,7 @@ export function WorkerWorkflowScreen({
                   </div>
 
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1">Packaging Quantity</label>
+                    <label className="text-xs text-slate-300 block mb-1">Packaging Quantity</label>
                     <input
                       type="number"
                       step="1"
@@ -567,19 +567,19 @@ export function WorkerWorkflowScreen({
 
                 {/* Manual Bulk Tare Options */}
                 {isManualBulk ? (
-                  <div className="rounded-xl border border-slate-800 bg-[#0E1626] p-3 text-xs space-y-2">
+                  <div className="rounded-xl border border-slate-700/60 bg-[#162032] p-3 text-xs space-y-2">
                     <label className="flex items-center gap-2 text-slate-300 font-medium">
                       <input
                         type="checkbox"
                         checked={noTare}
                         onChange={(e) => setNoTare(e.target.checked)}
-                        className="rounded border-slate-700 bg-slate-900 text-violet-600 focus:ring-violet-500"
+                        className="rounded border-slate-700 bg-slate-900 text-[#6655E8] focus:ring-[#6655E8]"
                       />
                       No packaging tare (Bulk loose cargo)
                     </label>
                     {!noTare ? (
                       <div>
-                        <label className="text-slate-400 block mb-1">Manual Tare per Unit (kg)</label>
+                        <label className="text-slate-300 block mb-1">Manual Tare per Unit (kg)</label>
                         <input
                           type="number"
                           step="any"
@@ -598,8 +598,8 @@ export function WorkerWorkflowScreen({
                 <div
                   className={`rounded-xl border p-3 text-xs ${
                     weightCalc.ok
-                      ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-300"
-                      : "border-slate-800 bg-[#0E1626] text-slate-400"
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                      : "border-slate-700/60 bg-[#162032] text-slate-400"
                   }`}
                 >
                   <span className="font-semibold block uppercase tracking-wider text-[10px] text-slate-400">
@@ -615,13 +615,13 @@ export function WorkerWorkflowScreen({
                       </span>
                     </div>
                   ) : (
-                    <p className="mt-1 text-slate-500">{weightCalc.error}</p>
+                    <p className="mt-1 text-slate-400">{weightCalc.error}</p>
                   )}
                 </div>
               </>
             ) : (
               <div>
-                <label className="text-xs text-slate-400 block mb-1">Units / Item Count</label>
+                <label className="text-xs text-slate-300 block mb-1">Units / Item Count</label>
                 <input
                   type="number"
                   step="1"
@@ -631,7 +631,7 @@ export function WorkerWorkflowScreen({
                   placeholder="e.g. 50"
                   className={WORKER_THEME.input}
                 />
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="mt-1 text-[11px] text-slate-400">
                   Count-only items are tracked in inventory by piece count and post zero weight to balance.
                 </p>
               </div>
@@ -649,15 +649,15 @@ export function WorkerWorkflowScreen({
       </div>
 
       {/* 5. Photo Upload Evidence Card */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
           <div>
             <h2 className="text-sm font-bold text-white">Inspection Photo Evidence</h2>
             <p className="text-[11px] text-slate-400">
               Required for workflow approval. Take direct photos or choose from device.
             </p>
           </div>
-          <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
+          <span className="rounded-full bg-[#162032] border border-slate-700/50 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
             {photos.length} photo(s)
           </span>
         </div>
@@ -677,7 +677,7 @@ export function WorkerWorkflowScreen({
 
         {/* Photo Capture Controls */}
         {!isCompleted ? (
-          <div className="mt-4 border-t border-slate-800 pt-3">
+          <div className="mt-4 border-t border-slate-700/60 pt-3">
             <UploadCapture
               kind="photo"
               acceptPdf={false}
@@ -691,8 +691,8 @@ export function WorkerWorkflowScreen({
       </div>
 
       {/* 6. CMR & Shipping Documents Card */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
           <div>
             <h2 className="text-sm font-bold text-white">CMR & Waybill Documentation</h2>
             <p className="text-[11px] text-slate-400">
@@ -704,7 +704,7 @@ export function WorkerWorkflowScreen({
               CMR Attached
             </span>
           ) : (
-            <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-400">
+            <span className="rounded-full bg-[#162032] border border-slate-700/50 px-2.5 py-0.5 text-xs font-semibold text-slate-400">
               Optional for Worker
             </span>
           )}
@@ -741,8 +741,8 @@ export function WorkerWorkflowScreen({
       </div>
 
       {/* 7. Request Workflow Status & Stock Posting */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
           <div>
             <h2 className="text-sm font-bold text-white">Stock Movement Approval</h2>
             <p className="text-[11px] text-slate-400">
@@ -757,14 +757,14 @@ export function WorkerWorkflowScreen({
                   : activeRequest.status === "completed"
                   ? "bg-blue-500/20 text-blue-400 border border-blue-500/40"
                   : activeRequest.status === "submitted"
-                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                   : "bg-rose-500/20 text-rose-400 border border-rose-500/40"
               }`}
             >
               {activeRequest.status.replace("_", " ").toUpperCase()}
             </span>
           ) : (
-            <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-400">
+            <span className="rounded-full bg-[#162032] border border-slate-700/50 px-2.5 py-1 text-xs font-semibold text-slate-400">
               Draft Operation
             </span>
           )}
@@ -772,14 +772,14 @@ export function WorkerWorkflowScreen({
 
         <div className="mt-3 text-xs space-y-3">
           {workflowError ? (
-            <div className="rounded-xl border border-rose-500/40 bg-rose-950/20 p-3 text-rose-300">
+            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-rose-300">
               ⚠ {workflowError}
             </div>
           ) : null}
 
           {/* Workflow Status Explanation */}
           {!activeRequest ? (
-            <div className="rounded-xl border border-slate-800 bg-[#0E1626] p-3 text-slate-300">
+            <div className="rounded-xl border border-slate-700/60 bg-[#162032] p-3 text-slate-300">
               <p className="font-semibold text-white">Ready for submission?</p>
               <p className="mt-1 text-[11px] text-slate-400">
                 Once you have added the material sections and captured inspection photos, submit this request for Admin review.
@@ -794,38 +794,38 @@ export function WorkerWorkflowScreen({
               </button>
             </div>
           ) : activeRequest.status === "submitted" ? (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-amber-200">
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-amber-200">
               <p className="font-bold text-amber-300">Awaiting Admin Approval</p>
-              <p className="mt-1 text-[11px] text-amber-200/80">
+              <p className="mt-1 text-[11px] text-amber-200/90">
                 Request {activeRequest.number} submitted by {activeRequest.createdByName}. Admin will review materials and photos before approving stock entry.
               </p>
             </div>
           ) : activeRequest.status === "approved" ? (
-            <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-3 text-emerald-200">
+            <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-emerald-200">
               <p className="font-bold text-emerald-300">Request Approved by Admin!</p>
-              <p className="mt-1 text-[11px] text-emerald-200/80">
+              <p className="mt-1 text-[11px] text-emerald-200/90">
                 You can now complete this operation to post net kilograms into warehouse stock.
               </p>
               <button
                 type="button"
                 disabled={workflowActionLoading}
                 onClick={handleCompleteOperation}
-                className="mt-3 flex h-12 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-950/50 hover:bg-emerald-500 active:scale-[0.98]"
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-emerald-500 active:scale-[0.98] transition"
               >
                 {workflowActionLoading ? "Posting Stock..." : "✔ Complete Operation & Post Stock"}
               </button>
             </div>
           ) : activeRequest.status === "completed" ? (
-            <div className="rounded-xl border border-blue-500/30 bg-blue-950/20 p-3 text-blue-200">
+            <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-blue-200">
               <p className="font-bold text-blue-300">Operation Completed</p>
-              <p className="mt-1 text-[11px] text-blue-200/80">
+              <p className="mt-1 text-[11px] text-blue-200/90">
                 Stock has been posted into {record.warehouse} warehouse inventory.
               </p>
             </div>
           ) : (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 text-rose-200">
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-rose-200">
               <p className="font-bold text-rose-300">Request Sent Back / Declined</p>
-              <p className="mt-1 text-[11px] text-rose-200/80">
+              <p className="mt-1 text-[11px] text-rose-200/90">
                 {activeRequest.declineReason || "Please verify materials and photos."}
               </p>
               <button
@@ -843,7 +843,7 @@ export function WorkerWorkflowScreen({
 
       {/* 8. Sticky Mobile Bottom Action Bar (Fixed above bottom nav) */}
       {!isCompleted ? (
-        <div className="fixed inset-x-0 bottom-16 z-30 border-t border-slate-800/90 bg-[#0E1626]/95 p-3 backdrop-blur-md">
+        <div className="fixed inset-x-0 bottom-16 z-30 border-t border-[#202A3D] bg-[#080D1C] p-3 shadow-lg">
           <div className="mx-auto max-w-lg">
             {/* If Inbound and Planned / Registered: Start Unloading action */}
             {isInbound && (record.status === "Planned" || record.status === "In transit" || record.status === "Arrived" || record.status === "Registered") ? (
@@ -867,7 +867,7 @@ export function WorkerWorkflowScreen({
                 type="button"
                 disabled={workflowActionLoading}
                 onClick={handleCompleteOperation}
-                className="flex h-12 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg hover:bg-emerald-500 active:scale-[0.98]"
+                className="flex h-12 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-emerald-500 active:scale-[0.98] transition"
               >
                 ✔ Complete Operation & Post Stock
               </button>
@@ -881,7 +881,7 @@ export function WorkerWorkflowScreen({
                 Submit Request for Admin Approval →
               </button>
             ) : (
-              <div className="flex h-12 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/60 text-xs font-semibold text-slate-300">
+              <div className="flex h-12 items-center justify-center rounded-xl border border-slate-700/60 bg-[#162032] text-xs font-semibold text-slate-300">
                 Operation in progress · Status: {record.status}
               </div>
             )}

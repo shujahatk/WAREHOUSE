@@ -23,9 +23,9 @@ import {
 
 describe("StockFlow – Worker Mobile Module Comprehensive Verification", () => {
   test("1. Design tokens conform to dark navy & purple visual language", () => {
-    assert.equal(WORKER_THEME.bg, "bg-[#0B0F19]");
-    assert.match(WORKER_THEME.card, /bg-\[#121B2E\]/);
-    assert.match(WORKER_THEME.btnPrimary, /bg-violet-600/);
+    assert.equal(WORKER_THEME.bg, "bg-[#080D1C]");
+    assert.match(WORKER_THEME.card, /bg-\[#202A3D\]/);
+    assert.match(WORKER_THEME.btnPrimary, /bg-\[#6655E8\]/);
     assert.match(WORKER_THEME.btnPrimary, /min-h-\[48px\]/);
     assert.match(WORKER_THEME.input, /h-12/);
     assert.match(WORKER_THEME.select, /h-12/);

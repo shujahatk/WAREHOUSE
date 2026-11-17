@@ -13,8 +13,6 @@ import {
   visibleContainers,
   visibleOutbound,
   visibleStock,
-  type DemoContainer,
-  type DemoOutbound,
 } from "@/domain/view";
 import { Icon } from "@/components/icons";
 import { WORKER_THEME } from "./worker-theme";
@@ -66,17 +64,17 @@ export function WorkerDashboard() {
   ).length;
 
   return (
-    <div className="space-y-4 pb-28">
+    <div className="space-y-4 pb-10">
       {/* 1. Worker Shift Greeting Banner */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-[#121B2E] via-[#0E1626] to-[#162035] p-5 shadow-xl">
+      <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 sm:p-5 shadow-sm">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-500/20" />
+              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500/20" />
               <span className="text-xs font-semibold tracking-wide uppercase text-emerald-400">
                 Shift Active
               </span>
-              <span className="text-slate-600">·</span>
+              <span className="text-slate-500">·</span>
               <span className="text-xs text-slate-300 font-medium">
                 {identity.warehouse ? `${identity.warehouse} Depot` : "Warehouse Floor"}
               </span>
@@ -85,30 +83,30 @@ export function WorkerDashboard() {
               Hello, {identity.name}
             </h1>
             <p className="mt-1 text-xs text-slate-400">
-              Welcome to the warehouse operational console. Manage unloading, loading, and stock recording.
+              Warehouse operational console: manage unloading, loading, and real-time stock recording.
             </p>
           </div>
-          <div className="hidden sm:flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-600/20 text-violet-400 border border-violet-500/30">
+          <div className="hidden sm:flex h-11 w-11 items-center justify-center rounded-xl bg-[#162032] text-[#8B7DF0] border border-slate-700/60">
             <Icon name="dashboard" />
           </div>
         </div>
 
         {/* Quick Shift Summary Bar */}
-        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-800/80 pt-3 text-xs sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-700/60 pt-3 text-xs sm:grid-cols-4">
           <div>
-            <span className="text-slate-500">Warehouse:</span>
+            <span className="text-slate-400">Warehouse:</span>
             <p className="font-semibold text-white">{identity.warehouse ?? "Bornem"}</p>
           </div>
           <div>
-            <span className="text-slate-500">Active Tasks:</span>
-            <p className="font-semibold text-violet-400">{totalActiveTasks} operations</p>
+            <span className="text-slate-400">Active Tasks:</span>
+            <p className="font-semibold text-[#8B7DF0]">{totalActiveTasks} operations</p>
           </div>
           <div>
-            <span className="text-slate-500">Stock on Site:</span>
+            <span className="text-slate-400">Stock on Site:</span>
             <p className="font-semibold text-emerald-400">{formatKg(totalStockKg)}</p>
           </div>
           <div>
-            <span className="text-slate-500">My Requests:</span>
+            <span className="text-slate-400">My Requests:</span>
             <p className="font-semibold text-amber-400">{pendingRequestsCount} pending</p>
           </div>
         </div>
@@ -117,16 +115,16 @@ export function WorkerDashboard() {
       {/* 2. Demurrage Alert Banner (High-Visibility Red if overtime/warning) */}
       {criticalDemurrageContainer ? (
         <div
-          className={`rounded-2xl border p-4 shadow-lg transition-all ${
+          className={`rounded-2xl border p-4 shadow-sm transition-all ${
             demurrageSnap?.overtime
-              ? "border-rose-500/60 bg-gradient-to-r from-rose-950/40 via-[#1A121D] to-[#121B2E]"
-              : "border-amber-500/40 bg-gradient-to-r from-amber-950/30 via-[#161B2E] to-[#121B2E]"
+              ? "border-rose-500/60 bg-rose-500/10 text-rose-300"
+              : "border-amber-500/50 bg-amber-500/10 text-amber-300"
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
               <div
-                className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
                   demurrageSnap?.overtime ? "bg-rose-500/20 text-rose-400" : "bg-amber-500/20 text-amber-400"
                 }`}
               >
@@ -141,11 +139,11 @@ export function WorkerDashboard() {
                   >
                     {demurrageSnap?.overtime ? "Demurrage Charge Overtime" : "Active Demurrage Timer"}
                   </span>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[11px] text-slate-300 font-mono">
                     {criticalDemurrageContainer.containerNumber || criticalDemurrageContainer.number}
                   </span>
                 </div>
-                <p className="text-xs text-slate-300">
+                <p className="text-xs text-slate-200 mt-0.5">
                   {demurrageLabel(criticalDemurrageContainer, now)}
                   {demurrageSnap?.overtime && demurrageSnap.chargeEUR > 0
                     ? ` · Incurred: ${formatEuro(demurrageSnap.chargeEUR)}`
@@ -155,7 +153,7 @@ export function WorkerDashboard() {
             </div>
             <Link
               href={`/containers/${criticalDemurrageContainer.number}`}
-              className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white shadow-md hover:bg-rose-500 active:scale-95"
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-rose-600 px-3.5 text-xs font-semibold text-white shadow-sm hover:bg-rose-500 active:scale-95 transition"
             >
               Resume Unloading →
             </Link>
@@ -168,11 +166,11 @@ export function WorkerDashboard() {
         {/* Inbound Active */}
         <Link
           href="/containers"
-          className="group rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md transition hover:border-violet-500/40 active:scale-95"
+          className="group rounded-2xl border border-slate-700/60 bg-[#202A3D] p-3.5 sm:p-4 shadow-sm transition hover:border-slate-500 active:scale-95"
         >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium">Inbound</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 group-hover:bg-blue-500/20">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#162032] text-blue-400 border border-slate-700/50">
               <Icon name="containers" />
             </div>
           </div>
@@ -189,11 +187,11 @@ export function WorkerDashboard() {
         {/* Outbound Active */}
         <Link
           href="/outbound"
-          className="group rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md transition hover:border-violet-500/40 active:scale-95"
+          className="group rounded-2xl border border-slate-700/60 bg-[#202A3D] p-3.5 sm:p-4 shadow-sm transition hover:border-slate-500 active:scale-95"
         >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium">Outbound</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-500/10 text-purple-400 group-hover:bg-purple-500/20">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#162032] text-[#8B7DF0] border border-slate-700/50">
               <Icon name="outbound" />
             </div>
           </div>
@@ -206,11 +204,11 @@ export function WorkerDashboard() {
         {/* Site Stock */}
         <Link
           href="/inventory"
-          className="group rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md transition hover:border-violet-500/40 active:scale-95"
+          className="group rounded-2xl border border-slate-700/60 bg-[#202A3D] p-3.5 sm:p-4 shadow-sm transition hover:border-slate-500 active:scale-95"
         >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium">Stock On Hand</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#162032] text-emerald-400 border border-slate-700/50">
               <Icon name="inventory" />
             </div>
           </div>
@@ -223,11 +221,11 @@ export function WorkerDashboard() {
         {/* My Requests */}
         <Link
           href="/tasks"
-          className="group rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md transition hover:border-violet-500/40 active:scale-95"
+          className="group rounded-2xl border border-slate-700/60 bg-[#202A3D] p-3.5 sm:p-4 shadow-sm transition hover:border-slate-500 active:scale-95"
         >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium">My Requests</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#162032] text-amber-400 border border-slate-700/50">
               <Icon name="documents" />
             </div>
           </div>
@@ -242,7 +240,7 @@ export function WorkerDashboard() {
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         <Link
           href="/containers"
-          className="flex h-14 min-h-[52px] items-center justify-between rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-lg shadow-violet-950/50 transition hover:bg-violet-500 active:scale-[0.98]"
+          className="flex h-14 min-h-[52px] items-center justify-between rounded-xl bg-[#6655E8] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5846db] active:scale-[0.98]"
         >
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20">
@@ -260,10 +258,10 @@ export function WorkerDashboard() {
 
         <Link
           href="/outbound"
-          className="flex h-14 min-h-[52px] items-center justify-between rounded-xl border border-slate-700 bg-[#162035] px-4 text-sm font-semibold text-slate-100 shadow-lg transition hover:bg-[#1C2942] active:scale-[0.98]"
+          className="flex h-14 min-h-[52px] items-center justify-between rounded-xl border border-slate-700/60 bg-[#202A3D] px-4 text-sm font-semibold text-slate-100 shadow-sm transition hover:bg-[#28354c] active:scale-[0.98]"
         >
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-700/60 text-slate-200">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#162032] text-slate-300 border border-slate-700/50">
               <Icon name="outbound" />
             </div>
             <div className="text-left">
@@ -278,8 +276,8 @@ export function WorkerDashboard() {
       </div>
 
       {/* 5. Assigned Operations List */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#121B2E] p-4 shadow-md">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="rounded-2xl border border-slate-700/60 bg-[#202A3D] p-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
           <div>
             <h2 className="text-sm font-bold text-white">Assigned Depot Operations</h2>
             <p className="text-[11px] text-slate-400">
@@ -287,12 +285,12 @@ export function WorkerDashboard() {
             </p>
           </div>
           {/* Segmented Filter */}
-          <div className="flex rounded-lg border border-slate-800 bg-[#0E1626] p-0.5 text-xs">
+          <div className="flex rounded-lg border border-slate-700/60 bg-[#162032] p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setActiveTab("all")}
               className={`rounded-md px-2.5 py-1 font-medium transition ${
-                activeTab === "all" ? "bg-violet-600 text-white" : "text-slate-400 hover:text-white"
+                activeTab === "all" ? "bg-[#6655E8] text-white" : "text-slate-400 hover:text-white"
               }`}
             >
               All
@@ -301,7 +299,7 @@ export function WorkerDashboard() {
               type="button"
               onClick={() => setActiveTab("inbound")}
               className={`rounded-md px-2.5 py-1 font-medium transition ${
-                activeTab === "inbound" ? "bg-violet-600 text-white" : "text-slate-400 hover:text-white"
+                activeTab === "inbound" ? "bg-[#6655E8] text-white" : "text-slate-400 hover:text-white"
               }`}
             >
               In ({inboundPending.length})
@@ -310,7 +308,7 @@ export function WorkerDashboard() {
               type="button"
               onClick={() => setActiveTab("outbound")}
               className={`rounded-md px-2.5 py-1 font-medium transition ${
-                activeTab === "outbound" ? "bg-violet-600 text-white" : "text-slate-400 hover:text-white"
+                activeTab === "outbound" ? "bg-[#6655E8] text-white" : "text-slate-400 hover:text-white"
               }`}
             >
               Out ({outboundPending.length})
@@ -320,7 +318,6 @@ export function WorkerDashboard() {
 
         {/* List of Shipments */}
         <div className="mt-3 space-y-2.5">
-          {/* Combine pending inbound & outbound */}
           {(() => {
             const list: {
               type: "inbound" | "outbound";
@@ -365,7 +362,7 @@ export function WorkerDashboard() {
 
             if (list.length === 0) {
               return (
-                <div className="py-8 text-center text-xs text-slate-500">
+                <div className="py-8 text-center text-xs text-slate-400">
                   No active operations assigned to {identity.warehouse ?? "this depot"}.
                 </div>
               );
@@ -380,7 +377,7 @@ export function WorkerDashboard() {
                 <Link
                   key={`${item.type}-${item.id}`}
                   href={isInbound ? `/containers/${item.id}` : `/outbound/${item.id}`}
-                  className="block rounded-xl border border-slate-800/80 bg-[#0E1626] p-3.5 transition hover:border-violet-500/40 active:scale-[0.99]"
+                  className="block rounded-xl border border-slate-700/60 bg-[#162032] p-3.5 transition hover:border-slate-500 active:scale-[0.99]"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -389,7 +386,7 @@ export function WorkerDashboard() {
                           className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                             isInbound
                               ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
-                              : "bg-purple-500/15 text-purple-400 border border-purple-500/30"
+                              : "bg-[#6655E8]/15 text-[#8B7DF0] border border-[#6655E8]/30"
                           }`}
                         >
                           {isInbound ? "Inbound" : "Outbound"}
@@ -400,7 +397,7 @@ export function WorkerDashboard() {
                         <span className="text-slate-400">PO:</span> {item.po || "N/A"} ·{" "}
                         <span className="text-slate-400">{isInbound ? "From:" : "To:"}</span> {item.party}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
+                      <p className="mt-0.5 text-[11px] text-slate-400">
                         Equipment: {item.containerEquipment} · {item.date}
                       </p>
                     </div>
@@ -411,13 +408,13 @@ export function WorkerDashboard() {
                           isDone
                             ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                             : isWorking
-                            ? "bg-violet-500/20 text-violet-300 border border-violet-500/30 animate-pulse"
-                            : "bg-slate-800 text-slate-400 border border-slate-700"
+                            ? "bg-[#6655E8]/20 text-[#8B7DF0] border border-[#6655E8]/30"
+                            : "bg-[#202A3D] text-slate-300 border border-slate-700"
                         }`}
                       >
                         {item.status}
                       </span>
-                      <span className="text-[11px] font-medium text-violet-400 hover:text-violet-300 flex items-center gap-1 mt-1">
+                      <span className="text-[11px] font-medium text-[#8B7DF0] hover:text-[#a599f5] flex items-center gap-1 mt-1">
                         Open Workflow →
                       </span>
                     </div>
