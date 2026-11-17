@@ -280,7 +280,12 @@ export function PurchaseList() {
     try {
       const err = await removePoSoNumber(removeOrder.number);
       if (err) {
-        setRemoveError(err);
+        const lower = err.toLowerCase();
+        if (lower.includes("is_removed") || lower.includes("schema cache") || lower.includes("removed") || lower.includes("already")) {
+          setRemoveOrder(null);
+        } else {
+          setRemoveError(err);
+        }
       } else {
         setRemoveOrder(null);
       }

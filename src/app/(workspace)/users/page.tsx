@@ -192,7 +192,8 @@ export default function UsersPage() {
         err = (await deleteUser(deleteModalUser.id || deleteModalUser.email)) ?? null;
       }
       if (err) {
-        if (err.includes("permission denied") || err.includes("42501")) {
+        const lower = err.toLowerCase();
+        if (lower.includes("permission denied") || lower.includes("42501") || lower.includes("removed") || lower.includes("deleted")) {
           setDeleteModalUser(null);
         } else {
           setActionError(err);

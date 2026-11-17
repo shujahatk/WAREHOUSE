@@ -12,6 +12,7 @@ import {
   demurrageFromMinutes,
   demurrageSnapshot,
   emptyDemurrage,
+  emptyWorkspace,
   visibleContainers,
   visibleOutbound,
   visibleStock,
@@ -161,10 +162,10 @@ describe("StockFlow – Worker Mobile Module Comprehensive Verification", () => 
       sections: [],
       containerNumber: "MSCU-1234567",
       demurrage: {
+        ...emptyDemurrage(),
         startedAt: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
         freeMinutes: 120,
         ratePerMinute: 1,
-        timeZone: "Europe/Zurich",
       },
     };
 
@@ -177,6 +178,7 @@ describe("StockFlow – Worker Mobile Module Comprehensive Verification", () => 
 
   test("6. Worker Scoped State Filtering across Warehouses", () => {
     const mockState: DemoState = {
+      ...emptyWorkspace(),
       containers: [
         {
           number: "INB-BORNEM-1",
@@ -216,6 +218,12 @@ describe("StockFlow – Worker Mobile Module Comprehensive Verification", () => 
           carrier: "",
           handover: "",
           weightKg: 500,
+          material: "Copper",
+          customs: { reference: "", procedureNote: "", goodsDescription: "", declarantReference: "" },
+          sellerConfirmation: { status: "Confirmed", company: "", confirmedBy: "", confirmedAt: "" },
+          customsConfirmation: { status: "Confirmed", confirmedBy: "", confirmedAt: "", proofName: "", proofMime: "", proofSize: 0 },
+          dispatchOverride: null,
+          audit: [],
         },
         {
           number: "OUT-ANTWERP-1",
@@ -229,34 +237,23 @@ describe("StockFlow – Worker Mobile Module Comprehensive Verification", () => 
           carrier: "",
           handover: "",
           weightKg: 800,
+          material: "Aluminium",
+          customs: { reference: "", procedureNote: "", goodsDescription: "", declarantReference: "" },
+          sellerConfirmation: { status: "Confirmed", company: "", confirmedBy: "", confirmedAt: "" },
+          customsConfirmation: { status: "Confirmed", confirmedBy: "", confirmedAt: "", proofName: "", proofMime: "", proofSize: 0 },
+          dispatchOverride: null,
+          audit: [],
         },
       ],
       stock: [
-        { id: "S1", material: "Copper", category: "Metals", warehouse: "Bornem", weightKg: 1000, quantity: 10, location: "Bay 1", thresholdKg: 100 },
-        { id: "S2", material: "Aluminium", category: "Metals", warehouse: "Antwerp", weightKg: 2000, quantity: 20, location: "Bay 2", thresholdKg: 100 },
+        { id: "S1", material: "Copper", category: "Metals", warehouse: "Bornem", weightKg: 1000, quantity: 10, location: "Bay 1", packaging: "Pallet", reorder: 100 },
+        { id: "S2", material: "Aluminium", category: "Metals", warehouse: "Antwerp", weightKg: 2000, quantity: 20, location: "Bay 2", packaging: "Pallet", reorder: 100 },
       ],
-      purchases: [],
-      sales: [],
-      suppliers: [],
-      customers: [],
-      warehouses: [],
-      materials: [],
-      packaging: PRESET_PACKAGING,
-      attachments: [],
-      users: [],
-      activity: [],
-      requests: [],
-      generalRequests: [],
-      containerInventory: [],
-      inventoryHistory: [],
-      offers: [],
-      sellingOffers: [],
-      registrationRequests: [],
-      userDeletionRequests: [],
     };
 
     const workerActor = {
       name: "Alice Worker",
+      email: "alice@stockflow.local",
       role: "worker" as const,
       warehouse: "Bornem",
     };

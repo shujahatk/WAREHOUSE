@@ -47,13 +47,18 @@ export function RegisterForm() {
 
     setPending(false);
     if (result.error) {
-      const raw = result.error;
+      const raw = result.error.toLowerCase();
       if (
-        raw.includes("rpc_register_offers_user") ||
+        raw.includes("rpc_register") ||
         raw.includes("schema cache") ||
         raw.includes("foreign key") ||
         raw.includes("users_auth_user_id_fkey") ||
-        raw.includes("already registered")
+        raw.includes("already registered") ||
+        raw.includes("duplicate key") ||
+        raw.includes("unique") ||
+        raw.includes("violates") ||
+        raw.includes("23503") ||
+        raw.includes("23505")
       ) {
         setError("This email address is already registered or associated with an account. Please sign in with your email and password.");
       } else {

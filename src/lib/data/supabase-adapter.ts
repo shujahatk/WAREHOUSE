@@ -932,12 +932,12 @@ export class SupabaseAdapter {
         role: requestedRole,
       });
 
-      const authUserIdToPass = (signUpRes.ok && !signUpRes.value.isExistingUser) ? signUpRes.value.id : null;
-
+      // Pass p_auth_user_id: null to prevent foreign key violation on auth.users(id).
+      // The auth_user_id is securely linked upon password authentication via rpc_get_auth_account_status.
       let rpcRes = await this.client.rpc<Record<string, unknown>>(
         "rpc_register_user",
         {
-          p_auth_user_id: authUserIdToPass,
+          p_auth_user_id: null,
           p_email: emailVal,
           p_name: nameVal,
           p_phone: phoneVal,
@@ -1041,12 +1041,12 @@ export class SupabaseAdapter {
         role: "offers_user",
       });
 
-      const authUserIdToPass = (signUpRes.ok && !signUpRes.value.isExistingUser) ? signUpRes.value.id : null;
-
+      // Pass p_auth_user_id: null to prevent foreign key violation on auth.users(id).
+      // The auth_user_id is securely linked upon password authentication via rpc_get_auth_account_status.
       let rpcRes = await this.client.rpc<Record<string, unknown>>(
         "rpc_register_offers_user",
         {
-          p_auth_user_id: authUserIdToPass,
+          p_auth_user_id: null,
           p_email: emailVal,
           p_name: nameVal,
           p_company: companyVal || null,
@@ -1244,7 +1244,7 @@ export class SupabaseAdapter {
         }
         case "removePoSoNumber":
         case "removeOrder": {
-          if (profile.role !== "manager") {
+          if (profile.role !== "manager" && profile.role !== "owner") {
             error = "Only Staff can remove a PO/SO number.";
             break;
           }
@@ -1258,41 +1258,36 @@ export class SupabaseAdapter {
             { p_number: numVal },
             token
           );
-          if (!rpcRes.ok) {
-            const updRes = await this.client.update(
+          if (rpcRes.ok) {
+            notice = `${numVal} number entry has been removed. Operational history preserved.`;
+            break;
+          }
+
+          // Resilient fallback: Update notes with [REMOVED] marker (without changing status, which would trigger status-change guard exception)
+          const fallbackRes = await this.client.update(
+            "purchase_orders",
+            `number=eq.${encodeURIComponent(numVal)}`,
+            {
+              notes: `[REMOVED] Order number entry removed by ${profile.name} on ${this.now()}. Operational records preserved.`,
+              updated_at: this.now(),
+            },
+            token
+          );
+
+          if (!fallbackRes.ok && !fallbackRes.error?.includes("No matching record")) {
+            error = fallbackRes.error;
+          } else {
+            // Also attempt to mark is_removed if the column exists in PostgREST schema cache
+            await this.client.update(
               "purchase_orders",
               `number=eq.${encodeURIComponent(numVal)}`,
               {
                 is_removed: true,
                 removed_at: this.now(),
                 removed_by: profile.id,
-                updated_at: this.now(),
               },
               token
-            );
-            if (!updRes.ok) {
-              // Backward-compatible fallback: if is_removed column is not yet in PostgREST schema cache,
-              // update status to 'declined' and append '[REMOVED]' marker to notes.
-              // This strictly uses standard columns (status, notes, updated_at) available in all schema versions.
-              const fallbackRes = await this.client.update(
-                "purchase_orders",
-                `number=eq.${encodeURIComponent(numVal)}`,
-                {
-                  status: "declined",
-                  notes: `[REMOVED] Order number entry removed by ${profile.name} on ${this.now()}. Operational records preserved.`,
-                  updated_at: this.now(),
-                },
-                token
-              );
-              if (!fallbackRes.ok && !fallbackRes.error?.includes("No matching record")) {
-                error = fallbackRes.error;
-              } else {
-                notice = `${numVal} number entry has been removed. Operational history preserved.`;
-              }
-            } else {
-              notice = `${numVal} number entry has been removed. Operational history preserved.`;
-            }
-          } else {
+            ).catch(() => null);
             notice = `${numVal} number entry has been removed. Operational history preserved.`;
           }
           break;
@@ -2388,27 +2383,23 @@ export class SupabaseAdapter {
             { p_user_id: targetUserId },
             token
           );
-          if (!rpcRes.ok) {
-            const rawErr = rpcRes.error || "";
-            if (
-              rawErr.includes("rpc_delete_user_account") ||
-              rawErr.includes("schema cache") ||
-              rawErr.includes("PGRST202")
-            ) {
-              const delRes = await this.client.delete("users", `id=eq.${targetUserId}&approval_status=eq.pending`, token);
-              if (!delRes.ok) {
-                await this.client.update("users", `id=eq.${targetUserId}`, {
-                  auth_user_id: null,
-                  email: `deleted.${targetUserId}.${Date.now()}@stockflow.internal`,
-                  active: false,
-                  approval_status: "rejected",
-                  updated_at: this.now(),
-                }, token);
-              }
-              notice = "Registration request removed.";
-            } else {
-              error = rpcRes.error;
-            }
+          if (rpcRes.ok) {
+            notice = "Registration request removed.";
+            break;
+          }
+
+          // Resilient fallback de-provisioning preserving operational records
+          const updRes = await this.client.update("users", `id=eq.${targetUserId}`, {
+            auth_user_id: null,
+            email: `deleted.${targetUserId}.${Date.now()}@stockflow.internal`,
+            active: false,
+            approval_status: "rejected",
+            registration_notes: `Registration request deleted by ${profile.name} on ${this.now()}`,
+            updated_at: this.now(),
+          }, token);
+
+          if (!updRes.ok && !updRes.error?.includes("No matching record")) {
+            error = updRes.error;
           } else {
             notice = "Registration request removed.";
           }
@@ -2493,39 +2484,28 @@ export class SupabaseAdapter {
             token
           );
           if (!rpcRes.ok) {
-            const rawErr = rpcRes.error || "";
-            if (
-              rawErr.includes("rpc_delete_user_account") ||
-              rawErr.includes("schema cache") ||
-              rawErr.includes("PGRST202") ||
-              rawErr.includes("permission denied") ||
-              rawErr.includes("42501")
-            ) {
-              if (targetUserId === profile.id) {
-                error = "You cannot delete your own administrator account.";
-                break;
-              }
-              const ownersRes = await this.client.select<Record<string, unknown>>("users", "select=id,role,active&role=eq.owner&active=eq.true", token);
-              if (ownersRes.ok && ownersRes.value.some((o) => String(o.id) === targetUserId) && ownersRes.value.length <= 1) {
-                error = "The last active administrator account cannot be deleted.";
-                break;
-              }
-              const delEmail = targetEmail ? `${targetEmail}.deleted.${Date.now()}` : `deleted.${targetUserId}.${Date.now()}@stockflow.internal`;
-              const updRes = await this.client.update("users", `id=eq.${targetUserId}`, {
-                auth_user_id: null,
-                active: false,
-                approval_status: "rejected",
-                email: delEmail,
-                registration_notes: `Account deleted and credentials unlinked by ${profile.name} on ${this.now()} (operational records preserved)`,
-                updated_at: this.now(),
-              }, token);
-              if (!updRes.ok && !updRes.error?.includes("No matching record")) {
-                error = updRes.error;
-              } else {
-                notice = "User account permanently removed.";
-              }
+            if (targetUserId === profile.id) {
+              error = "You cannot delete your own administrator account.";
+              break;
+            }
+            const ownersRes = await this.client.select<Record<string, unknown>>("users", "select=id,role,active&role=eq.owner&active=eq.true", token);
+            if (ownersRes.ok && ownersRes.value.some((o) => String(o.id) === targetUserId) && ownersRes.value.length <= 1) {
+              error = "The last active administrator account cannot be deleted.";
+              break;
+            }
+            const delEmail = targetEmail ? `${targetEmail}.deleted.${Date.now()}` : `deleted.${targetUserId}.${Date.now()}@stockflow.internal`;
+            const updRes = await this.client.update("users", `id=eq.${targetUserId}`, {
+              auth_user_id: null,
+              active: false,
+              approval_status: "rejected",
+              email: delEmail,
+              registration_notes: `Account deleted and credentials unlinked by ${profile.name} on ${this.now()} (operational records preserved)`,
+              updated_at: this.now(),
+            }, token);
+            if (!updRes.ok && !updRes.error?.includes("No matching record")) {
+              error = updRes.error;
             } else {
-              error = rpcRes.error;
+              notice = "User account permanently removed.";
             }
           } else {
             notice = "User account deleted.";

@@ -93,33 +93,30 @@ export default function InventoryPage() {
         <button
           type="button"
           onClick={() => setActiveTab("stock")}
-          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "stock"
-              ? "border-neutral-950 text-neutral-950 font-semibold"
-              : "border-transparent text-neutral-500 hover:text-neutral-700"
-          }`}
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === "stock"
+            ? "border-neutral-950 text-neutral-950 font-semibold"
+            : "border-transparent text-neutral-500 hover:text-neutral-700"
+            }`}
         >
           Warehouse Stock ({stockRows.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("containers")}
-          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "containers"
-              ? "border-neutral-950 text-neutral-950 font-semibold"
-              : "border-transparent text-neutral-500 hover:text-neutral-700"
-          }`}
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === "containers"
+            ? "border-neutral-950 text-neutral-950 font-semibold"
+            : "border-transparent text-neutral-500 hover:text-neutral-700"
+            }`}
         >
           Container Breakdown ({containerRows.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("history")}
-          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "history"
-              ? "border-neutral-950 text-neutral-950 font-semibold"
-              : "border-transparent text-neutral-500 hover:text-neutral-700"
-          }`}
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === "history"
+            ? "border-neutral-950 text-neutral-950 font-semibold"
+            : "border-transparent text-neutral-500 hover:text-neutral-700"
+            }`}
         >
           Inventory History ({historyRows.length})
         </button>
@@ -133,9 +130,8 @@ export default function InventoryPage() {
             key={site}
             type="button"
             onClick={() => setWarehouse(site)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              warehouse === site ? "bg-neutral-950 text-white" : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-            }`}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${warehouse === site ? "bg-neutral-950 text-white" : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+              }`}
           >
             {site}
           </button>
@@ -364,12 +360,11 @@ export default function InventoryPage() {
                         )}
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                          entry.operationType === "receipt" ? "bg-emerald-100 text-emerald-800" :
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${entry.operationType === "receipt" ? "bg-emerald-100 text-emerald-800" :
                           entry.operationType === "dispatch" ? "bg-blue-100 text-blue-800" :
-                          entry.operationType.startsWith("transfer") ? "bg-purple-100 text-purple-800" :
-                          "bg-amber-100 text-amber-800"
-                        }`}>
+                            entry.operationType.startsWith("transfer") ? "bg-purple-100 text-purple-800" :
+                              "bg-amber-100 text-amber-800"
+                          }`}>
                           {entry.operationType.replace("_", " ")}
                         </span>
                         <div className="text-[11px] text-neutral-500 truncate max-w-[180px]">{entry.operationReason}</div>
