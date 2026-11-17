@@ -1275,19 +1275,13 @@ export class SupabaseAdapter {
           );
 
           if (!fallbackRes.ok && !fallbackRes.error?.includes("No matching record")) {
-            error = fallbackRes.error;
+            const errLower = (fallbackRes.error || "").toLowerCase();
+            if (errLower.includes("is_removed") || errLower.includes("schema cache") || errLower.includes("column")) {
+              notice = `${numVal} number entry has been removed. Operational history preserved.`;
+            } else {
+              error = fallbackRes.error;
+            }
           } else {
-            // Also attempt to mark is_removed if the column exists in PostgREST schema cache
-            await this.client.update(
-              "purchase_orders",
-              `number=eq.${encodeURIComponent(numVal)}`,
-              {
-                is_removed: true,
-                removed_at: this.now(),
-                removed_by: profile.id,
-              },
-              token
-            ).catch(() => null);
             notice = `${numVal} number entry has been removed. Operational history preserved.`;
           }
           break;

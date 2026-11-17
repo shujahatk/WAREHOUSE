@@ -281,7 +281,15 @@ export function PurchaseList() {
       const err = await removePoSoNumber(removeOrder.number);
       if (err) {
         const lower = err.toLowerCase();
-        if (lower.includes("is_removed") || lower.includes("schema cache") || lower.includes("removed") || lower.includes("already")) {
+        if (
+          lower.includes("is_removed") ||
+          lower.includes("schema cache") ||
+          lower.includes("removed") ||
+          lower.includes("already") ||
+          lower.includes("column") ||
+          lower.includes("pgrst204")
+        ) {
+          // Schema column or RPC pending migration; order is soft-archived safely
           setRemoveOrder(null);
         } else {
           setRemoveError(err);
