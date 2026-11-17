@@ -56,9 +56,8 @@ export function WorkerInventoryView() {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs text-emerald-800">
             <span
-              className={`h-2 w-2 rounded-full ${
-                isSyncing ? "bg-amber-500 animate-pulse" : "bg-emerald-600"
-              }`}
+              className={`h-2 w-2 rounded-full ${isSyncing ? "bg-amber-500 animate-pulse" : "bg-emerald-600"
+                }`}
             />
             <span className="font-semibold text-emerald-900">
               {isSyncing ? "Syncing..." : lastSyncedAt ? "Live Synced" : "Connected"}
@@ -99,22 +98,20 @@ export function WorkerInventoryView() {
         <button
           type="button"
           onClick={() => setActiveTab("stock")}
-          className={`flex-1 rounded-lg py-2 font-bold transition ${
-            activeTab === "stock"
-              ? "bg-white text-emerald-900 shadow-2xs border border-neutral-200/60"
-              : "text-neutral-600 hover:text-neutral-900"
-          }`}
+          className={`flex-1 rounded-lg py-2 font-bold transition ${activeTab === "stock"
+            ? "bg-white text-emerald-900 shadow-2xs border border-neutral-200/60"
+            : "text-neutral-600 hover:text-neutral-900"
+            }`}
         >
           Material Stock ({scopedStock.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("containers")}
-          className={`flex-1 rounded-lg py-2 font-bold transition ${
-            activeTab === "containers"
-              ? "bg-white text-emerald-900 shadow-2xs border border-neutral-200/60"
-              : "text-neutral-600 hover:text-neutral-900"
-          }`}
+          className={`flex-1 rounded-lg py-2 font-bold transition ${activeTab === "containers"
+            ? "bg-white text-emerald-900 shadow-2xs border border-neutral-200/60"
+            : "text-neutral-600 hover:text-neutral-900"
+            }`}
         >
           Container Cargo ({containerRows.length})
         </button>
@@ -170,11 +167,10 @@ export function WorkerInventoryView() {
                       {row.quantity > 0 ? `${row.quantity} unit(s)` : "Bulk balance"}
                     </p>
                     <span
-                      className={`inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        row.weightKg > 1000
-                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                          : "bg-amber-100 text-amber-800 border border-amber-300"
-                      }`}
+                      className={`inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${row.weightKg > 1000
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                        : "bg-amber-100 text-amber-800 border border-amber-300"
+                        }`}
                     >
                       {row.weightKg > 1000 ? "In Stock" : "Low Stock"}
                     </span>

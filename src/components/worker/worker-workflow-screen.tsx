@@ -212,7 +212,7 @@ export function WorkerWorkflowScreen({
   const isCompleted = record.status === "Completed" || record.status === "Dispatched";
 
   return (
-    <div className="space-y-4 pb-36">
+    <div className={`space-y-4 ${isCompleted ? "pb-32" : "pb-48"}`}>
       {/* 1. Header Bar with Back Link */}
       <div className="flex items-center justify-between border-b border-neutral-200/90 pb-3">
         <Link
@@ -222,11 +222,10 @@ export function WorkerWorkflowScreen({
           <span>←</span> Back to {isInbound ? "Inbound Shipments" : "Outbound Shipments"}
         </Link>
         <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-            isCompleted
-              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-              : "bg-blue-100 text-blue-800 border border-blue-200"
-          }`}
+          className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${isCompleted
+            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+            : "bg-blue-100 text-blue-800 border border-blue-200"
+            }`}
         >
           {record.status}
         </span>
@@ -312,24 +311,22 @@ export function WorkerWorkflowScreen({
             return (
               <div key={item.step} className="flex flex-col items-center">
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
-                    isPast
-                      ? "bg-emerald-700 text-white shadow-2xs"
-                      : isCurrent
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${isPast
+                    ? "bg-emerald-700 text-white shadow-2xs"
+                    : isCurrent
                       ? "bg-emerald-800 text-white ring-2 ring-emerald-500/30 font-black"
                       : "bg-neutral-100 text-neutral-400 border border-neutral-300"
-                  }`}
+                    }`}
                 >
                   {isPast ? "✔" : item.step}
                 </div>
                 <span
-                  className={`mt-1.5 text-[10px] leading-tight ${
-                    isCurrent
-                      ? "text-emerald-900 font-bold"
-                      : isPast
+                  className={`mt-1.5 text-[10px] leading-tight ${isCurrent
+                    ? "text-emerald-900 font-bold"
+                    : isPast
                       ? "text-emerald-700 font-semibold"
                       : "text-neutral-500 font-medium"
-                  }`}
+                    }`}
                 >
                   {item.label}
                 </span>
@@ -350,19 +347,19 @@ export function WorkerWorkflowScreen({
               {currentStep === 1
                 ? "Preparation Phase — Start Operation"
                 : currentStep === 2
-                ? "Recording Phase — Enter Cargo & Photos"
-                : currentStep === 3
-                ? "Review Phase — Awaiting Admin Approval"
-                : "Completion Phase — Stock Verified"}
+                  ? "Recording Phase — Enter Cargo & Photos"
+                  : currentStep === 3
+                    ? "Review Phase — Awaiting Admin Approval"
+                    : "Completion Phase — Stock Verified"}
             </h3>
             <p className="mt-0.5 text-xs text-emerald-900/90 leading-relaxed">
               {currentStep === 1
                 ? "Check equipment number and container seals. When ready, tap 'Start Unloading (Run Timer)' to begin operations and start the demurrage clock."
                 : currentStep === 2
-                ? "Weigh each pallet or bundle on the warehouse scale. Record gross weight, select packaging type, and take at least one clear inspection photo."
-                : currentStep === 3
-                ? "Your unloading record and photos have been submitted. An Administrator will review the cargo before approving it into live warehouse stock."
-                : "This operation is approved and finished. Net kilograms have been added to depot stock balances."}
+                  ? "Weigh each pallet or bundle on the warehouse scale. Record gross weight, select packaging type, and take at least one clear inspection photo."
+                  : currentStep === 3
+                    ? "Your unloading record and photos have been submitted. An Administrator will review the cargo before approving it into live warehouse stock."
+                    : "This operation is approved and finished. Net kilograms have been added to depot stock balances."}
             </p>
           </div>
         </div>
@@ -371,24 +368,22 @@ export function WorkerWorkflowScreen({
       {/* 4. Demurrage Timer Card (for Inbound) */}
       {isInbound && container ? (
         <div
-          className={`rounded-xl border p-4 shadow-2xs transition-all ${
-            isDemurrageOvertime
-              ? "border-rose-300 bg-rose-50 text-rose-950"
-              : isDemurrageRunning
+          className={`rounded-xl border p-4 shadow-2xs transition-all ${isDemurrageOvertime
+            ? "border-rose-300 bg-rose-50 text-rose-950"
+            : isDemurrageRunning
               ? "border-amber-300 bg-amber-50 text-amber-950"
               : "border-neutral-200/90 bg-white"
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span
-                className={`flex h-2.5 w-2.5 rounded-full ${
-                  isDemurrageOvertime
-                    ? "bg-rose-600 animate-ping"
-                    : isDemurrageRunning
+                className={`flex h-2.5 w-2.5 rounded-full ${isDemurrageOvertime
+                  ? "bg-rose-600 animate-ping"
+                  : isDemurrageRunning
                     ? "bg-amber-500 animate-pulse"
                     : "bg-neutral-400"
-                }`}
+                  }`}
               />
               <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
                 Demurrage Clock (Europe/Zurich)
@@ -534,22 +529,20 @@ export function WorkerWorkflowScreen({
                 <button
                   type="button"
                   onClick={() => setMode("weight")}
-                  className={`min-h-[44px] rounded-xl text-xs font-bold transition ${
-                    mode === "weight"
-                      ? "bg-emerald-800 text-white shadow-xs"
-                      : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-                  }`}
+                  className={`min-h-[44px] rounded-xl text-xs font-bold transition ${mode === "weight"
+                    ? "bg-emerald-800 text-white shadow-xs"
+                    : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+                    }`}
                 >
                   ⚖ Weight in Kilograms
                 </button>
                 <button
                   type="button"
                   onClick={() => setMode("count")}
-                  className={`min-h-[44px] rounded-xl text-xs font-bold transition ${
-                    mode === "count"
-                      ? "bg-emerald-800 text-white shadow-xs"
-                      : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-                  }`}
+                  className={`min-h-[44px] rounded-xl text-xs font-bold transition ${mode === "count"
+                    ? "bg-emerald-800 text-white shadow-xs"
+                    : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+                    }`}
                 >
                   🔢 Count Only (No Weight)
                 </button>
@@ -640,11 +633,10 @@ export function WorkerWorkflowScreen({
 
                 {/* Automatic Gross & Net Weight Calculation Summary */}
                 <div
-                  className={`rounded-xl border p-3.5 text-xs shadow-2xs ${
-                    weightCalc.ok
-                      ? "border-emerald-200 bg-emerald-50/80 text-emerald-950"
-                      : "border-neutral-200 bg-neutral-50 text-neutral-600"
-                  }`}
+                  className={`rounded-xl border p-3.5 text-xs shadow-2xs ${weightCalc.ok
+                    ? "border-emerald-200 bg-emerald-50/80 text-emerald-950"
+                    : "border-neutral-200 bg-neutral-50 text-neutral-600"
+                    }`}
                 >
                   <span className="font-bold block uppercase tracking-wider text-[10px] text-neutral-500">
                     Calculated Weight Breakdown
@@ -799,15 +791,14 @@ export function WorkerWorkflowScreen({
           </div>
           {activeRequest ? (
             <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                activeRequest.status === "approved"
-                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                  : activeRequest.status === "completed"
+              className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${activeRequest.status === "approved"
+                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                : activeRequest.status === "completed"
                   ? "bg-blue-100 text-blue-800 border border-blue-300"
                   : activeRequest.status === "submitted"
-                  ? "bg-amber-100 text-amber-800 border border-amber-300"
-                  : "bg-rose-100 text-rose-800 border border-rose-300"
-              }`}
+                    ? "bg-amber-100 text-amber-800 border border-amber-300"
+                    : "bg-rose-100 text-rose-800 border border-rose-300"
+                }`}
             >
               {activeRequest.status.replace("_", " ").toUpperCase()}
             </span>
@@ -889,10 +880,10 @@ export function WorkerWorkflowScreen({
         </div>
       </div>
 
-      {/* 9. Sticky Mobile Bottom Action Bar (Fixed above bottom navigation) */}
+      {/* 9. Sticky Mobile Bottom Action Bar (Floating cleanly above bottom navigation dock) */}
       {!isCompleted ? (
-        <div className="fixed inset-x-0 bottom-16 z-30 border-t border-neutral-200 bg-white p-3 shadow-lg">
-          <div className="mx-auto max-w-lg">
+        <div className="fixed inset-x-0 bottom-[86px] z-30 flex justify-center px-3.5 pointer-events-none pb-[env(safe-area-inset-bottom,0px)]">
+          <div className="pointer-events-auto w-full max-w-[420px] rounded-2xl border border-neutral-200/90 bg-white/95 p-2.5 shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] backdrop-blur-md">
             {/* If Inbound and Planned / Registered: Start Unloading action */}
             {isInbound && (record.status === "Planned" || record.status === "In transit" || record.status === "Arrived" || record.status === "Registered") ? (
               <button

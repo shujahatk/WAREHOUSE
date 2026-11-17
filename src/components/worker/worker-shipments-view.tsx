@@ -117,44 +117,40 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
-            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
-              statusFilter === "all"
-                ? "bg-emerald-800 text-white shadow-xs"
-                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-            }`}
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${statusFilter === "all"
+              ? "bg-emerald-800 text-white shadow-xs"
+              : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+              }`}
           >
             All Shipments ({isInbound ? containers.length : outboundList.length})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("active")}
-            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
-              statusFilter === "active"
-                ? "bg-emerald-800 text-white shadow-xs"
-                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-            }`}
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${statusFilter === "active"
+              ? "bg-emerald-800 text-white shadow-xs"
+              : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+              }`}
           >
             Open / Pending
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("in-progress")}
-            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
-              statusFilter === "in-progress"
-                ? "bg-emerald-800 text-white shadow-xs"
-                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-            }`}
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${statusFilter === "in-progress"
+              ? "bg-emerald-800 text-white shadow-xs"
+              : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+              }`}
           >
             {isInbound ? "Unloading Now" : "Loading Now"}
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("done")}
-            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
-              statusFilter === "done"
-                ? "bg-emerald-800 text-white shadow-xs"
-                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-            }`}
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${statusFilter === "done"
+              ? "bg-emerald-800 text-white shadow-xs"
+              : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+              }`}
           >
             Completed
           </button>
@@ -191,13 +187,12 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
             return (
               <div
                 key={item.number}
-                className={`overflow-hidden rounded-xl border bg-white transition-all shadow-2xs ${
-                  isDemurrageWarning
-                    ? "border-rose-300 bg-rose-50/40"
-                    : isWorking
+                className={`overflow-hidden rounded-xl border bg-white transition-all shadow-2xs ${isDemurrageWarning
+                  ? "border-rose-300 bg-rose-50/40"
+                  : isWorking
                     ? "border-blue-300 bg-blue-50/30"
                     : "border-neutral-200/90"
-                }`}
+                  }`}
               >
                 {/* Main Card Header */}
                 <div className="p-4">
@@ -228,13 +223,12 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
 
                     {/* Status Pill */}
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tracking-tight ${
-                        isCompleted
-                          ? "border border-emerald-300 bg-emerald-100 text-emerald-800"
-                          : isWorking
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tracking-tight ${isCompleted
+                        ? "border border-emerald-300 bg-emerald-100 text-emerald-800"
+                        : isWorking
                           ? "border border-blue-300 bg-blue-100 text-blue-800"
                           : "border border-neutral-300 bg-neutral-100 text-neutral-700"
-                      }`}
+                        }`}
                     >
                       {isCompleted ? "✔" : isWorking ? "●" : "○"} {item.status}
                     </span>
@@ -268,11 +262,10 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
                   {/* Demurrage Notice Banner if applicable */}
                   {isInbound && containerItem?.status === "Unloading" ? (
                     <div
-                      className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold ${
-                        isDemurrageWarning
-                          ? "bg-rose-100 text-rose-900 border border-rose-300"
-                          : "bg-amber-100 text-amber-900 border border-amber-300"
-                      }`}
+                      className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold ${isDemurrageWarning
+                        ? "bg-rose-100 text-rose-900 border border-rose-300"
+                        : "bg-amber-100 text-amber-900 border border-amber-300"
+                        }`}
                     >
                       <span className="flex items-center gap-1.5">
                         <Icon name="bell" />
