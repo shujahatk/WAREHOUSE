@@ -588,6 +588,8 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
         poNumber: o.poNumber ?? null,
         purchasingOfferId: o.purchasingOfferId ?? null,
         clientName: o.clientName ?? null,
+        buyerName: o.clientName ?? null,
+        senderName: creator?.name ?? "Moderator",
         contactNumber: o.contactNumber ?? null,
         emailAddress: o.emailAddress ?? null,
         origin: o.origin ?? null,

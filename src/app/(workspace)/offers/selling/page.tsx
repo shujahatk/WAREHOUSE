@@ -36,9 +36,7 @@ export default function SellingOffersPage() {
   const [sellingStatusTab, setSellingStatusTab] = useState<string>("all");
   const [activeKpiFilter, setActiveKpiFilter] = useState<OfferFilterKey>("all");
 
-  const isModerator = identity.role === "moderator";
   const isOffersUser = identity.role === "offers_user";
-  const isAdmin = identity.role === "owner";
 
   const allOffers = useMemo(() => state.offers || [], [state.offers]);
   const sellingOffers = useMemo(() => {
@@ -250,7 +248,7 @@ export default function SellingOffersPage() {
               Selling Desk &amp; Commercial Margins Registry ({displayedOffers.length})
             </h3>
             <p className="text-xs text-neutral-500">
-              Customer sales offers linked to Purchase Orders with real-time margin tracking and admin status
+              Customer sales offers linked to Purchase Orders with real-time margin tracking and separated Buyer &amp; Sender tracking
             </p>
           </div>
 

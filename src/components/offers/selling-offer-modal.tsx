@@ -184,123 +184,178 @@ export function SellingOfferModal({
             </div>
           ) : null}
 
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            {/* Field 1: PO Number */}
-            <div className="sm:col-span-2">
-              <label className="block font-medium text-neutral-700">
-                1. Associated PO Number <span className="text-rose-500">*</span>
-              </label>
-              {availableOrders.length > 0 ? (
-                <div className="mt-1 flex gap-2">
-                  <select
-                    value={poNumber}
-                    onChange={(e) => setPoNumber(e.target.value)}
-                    className="h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
-                  >
-                    <option value="">Select a Purchase Order...</option>
-                    {availableOrders.map((o) => (
-                      <option key={o.number} value={o.number}>
-                        {o.number} — {o.title || o.material} ({o.supplier})
-                      </option>
-                    ))}
-                  </select>
+          {/* Section 1: Sender & Source Details */}
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3.5 space-y-3">
+            <div className="flex items-center gap-2 border-b border-emerald-200/50 pb-2">
+              <span className="inline-flex items-center rounded-xs bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                Sender &amp; Source
+              </span>
+              <h3 className="font-bold text-neutral-900 text-xs">Originator &amp; Sourced Supply Details</h3>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Field 1: PO Number */}
+              <div className="sm:col-span-2">
+                <label className="block font-medium text-neutral-700">
+                  1. Associated Sourced PO Number <span className="text-rose-500">*</span>
+                </label>
+                {availableOrders.length > 0 ? (
+                  <div className="mt-1 flex gap-2">
+                    <select
+                      value={poNumber}
+                      onChange={(e) => setPoNumber(e.target.value)}
+                      className="h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
+                    >
+                      <option value="">Select a Purchase Order...</option>
+                      {availableOrders.map((o) => (
+                        <option key={o.number} value={o.number}>
+                          {o.number} — {o.title || o.material} (Supplier: {o.supplier})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={poNumber}
+                      onChange={(e) => setPoNumber(e.target.value)}
+                      placeholder="Or enter PO-..."
+                      className="h-9.5 w-44 rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono"
+                    />
+                  </div>
+                ) : (
                   <input
                     type="text"
+                    required
                     value={poNumber}
                     onChange={(e) => setPoNumber(e.target.value)}
-                    placeholder="Or enter PO-..."
-                    className="h-9.5 w-44 rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono"
+                    placeholder="e.g. PO-2026-0001"
+                    className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono"
                   />
-                </div>
-              ) : (
+                )}
+              </div>
+
+              {/* Field 2: Material Type */}
+              <div>
+                <label className="block font-medium text-neutral-700">
+                  2. Material Type <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  value={poNumber}
-                  onChange={(e) => setPoNumber(e.target.value)}
-                  placeholder="e.g. PO-2026-0001"
-                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono"
+                  value={materialType}
+                  onChange={(e) => setMaterialType(e.target.value)}
+                  placeholder="e.g. Plastics (LDPE), Scrap Metal, Paper"
+                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
                 />
-              )}
+              </div>
+
+              {/* Field 3: Material Name */}
+              <div>
+                <label className="block font-medium text-neutral-700">
+                  3. Material Name &amp; Grade <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={materialName}
+                  onChange={(e) => setMaterialName(e.target.value)}
+                  placeholder="e.g. LDPE Film 98/2 Regranulate"
+                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Field 8: Origin Loading Location */}
+              <div className="sm:col-span-2">
+                <label className="block font-medium text-neutral-700">
+                  8. Origin / Sender Loading Facility <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={origin}
+                  onChange={(e) => setOrigin(e.target.value)}
+                  placeholder="e.g. Bornem Warehouse, Belgium"
+                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Buyer (Client) Details */}
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-3.5 space-y-3">
+            <div className="flex items-center gap-2 border-b border-indigo-200/50 pb-2">
+              <span className="inline-flex items-center rounded-xs bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
+                Buyer (Client)
+              </span>
+              <h3 className="font-bold text-neutral-900 text-xs">Purchasing Client &amp; Delivery Destination</h3>
             </div>
 
-            {/* Field 2: Material Type */}
-            <div>
-              <label className="block font-medium text-neutral-700">
-                2. Material Type <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={materialType}
-                onChange={(e) => setMaterialType(e.target.value)}
-                placeholder="e.g. Plastics (LDPE), Scrap Metal, Paper"
-                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
-              />
-            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Field 4: Client Name */}
+              <div className="sm:col-span-2">
+                <label className="block font-medium text-neutral-700">
+                  4. Client / Buyer Company Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  placeholder="e.g. Benelux Recycling BV"
+                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-indigo-700 focus:outline-hidden"
+                />
+              </div>
 
-            {/* Field 3: Material Name */}
-            <div>
-              <label className="block font-medium text-neutral-700">
-                3. Material Name &amp; Grade <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={materialName}
-                onChange={(e) => setMaterialName(e.target.value)}
-                placeholder="e.g. LDPE Film 98/2 Regranulate"
-                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
-              />
-            </div>
+              {/* Field 5: Contact Number */}
+              <div>
+                <label className="block font-medium text-neutral-700">
+                  5. Buyer Contact Phone <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(e.target.value)}
+                  placeholder="e.g. +32 3 888 1234"
+                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-indigo-700 focus:outline-hidden"
+                />
+              </div>
 
-            {/* Field 4: Client Name */}
-            <div>
-              <label className="block font-medium text-neutral-700">
-                4. Client / Buyer Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                placeholder="e.g. Benelux Recycling BV"
-                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
-              />
-            </div>
+              {/* Field 6: Email Address */}
+              <div>
+                <label className="block font-medium text-neutral-700">
+                  6. Buyer Email Address <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={emailAddress}
+                  onChange={(e) => setEmailAddress(e.target.value)}
+                  placeholder="e.g. purchasing@client.com"
+                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-indigo-700 focus:outline-hidden"
+                />
+              </div>
 
-            {/* Field 5: Contact Number */}
-            <div>
-              <label className="block font-medium text-neutral-700">
-                5. Contact Number <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="tel"
-                required
-                value={contactNumber}
-                onChange={(e) => setContactNumber(e.target.value)}
-                placeholder="e.g. +32 3 888 1234"
-                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
-              />
+              {/* Field 9: Destination */}
+              <div className="sm:col-span-2">
+                <label className="block font-medium text-neutral-700">
+                  9. Destination Delivery Location <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  placeholder="e.g. Rotterdam Port, Netherlands"
+                  className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-indigo-700 focus:outline-hidden"
+                />
+              </div>
             </div>
+          </div>
 
-            {/* Field 6: Email Address */}
-            <div>
-              <label className="block font-medium text-neutral-700">
-                6. Email Address <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="email"
-                required
-                value={emailAddress}
-                onChange={(e) => setEmailAddress(e.target.value)}
-                placeholder="e.g. purchasing@client.com"
-                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
-              />
-            </div>
-
+          {/* Section 3: Commercial Valuation & Terms */}
+          <div className="grid gap-3.5 sm:grid-cols-2">
             {/* Field 7: Price */}
-            <div>
+            <div className="sm:col-span-2">
               <label className="block font-medium text-neutral-700">
                 7. Selling Price (EUR) <span className="text-rose-500">*</span>
               </label>
@@ -312,37 +367,7 @@ export function SellingOfferModal({
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="e.g. 1450.00"
-                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono"
-              />
-            </div>
-
-            {/* Field 8: Origin */}
-            <div>
-              <label className="block font-medium text-neutral-700">
-                8. Origin Loading Location <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={origin}
-                onChange={(e) => setOrigin(e.target.value)}
-                placeholder="e.g. Bornem Warehouse, Belgium"
-                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
-              />
-            </div>
-
-            {/* Field 9: Destination */}
-            <div>
-              <label className="block font-medium text-neutral-700">
-                9. Destination Delivery Location <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                placeholder="e.g. Rotterdam Port, Netherlands"
-                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden"
+                className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono font-bold"
               />
             </div>
           </div>

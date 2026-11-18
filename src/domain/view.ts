@@ -117,6 +117,8 @@ export type OfferView = {
   poNumber?: string | null;
   purchasingOfferId?: string | null;
   clientName?: string | null;
+  buyerName?: string | null;
+  senderName?: string | null;
   contactNumber?: string | null;
   emailAddress?: string | null;
   origin?: string | null;

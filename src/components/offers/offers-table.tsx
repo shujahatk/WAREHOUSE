@@ -18,7 +18,7 @@ const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   sold: { label: "Sold", className: "bg-emerald-100 text-emerald-900 border-emerald-400 font-bold" },
 };
 
-type SortKey = "date" | "number" | "material" | "quantity" | "totalValue" | "pricePerUnit" | "status";
+type SortKey = "date" | "number" | "material" | "quantity" | "totalValue" | "pricePerUnit" | "status" | "buyer" | "sender";
 
 export function OffersTable({
   offers,
@@ -108,6 +108,9 @@ export function OffersTable({
           o.country.toLowerCase().includes(q) ||
           (o.location && o.location.toLowerCase().includes(q)) ||
           (o.clientName && o.clientName.toLowerCase().includes(q)) ||
+          (o.buyerName && o.buyerName.toLowerCase().includes(q)) ||
+          (o.createdByName && o.createdByName.toLowerCase().includes(q)) ||
+          (o.senderName && o.senderName.toLowerCase().includes(q)) ||
           (o.poNumber && o.poNumber.toLowerCase().includes(q)) ||
           (o.origin && o.origin.toLowerCase().includes(q)) ||
           (o.destination && o.destination.toLowerCase().includes(q)) ||
@@ -145,6 +148,12 @@ export function OffersTable({
           break;
         case "status":
           cmp = (a.statusKey || "").localeCompare(b.statusKey || "");
+          break;
+        case "buyer":
+          cmp = (a.clientName || a.buyerName || "").localeCompare(b.clientName || b.buyerName || "");
+          break;
+        case "sender":
+          cmp = (a.createdByName || a.senderName || "").localeCompare(b.createdByName || b.senderName || "");
           break;
       }
       return sortAsc ? cmp : -cmp;
@@ -457,10 +466,33 @@ export function OffersTable({
                   </div>
                 </th>
 
-                {/* Counterparty: Supplier / Client */}
-                <th className="py-3 px-3">
-                  {mode === "purchasing" ? "Supplier / Source" : mode === "selling" ? "Client / Buyer" : "Counterparty"}
-                </th>
+                {/* Counterparty: Buyer and Sender separation */}
+                {mode === "selling" ? (
+                  <>
+                    <th
+                      className="py-3 px-3 cursor-pointer hover:text-neutral-950 transition-colors"
+                      onClick={() => handleSort("buyer")}
+                    >
+                      <div className="flex items-center">
+                        <span>Buyer (Client)</span>
+                        {renderSortIcon("buyer")}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-3 cursor-pointer hover:text-neutral-950 transition-colors"
+                      onClick={() => handleSort("sender")}
+                    >
+                      <div className="flex items-center">
+                        <span>Sender (Originator)</span>
+                        {renderSortIcon("sender")}
+                      </div>
+                    </th>
+                  </>
+                ) : (
+                  <th className="py-3 px-3">
+                    {mode === "purchasing" ? "Supplier / Source" : "Buyer & Sender / Counterparty"}
+                  </th>
+                )}
 
                 {/* Quantity */}
                 <th
@@ -532,7 +564,7 @@ export function OffersTable({
             <tbody className="divide-y divide-neutral-100">
               {paginatedOffers.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-xs text-neutral-500">
+                  <td colSpan={mode === "selling" ? 15 : mode === "all" ? 13 : 11} className="py-12 text-center text-xs text-neutral-500">
                     No offers match the current filters or search query.
                   </td>
                 </tr>
@@ -549,11 +581,13 @@ export function OffersTable({
                   const docCount = offer.attachments.filter((a) => a.kind === "document").length;
                   const isSelected = selectedIds.has(offer.id);
 
+                  // Associated PO record (if linked)
+                  const po = offer.poNumber ? poMap.get(offer.poNumber) : undefined;
+
                   // Margin calculation for selling offers
                   let marginInfo: { text: string; positive: boolean } | null = null;
-                  if (mode === "selling" && offer.poNumber) {
-                    const po = poMap.get(offer.poNumber);
-                    if (po && po.quantityKg && po.valueEur) {
+                  if (mode === "selling" && po) {
+                    if (po.quantityKg && po.valueEur) {
                       const poUnitCost = po.valueEur / po.quantityKg;
                       const sellPrice = offer.pricePerUnit;
                       if (sellPrice > 0 && poUnitCost > 0) {
@@ -657,15 +691,91 @@ export function OffersTable({
                         </p>
                       </td>
 
-                      {/* Counterparty: Supplier / Client */}
-                      <td className="py-3 px-3">
-                        <p className="font-medium text-neutral-800 truncate max-w-[140px]">
-                          {offer.clientName || offer.createdByName || "—"}
-                        </p>
-                        {offer.contactNumber ? (
-                          <p className="text-[10px] text-neutral-400 truncate">{offer.contactNumber}</p>
-                        ) : null}
-                      </td>
+                      {/* Counterparty: Buyer and Sender separation */}
+                      {mode === "selling" ? (
+                        <>
+                          {/* Buyer (Client) Column */}
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center rounded-xs bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700 uppercase tracking-wider">
+                                Buyer
+                              </span>
+                              <p className="font-semibold text-neutral-900 truncate max-w-[130px]" title={offer.clientName || "Direct Client"}>
+                                {offer.clientName || "Direct Client"}
+                              </p>
+                            </div>
+                            <div className="mt-0.5 flex flex-col text-[10px] text-neutral-500">
+                              {offer.contactNumber ? (
+                                <span className="truncate">{offer.contactNumber}</span>
+                              ) : null}
+                              {offer.destination ? (
+                                <span className="text-neutral-400 truncate">🏁 {offer.destination}</span>
+                              ) : null}
+                            </div>
+                          </td>
+
+                          {/* Sender (Originator / Source) Column */}
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center rounded-xs bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800 uppercase tracking-wider">
+                                Sender
+                              </span>
+                              <p className="font-semibold text-neutral-900 truncate max-w-[130px]" title={offer.createdByName || "Trader"}>
+                                {offer.createdByName || "Trader"}
+                              </p>
+                            </div>
+                            <div className="mt-0.5 flex flex-col text-[10px] text-neutral-500">
+                              {po ? (
+                                <span className="text-neutral-600 font-medium truncate" title={`Sourced via ${po.supplier}`}>
+                                  From: {po.supplier}
+                                </span>
+                              ) : null}
+                              {offer.origin ? (
+                                <span className="text-neutral-400 truncate">📍 {offer.origin}</span>
+                              ) : null}
+                            </div>
+                          </td>
+                        </>
+                      ) : mode === "all" ? (
+                        <td className="py-3 px-3">
+                          {offer.kind === "selling" ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1 text-[11px]">
+                                <span className="font-bold text-indigo-700 text-[10px]">Buyer:</span>
+                                <span className="font-medium text-neutral-900 truncate max-w-[130px]">{offer.clientName || "—"}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px]">
+                                <span className="font-bold text-emerald-700 text-[10px]">Sender:</span>
+                                <span className="text-neutral-600 truncate max-w-[130px]">{offer.createdByName || "—"}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="font-medium text-neutral-800 truncate max-w-[140px]">
+                                {offer.createdByName || offer.clientName || "Supplier"}
+                              </p>
+                              {offer.contactNumber ? (
+                                <p className="text-[10px] text-neutral-400 truncate">{offer.contactNumber}</p>
+                              ) : null}
+                            </div>
+                          )}
+                        </td>
+                      ) : (
+                        /* mode === "purchasing" */
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center rounded-xs bg-teal-50 px-1.5 py-0.5 text-[9px] font-bold text-teal-800 uppercase tracking-wider">
+                              Supplier
+                            </span>
+                            <p className="font-semibold text-neutral-900 truncate max-w-[140px]">
+                              {offer.createdByName || offer.clientName || "—"}
+                            </p>
+                          </div>
+                          {offer.contactNumber ? (
+                            <p className="text-[10px] text-neutral-400 truncate">{offer.contactNumber}</p>
+                          ) : null}
+                        </td>
+                      )}
 
                       {/* Volume & Truckloads */}
                       <td className="py-3 px-3 whitespace-nowrap font-medium text-neutral-800">

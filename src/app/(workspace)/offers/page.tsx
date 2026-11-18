@@ -50,7 +50,6 @@ export default function OffersDashboardPage() {
 
   const isModerator = identity.role === "moderator";
   const isOffersUser = identity.role === "offers_user";
-  const isAdmin = identity.role === "owner";
 
   // Segmented offers
   const purchasingOffers = useMemo(() => {

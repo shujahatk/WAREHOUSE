@@ -180,34 +180,104 @@ export function OfferQuickViewDrawer({
             ) : null}
           </div>
 
-          {/* Counterparty & Contact */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-neutral-950 uppercase tracking-wide">
-              Commercial Counterparty
-            </h4>
-            <div className="rounded-lg border border-neutral-200 p-3 bg-white space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Company / Client:</span>
-                <span className="font-semibold text-neutral-900">{offer.clientName || "Not specified"}</span>
+          {/* Commercial Counterparties: Separated Buyer and Sender for Selling Offers */}
+          {offer.kind === "selling" ? (
+            <div className="space-y-3">
+              {/* Buyer (Client) Card */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center rounded-xs bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
+                    Buyer
+                  </span>
+                  <h4 className="text-xs font-bold text-neutral-950 uppercase tracking-wide">
+                    Purchasing Client (Buyer)
+                  </h4>
+                </div>
+                <div className="rounded-lg border border-neutral-200 p-3 bg-white space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-neutral-400">Client / Company:</span>
+                    <span className="font-semibold text-neutral-900">{offer.clientName || "Not specified"}</span>
+                  </div>
+                  {offer.contactNumber ? (
+                    <div className="flex justify-between">
+                      <span className="text-neutral-400">Phone:</span>
+                      <a href={`tel:${offer.contactNumber}`} className="font-semibold text-indigo-700 hover:underline">
+                        {offer.contactNumber}
+                      </a>
+                    </div>
+                  ) : null}
+                  {offer.emailAddress ? (
+                    <div className="flex justify-between">
+                      <span className="text-neutral-400">Email:</span>
+                      <a href={`mailto:${offer.emailAddress}`} className="font-semibold text-indigo-700 hover:underline">
+                        {offer.emailAddress}
+                      </a>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between pt-1 border-t border-neutral-100">
+                    <span className="text-neutral-400">Destination:</span>
+                    <span className="font-semibold text-neutral-900">🏁 {offer.destination || "Direct Delivery"}</span>
+                  </div>
+                </div>
               </div>
-              {offer.contactNumber ? (
-                <div className="flex justify-between">
-                  <span className="text-neutral-400">Phone:</span>
-                  <a href={`tel:${offer.contactNumber}`} className="font-semibold text-emerald-800 hover:underline">
-                    {offer.contactNumber}
-                  </a>
+
+              {/* Sender (Originator / Source) Card */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center rounded-xs bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                    Sender
+                  </span>
+                  <h4 className="text-xs font-bold text-neutral-950 uppercase tracking-wide">
+                    Originator &amp; Source (Sender)
+                  </h4>
                 </div>
-              ) : null}
-              {offer.emailAddress ? (
-                <div className="flex justify-between">
-                  <span className="text-neutral-400">Email:</span>
-                  <a href={`mailto:${offer.emailAddress}`} className="font-semibold text-emerald-800 hover:underline">
-                    {offer.emailAddress}
-                  </a>
+                <div className="rounded-lg border border-neutral-200 p-3 bg-white space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-neutral-400">Submitted By:</span>
+                    <span className="font-semibold text-neutral-900">{offer.createdByName || "Trading Desk"}</span>
+                  </div>
+                  {offer.poNumber ? (
+                    <div className="flex justify-between">
+                      <span className="text-neutral-400">Sourced PO:</span>
+                      <span className="font-mono font-semibold text-emerald-800">{offer.poNumber}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between pt-1 border-t border-neutral-100">
+                    <span className="text-neutral-400">Origin Loading:</span>
+                    <span className="font-semibold text-neutral-900">📍 {offer.origin || offer.location || offer.country || "—"}</span>
+                  </div>
                 </div>
-              ) : null}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-neutral-950 uppercase tracking-wide">
+                Commercial Counterparty
+              </h4>
+              <div className="rounded-lg border border-neutral-200 p-3 bg-white space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-neutral-400">Supplier / Source:</span>
+                  <span className="font-semibold text-neutral-900">{offer.clientName || offer.createdByName || "Not specified"}</span>
+                </div>
+                {offer.contactNumber ? (
+                  <div className="flex justify-between">
+                    <span className="text-neutral-400">Phone:</span>
+                    <a href={`tel:${offer.contactNumber}`} className="font-semibold text-emerald-800 hover:underline">
+                      {offer.contactNumber}
+                    </a>
+                  </div>
+                ) : null}
+                {offer.emailAddress ? (
+                  <div className="flex justify-between">
+                    <span className="text-neutral-400">Email:</span>
+                    <a href={`mailto:${offer.emailAddress}`} className="font-semibold text-emerald-800 hover:underline">
+                      {offer.emailAddress}
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
 
           {/* Logistics Route */}
           <div className="space-y-2">

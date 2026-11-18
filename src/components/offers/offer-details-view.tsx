@@ -623,44 +623,145 @@ export function OfferDetailsView({
             ) : null}
           </div>
 
-          {/* Client & Counterparty Information */}
-          <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
-            <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Commercial Counterparty &amp; Contacts
-            </h2>
-            <dl className="mt-4 grid grid-cols-1 gap-4 text-xs sm:grid-cols-3">
-              <div>
-                <dt className="text-neutral-500">Company / Client Name</dt>
-                <dd className="mt-1 text-sm font-semibold text-neutral-900">
-                  {offer.clientName || "Not specified"}
-                </dd>
+          {/* Commercial Counterparties: Separated Buyer and Sender for Selling Offers */}
+          {offer.kind === "selling" ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Buyer Card */}
+              <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-xs bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
+                      Buyer
+                    </span>
+                    <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide">
+                      Purchasing Client (Buyer)
+                    </h2>
+                  </div>
+                </div>
+                <dl className="mt-3 space-y-3 text-xs">
+                  <div>
+                    <dt className="text-neutral-500">Client / Company Name</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-neutral-900">
+                      {offer.clientName || "Not specified"}
+                    </dd>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <dt className="text-neutral-500">Contact Number</dt>
+                      <dd className="mt-0.5 text-xs font-semibold text-neutral-900">
+                        {offer.contactNumber ? (
+                          <a href={`tel:${offer.contactNumber}`} className="text-indigo-700 hover:underline">
+                            {offer.contactNumber}
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-neutral-500">Email Address</dt>
+                      <dd className="mt-0.5 text-xs font-semibold text-neutral-900">
+                        {offer.emailAddress ? (
+                          <a href={`mailto:${offer.emailAddress}`} className="text-indigo-700 hover:underline">
+                            {offer.emailAddress}
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </dd>
+                    </div>
+                  </div>
+                  <div>
+                    <dt className="text-neutral-500">Delivery Destination</dt>
+                    <dd className="mt-0.5 text-xs font-medium text-neutral-900">
+                      🏁 {offer.destination || "Direct Delivery"}
+                    </dd>
+                  </div>
+                </dl>
               </div>
-              <div>
-                <dt className="text-neutral-500">Contact Number</dt>
-                <dd className="mt-1 text-sm font-semibold text-neutral-900">
-                  {offer.contactNumber ? (
-                    <a href={`tel:${offer.contactNumber}`} className="text-emerald-800 hover:underline">
-                      {offer.contactNumber}
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </dd>
+
+              {/* Sender Card */}
+              <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-xs bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                      Sender
+                    </span>
+                    <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide">
+                      Originator &amp; Source (Sender)
+                    </h2>
+                  </div>
+                </div>
+                <dl className="mt-3 space-y-3 text-xs">
+                  <div>
+                    <dt className="text-neutral-500">Submitted By (Sender)</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-neutral-900">
+                      {offer.createdByName || "Trading Desk"}
+                    </dd>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <dt className="text-neutral-500">Sourced PO</dt>
+                      <dd className="mt-0.5 font-mono text-xs font-semibold text-emerald-800">
+                        {offer.poNumber || "Direct Stock"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-neutral-500">Submitted Date</dt>
+                      <dd className="mt-0.5 text-xs font-semibold text-neutral-900">
+                        {offer.createdAt?.slice(0, 10) || "—"}
+                      </dd>
+                    </div>
+                  </div>
+                  <div>
+                    <dt className="text-neutral-500">Origin / Loading Location</dt>
+                    <dd className="mt-0.5 text-xs font-medium text-neutral-900">
+                      📍 {offer.origin || offer.location || offer.country || "Not specified"}
+                    </dd>
+                  </div>
+                </dl>
               </div>
-              <div>
-                <dt className="text-neutral-500">Email Address</dt>
-                <dd className="mt-1 text-sm font-semibold text-neutral-900">
-                  {offer.emailAddress ? (
-                    <a href={`mailto:${offer.emailAddress}`} className="text-emerald-800 hover:underline">
-                      {offer.emailAddress}
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </dd>
-              </div>
-            </dl>
-          </div>
+            </div>
+          ) : (
+            /* Standard Purchasing Counterparty */
+            <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
+              <h2 className="text-sm font-bold text-neutral-950 uppercase tracking-wide border-b border-neutral-100 pb-2">
+                Commercial Counterparty &amp; Contacts
+              </h2>
+              <dl className="mt-4 grid grid-cols-1 gap-4 text-xs sm:grid-cols-3">
+                <div>
+                  <dt className="text-neutral-500">Supplier / Source Name</dt>
+                  <dd className="mt-1 text-sm font-semibold text-neutral-900">
+                    {offer.clientName || offer.createdByName || "Not specified"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-neutral-500">Contact Number</dt>
+                  <dd className="mt-1 text-sm font-semibold text-neutral-900">
+                    {offer.contactNumber ? (
+                      <a href={`tel:${offer.contactNumber}`} className="text-emerald-800 hover:underline">
+                        {offer.contactNumber}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-neutral-500">Email Address</dt>
+                  <dd className="mt-1 text-sm font-semibold text-neutral-900">
+                    {offer.emailAddress ? (
+                      <a href={`mailto:${offer.emailAddress}`} className="text-emerald-800 hover:underline">
+                        {offer.emailAddress}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          )}
 
           {/* Logistics & Routing */}
           <div className="rounded-xl border border-neutral-200/90 bg-white p-5 shadow-2xs">
