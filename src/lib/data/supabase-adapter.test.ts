@@ -287,6 +287,13 @@ function createMockSupabaseFetch() {
       return jsonResponse(created, 200);
     }
 
+    if (url.includes("/rest/v1/rpc/rpc_remove_poso_number")) {
+      return jsonResponse(
+        { code: "PGRST202", message: "Could not find the function public.rpc_remove_poso_number(p_number) in the schema cache" },
+        404,
+      );
+    }
+
     if (url.includes("/rest/v1/rpc/rpc_worker_save_material_line")) {
       const body = parsedBody as Record<string, unknown>;
       return jsonResponse(
@@ -340,7 +347,15 @@ function createMockSupabaseFetch() {
     if (url.includes("/rest/v1/purchase_orders")) {
       const numMatch = url.match(/number=eq\.([^&]+)/);
       if (numMatch) {
-        const found = purchaseOrders.filter((p) => p.number === decodeURIComponent(numMatch[1]));
+        const decoded = decodeURIComponent(numMatch[1]);
+        const found = purchaseOrders.filter((p) => p.number === decoded);
+        if (method === "PATCH") {
+          if (found[0]) {
+            Object.assign(found[0], parsedBody as Record<string, unknown>);
+            return jsonResponse(found[0], 200);
+          }
+          return jsonResponse([], 200);
+        }
         return jsonResponse(found, 200);
       }
       return jsonResponse(purchaseOrders, 200);
@@ -696,4 +711,14 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
     handover: "2026-10-22T10:00",
   });
   assert.equal(savedCarrier.error, undefined);
+
+  // 8. Staff PO/SO number removal resilient fallback test (reproduces missing column scenario without crash)
+  const removeRes = await adapter.run("jwt-staff", "removePoSoNumber", {
+    number: "PO-100",
+  });
+  const removedOrder = removeRes.state.orders.find((o) => o.number === "PO-100");
+  assert.equal(removeRes.error, undefined);
+  assert.match(removeRes.notice ?? "", /PO-100.*removed.*Operational history preserved/i);
+  assert.ok(removedOrder, "Order still exists in store history");
+  assert.equal(removedOrder.isRemoved, true, "Order is soft-archived with isRemoved=true");
 });

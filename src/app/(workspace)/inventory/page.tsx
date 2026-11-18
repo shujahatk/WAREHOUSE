@@ -15,17 +15,17 @@ type SortKey = "material" | "quantity" | "weight" | "warehouse";
 export default function InventoryPage() {
   const { state, setThreshold, notice, isSyncing, lastSyncedAt } = useDemo();
   const { identity } = useSession();
-
-  if (identity.role === "worker") {
-    return <WorkerInventoryView />;
-  }
-
-  const query = useWorkspaceSearch().trim().toLowerCase();
+  const rawQuery = useWorkspaceSearch();
+  const query = rawQuery.trim().toLowerCase();
 
   const [activeTab, setActiveTab] = useState<TabKey>("stock");
   const [warehouse, setWarehouse] = useState(identity.warehouse ?? "All");
   const [sort, setSort] = useState<SortKey>("material");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  if (identity.role === "worker") {
+    return <WorkerInventoryView />;
+  }
 
   // Material Stock
   const scopedStock = visibleStock(state, identity.role, identity.warehouse);

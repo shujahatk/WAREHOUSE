@@ -313,19 +313,28 @@ test("7. Staff can remove PO/SO number entries while preserving operational hist
     assert.match(removeRes.notice || "", /removed.*Operational history preserved/i);
 
     // Check state: number is flagged isRemoved = true, historical record exists
-    const rawState = await (store as any).snapshot();
-    const rawOrder = rawState.purchaseOrders.find((po: any) => po.number === "PO-2026-7777");
+    type RawOrderRecord = { id: string; number: string; isRemoved?: boolean; removedAt?: string };
+    type RawLineRecord = { id: string; purchaseOrderId: string };
+    type RawAuditRecord = { action: string };
+    type RawStoreSnapshot = {
+      purchaseOrders: RawOrderRecord[];
+      purchaseOrderLines: RawLineRecord[];
+      auditLogs?: RawAuditRecord[];
+      auditLog?: RawAuditRecord[];
+    };
+    const rawState = await (store as unknown as { snapshot: () => Promise<RawStoreSnapshot> }).snapshot();
+    const rawOrder = rawState.purchaseOrders.find((po) => po.number === "PO-2026-7777");
     assert.ok(rawOrder);
     assert.equal(rawOrder.isRemoved, true);
     assert.ok(rawOrder.removedAt);
 
     // Check lines are preserved
-    const lines = rawState.purchaseOrderLines.filter((l: any) => l.purchaseOrderId === rawOrder.id);
+    const lines = rawState.purchaseOrderLines.filter((l) => l.purchaseOrderId === rawOrder.id);
     assert.ok(lines.length > 0);
 
     // Check audit log contains poso-number-removed
     const auditLogs = rawState.auditLogs || rawState.auditLog || [];
-    const logFound = auditLogs.some((l: any) => l.action === "poso-number-removed");
+    const logFound = auditLogs.some((l) => l.action === "poso-number-removed");
     assert.ok(logFound);
   } finally {
     rmSync(dir, { recursive: true, force: true });

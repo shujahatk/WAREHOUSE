@@ -14,16 +14,18 @@ import { WorkerShipmentsView } from "@/components/worker/worker-shipments-view";
 export default function ContainersPage() {
   const { state, addInbound, notice } = useDemo();
   const { identity } = useSession();
+  const rawQuery = useWorkspaceSearch();
+  const query = rawQuery.trim().toLowerCase();
+  const isWorker = identity.role === "worker";
 
-  if (identity.role === "worker") {
+  const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
+  const scoped = isWorker ? [] : visibleContainers(state, actor);
+  const rows = isWorker ? [] : scoped.filter((row) => `${row.number} ${row.containerNumber} ${row.po} ${row.supplier} ${row.warehouse}`.toLowerCase().includes(query));
+  const now = useLiveNow(!isWorker && rows.some((row) => row.status === "Unloading" && Boolean(row.demurrage.startedAt)));
+
+  if (isWorker) {
     return <WorkerShipmentsView direction="inbound" />;
   }
-
-  const query = useWorkspaceSearch().trim().toLowerCase();
-  const actor = { name: identity.name, role: identity.role, warehouse: identity.warehouse, email: identity.email, company: identity.company };
-  const scoped = visibleContainers(state, actor);
-  const rows = scoped.filter((row) => `${row.number} ${row.containerNumber} ${row.po} ${row.supplier} ${row.warehouse}`.toLowerCase().includes(query));
-  const now = useLiveNow(rows.some((row) => row.status === "Unloading" && Boolean(row.demurrage.startedAt)));
 
   return (
     <>

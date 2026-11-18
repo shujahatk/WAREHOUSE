@@ -75,7 +75,7 @@ export function PurchaseList() {
       }
     }
     return Array.from(list);
-  }, [state.directory?.warehouses]);
+  }, [state.directory]);
 
   // Existing partners for autocomplete
   const existingSuppliers = useMemo(() => {

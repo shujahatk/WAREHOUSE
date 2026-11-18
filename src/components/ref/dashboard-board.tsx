@@ -15,18 +15,20 @@ export function DashboardBoard() {
   const { identity } = useSession();
   const mounted = useIsMounted();
   const currentRole = mounted ? identity.role : "worker";
+  const isWorker = currentRole === "worker";
 
-  if (currentRole === "worker") {
+  const actor = { name: identity.name, role: currentRole, warehouse: identity.warehouse, email: identity.email, company: identity.company };
+  const stock = isWorker ? [] : visibleStock(state, currentRole, identity.warehouse);
+  const orders = isWorker ? [] : visibleOrders(state, actor);
+  const containers = isWorker ? [] : visibleContainers(state, actor);
+  const outbound = isWorker ? [] : visibleOutbound(state, actor);
+  const unloading = containers.filter((row) => row.status === "Unloading");
+  const now = useLiveNow(!isWorker && unloading.some((row) => Boolean(row.demurrage.startedAt)));
+
+  if (isWorker) {
     return <WorkerDashboard />;
   }
 
-  const actor = { name: identity.name, role: currentRole, warehouse: identity.warehouse, email: identity.email, company: identity.company };
-  const stock = visibleStock(state, currentRole, identity.warehouse);
-  const orders = visibleOrders(state, actor);
-  const containers = visibleContainers(state, actor);
-  const outbound = visibleOutbound(state, actor);
-  const myGeneralRequests = (state.generalRequests || []).filter((r) => r.createdByName === identity.name);
-  const pendingMyRequests = myGeneralRequests.filter((r) => r.status === "submitted" || r.status === "under_review").length;
   const pendingGeneralRequests = (state.generalRequests || []).filter((r) => r.status === "submitted" || r.status === "under_review").length;
   const pendingOrders = orders.filter((order) => order.status === "Pending").length;
   const pendingRequests = state.requests.filter((req) => req.status === "submitted").length + pendingGeneralRequests;
@@ -39,9 +41,6 @@ export function DashboardBoard() {
   const activity = state.activity
     .filter((item) => canAccess(currentRole, item.href))
     .slice(0, 5);
-  const stockWeight = stock.reduce((sum, row) => sum + row.weightKg, 0);
-  const unloading = containers.filter((row) => row.status === "Unloading");
-  const now = useLiveNow(unloading.some((row) => Boolean(row.demurrage.startedAt)));
 
   return (
     <>
