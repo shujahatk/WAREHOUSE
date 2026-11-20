@@ -2665,18 +2665,31 @@ export function assignRequestWorker(
 
 export function deletePurchaseOrder(
   store: StoreData,
-  number: string,
+  numberOrId: string,
   actor: UserRecord,
   now: string,
 ): Result<PurchaseOrder> {
-  if (!canPerform(actor.role, "delete-order")) {
-    return fail("Operational PO/SO records cannot be deleted.");
+  if (!canPerform(actor.role, "delete-order") && !canPerform(actor.role, "remove-order")) {
+    return fail("Only Staff can delete PO/SO records.");
   }
-  const order = orderByNumber(store, number);
-  if (!order) return fail("That purchase order does not exist.");
-  store.purchaseOrders = store.purchaseOrders.filter((item) => item.id !== order.id);
-  store.purchaseOrderLines = store.purchaseOrderLines.filter((item) => item.purchaseOrderId !== order.id);
-  audit(store, actor.id, "order-deleted", "purchase-order", order.id, `${order.number} was deleted.`, now, order.status);
+  const order = store.purchaseOrders.find((item) => item.id === numberOrId || same(item.number, numberOrId));
+  if (!order) return fail("That order does not exist.");
+
+  order.isRemoved = true;
+  order.removedAt = now;
+  order.removedBy = actor.id;
+  order.updatedAt = now;
+
+  audit(
+    store,
+    actor.id,
+    "order-deleted",
+    "purchase-order",
+    order.id,
+    `${order.number} was deleted by ${actor.name}. Historical operational records and audit logs are preserved.`,
+    now,
+    order.status,
+  );
   return ok(order);
 }
 
@@ -3349,23 +3362,44 @@ export function createOperationSchedule(
   }
 
   const type = text(body.type) === "loading" ? "loading" : "unloading";
-  const poSoNumber = text(body.poSoNumber).toUpperCase();
-  if (!poSoNumber) {
+  const explicitPoId = text(body.purchaseOrderId || body.orderId || body.poId || body.soId);
+  let existingPo = explicitPoId
+    ? store.purchaseOrders.find((p) => p.id === explicitPoId && !p.isRemoved)
+    : undefined;
+  const rawPoSoNumber = text(body.poSoNumber).toUpperCase() || (existingPo ? existingPo.number.toUpperCase() : "");
+  if (!rawPoSoNumber) {
     return { error: type === "unloading" ? "PO Number is required." : "SO Number is required." };
   }
+  if (!existingPo) {
+    existingPo = store.purchaseOrders.find((p) => !p.isRemoved && same(p.number, rawPoSoNumber));
+  }
 
-  const partnerName = text(body.partnerName || body.supplier || body.customer || body.buyer);
+  if (existingPo) {
+    const existingType = existingPo.type || (existingPo.number.toUpperCase().startsWith("SO") ? "SO" : "PO");
+    if (type === "unloading" && existingType === "SO") {
+      return { error: `Unloading schedules must link to a Purchase Order (PO). ${existingPo.number} is a Sales Order (SO).` };
+    }
+    if (type === "loading" && existingType === "PO") {
+      return { error: `Loading schedules must link to a Sales Order (SO). ${existingPo.number} is a Purchase Order (PO).` };
+    }
+  }
+
+  const poSoNumber = existingPo ? existingPo.number : rawPoSoNumber;
+  const existingCompany = existingPo ? store.companies.find((c) => c.id === existingPo!.companyId) : undefined;
+  const partnerName = text(body.partnerName || body.supplier || body.customer || body.buyer) || existingCompany?.name || "";
   if (!partnerName) {
     return { error: type === "unloading" ? "Supplier name is required." : "Customer / Buyer name is required." };
   }
 
-  const warehouseId = text(body.warehouseId || body.warehouse);
+  const warehouseId = text(body.warehouseId || body.warehouse) || (existingPo?.warehouseId ?? "");
   const warehouse = store.warehouses.find((w) => w.id === warehouseId || same(w.name, warehouseId));
   if (!warehouse) {
     return { error: "Please select a valid warehouse." };
   }
 
-  const scheduledDate = text(body.scheduledDate || body.scheduledUnloadingDate || body.scheduledLoadingDate);
+  const scheduledDate =
+    text(body.scheduledDate || body.scheduledUnloadingDate || body.scheduledLoadingDate) ||
+    (existingPo?.scheduledDate ?? "");
   if (!scheduledDate) {
     return { error: "Scheduled date is required." };
   }
@@ -3379,11 +3413,28 @@ export function createOperationSchedule(
   const scheduleNumber = nextScheduleNumber(store, type, now);
   const scheduleId = randomUUID();
 
-  // Find or create linked PO/SO
-  let po = store.purchaseOrders.find((p) => same(p.number, poSoNumber));
+  const resolvedOrigin = text(body.origin) || existingPo?.origin || "";
+  const resolvedDestination = text(body.destination) || existingPo?.destination || "";
+  const resolvedAnnex7 = body.annex7Required !== undefined ? Boolean(body.annex7Required) : Boolean(existingPo?.annex7Required);
+  const resolvedTransportPrice = body.transportPrice !== undefined ? Math.max(0, num(body.transportPrice) || 0) : (existingPo?.transportPrice ?? 0);
+  const resolvedCurrency = text(body.currency) || existingPo?.currency || "EUR";
+  const resolvedPickupDate = text(body.pickupDate) || existingPo?.pickupDate || null;
+  const resolvedPurchaserName = text(body.purchaserName) || existingPo?.purchaserName || null;
+  const resolvedPurchasingPrice =
+    type === "unloading"
+      ? (body.purchasingPrice !== undefined && body.purchasingPrice !== "" ? Math.max(0, num(body.purchasingPrice) || 0) : (existingPo?.valueEur ?? 0))
+      : 0;
+  const resolvedSellerName = text(body.sellerName) || existingPo?.sellerName || null;
+  const resolvedSellingPrice =
+    type === "loading"
+      ? (body.sellingPrice !== undefined && body.sellingPrice !== "" ? Math.max(0, num(body.sellingPrice) || 0) : (existingPo?.valueEur ?? 0))
+      : 0;
+
+  // Find or create linked PO/SO (never duplicate an existing PO/SO)
+  let po = existingPo;
   if (!po) {
     const company = ensureCompanyByName(store, partnerName, type === "unloading" ? "supplier" : "customer");
-    const val = type === "unloading" ? num(body.purchasingPrice) || 0 : num(body.sellingPrice) || 0;
+    const val = type === "unloading" ? resolvedPurchasingPrice : resolvedSellingPrice;
     po = {
       id: randomUUID(),
       number: poSoNumber,
@@ -3391,10 +3442,17 @@ export function createOperationSchedule(
       companyId: company.id,
       status: "approved",
       valueEur: Math.max(0, val),
-      currency: text(body.currency) || "EUR",
+      currency: resolvedCurrency,
       notes: "Created via Staff Schedule Module",
       type: type === "unloading" ? "PO" : "SO",
       warehouseId: warehouse.id,
+      purchaserName: resolvedPurchaserName,
+      sellerName: resolvedSellerName,
+      transportPrice: resolvedTransportPrice,
+      origin: resolvedOrigin,
+      destination: resolvedDestination,
+      pickupDate: resolvedPickupDate,
+      annex7Required: resolvedAnnex7,
       isRemoved: false,
       removedAt: null,
       removedBy: null,
@@ -3417,6 +3475,14 @@ export function createOperationSchedule(
     po.assignedAt = now;
     po.scheduledDate = scheduledDate;
     po.executionStatus = "assigned";
+    if (!po.warehouseId) po.warehouseId = warehouse.id;
+    if (!po.origin && resolvedOrigin) po.origin = resolvedOrigin;
+    if (!po.destination && resolvedDestination) po.destination = resolvedDestination;
+    if (!po.purchaserName && resolvedPurchaserName) po.purchaserName = resolvedPurchaserName;
+    if (!po.sellerName && resolvedSellerName) po.sellerName = resolvedSellerName;
+    if (!po.pickupDate && resolvedPickupDate) po.pickupDate = resolvedPickupDate;
+    if (!po.transportPrice && resolvedTransportPrice) po.transportPrice = resolvedTransportPrice;
+    if (po.annex7Required === undefined) po.annex7Required = resolvedAnnex7;
     po.updatedAt = now;
   }
 
@@ -3431,12 +3497,12 @@ export function createOperationSchedule(
       purchaseOrderId: po.id,
       containerNumber: poSoNumber,
       warehouseId: warehouse.id,
-      originCountry: text(body.origin) || "EU",
-      destinationCountry: text(body.destination) || "EU",
+      originCountry: resolvedOrigin || "EU",
+      destinationCountry: resolvedDestination || "EU",
       status: "Planned",
       carrierName: text(body.carrierName) || "Standard Freight",
       handedOverAt: null,
-      annex7Required: Boolean(body.annex7Required),
+      annex7Required: resolvedAnnex7,
       sellerStatus: "Confirmed",
       sellerCompany: partnerName,
       sellerConfirmedBy: actor.name,
@@ -3447,45 +3513,75 @@ export function createOperationSchedule(
     };
     store.shipments.push(shipment);
   } else {
-    shipment.annex7Required = Boolean(body.annex7Required);
+    shipment.annex7Required = resolvedAnnex7;
+    if (resolvedOrigin) shipment.originCountry = resolvedOrigin;
+    if (resolvedDestination) shipment.destinationCountry = resolvedDestination;
   }
 
   if (!store.operationSchedules) store.operationSchedules = [];
   if (!store.operationScheduleItems) store.operationScheduleItems = [];
 
-  // Parse items
+  // Parse items (or auto-populate from PO lines if none provided)
   const rawItems = Array.isArray(body.items) ? body.items : [];
-  for (const rawItem of rawItems) {
-    const itemRec = record(rawItem);
-    const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
-    if (!matName) continue;
-    const material = ensureMaterialByName(store, matName);
-    const packagingId = text(itemRec.packagingTypeId || itemRec.packagingId || itemRec.packagingTypeName || itemRec.packagingType);
-    const packaging = store.packagingTypes.find((p) => p.id === packagingId || same(p.name, packagingId)) || store.packagingTypes[0];
-    const pkgName = text(itemRec.packagingTypeName || itemRec.packagingType) || (packaging ? packaging.name : "Standard Packaging");
-    const pkgId = packaging ? packaging.id : randomUUID();
-    const packageCount = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || itemRec.count) || 1));
-    const tareInput = itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.packagingTareWeightKg ?? itemRec.tareWeightKg ?? itemRec.tareKg ?? itemRec.tare;
-    const tarePerPackage = tareInput !== undefined && num(tareInput) >= 0 ? num(tareInput) : (packaging?.tareKg ?? 0);
-    const grossWeight = Math.max(0, num(itemRec.grossWeightKg ?? itemRec.grossKg) || 0);
-    const totalTare = roundKg(packageCount * tarePerPackage);
-    const netWeight = Math.max(0, roundKg(grossWeight - totalTare));
+  if (rawItems.length > 0) {
+    for (const rawItem of rawItems) {
+      const itemRec = record(rawItem);
+      const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
+      if (!matName) continue;
+      const material = ensureMaterialByName(store, matName);
+      const packagingId = text(itemRec.packagingTypeId || itemRec.packagingId || itemRec.packagingTypeName || itemRec.packagingType);
+      const packaging = store.packagingTypes.find((p) => p.id === packagingId || same(p.name, packagingId)) || store.packagingTypes[0];
+      const pkgName = text(itemRec.packagingTypeName || itemRec.packagingType) || (packaging ? packaging.name : "Standard Packaging");
+      const pkgId = packaging ? packaging.id : randomUUID();
+      const packageCount = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || itemRec.count) || 1));
+      const tareInput = itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.packagingTareWeightKg ?? itemRec.tareWeightKg ?? itemRec.tareKg ?? itemRec.tare;
+      const tarePerPackage = tareInput !== undefined && num(tareInput) >= 0 ? num(tareInput) : (packaging?.tareKg ?? 0);
+      const grossWeight = Math.max(0, num(itemRec.grossWeightKg ?? itemRec.grossKg) || 0);
+      const totalTare = roundKg(packageCount * tarePerPackage);
+      const netWeight = Math.max(0, roundKg(grossWeight - totalTare));
 
-    store.operationScheduleItems.push({
-      id: randomUUID(),
-      scheduleId,
-      materialId: material.id,
-      materialName: material.description,
-      packagingTypeId: pkgId,
-      packagingTypeName: pkgName,
-      packageCount,
-      tarePerPackageKg: tarePerPackage,
-      totalTareWeightKg: totalTare,
-      grossWeightKg: grossWeight,
-      netWeightKg: netWeight,
-      createdAt: now,
-      updatedAt: now,
-    });
+      store.operationScheduleItems.push({
+        id: randomUUID(),
+        scheduleId,
+        materialId: material.id,
+        materialName: material.description,
+        packagingTypeId: pkgId,
+        packagingTypeName: pkgName,
+        packageCount,
+        tarePerPackageKg: tarePerPackage,
+        totalTareWeightKg: totalTare,
+        grossWeightKg: grossWeight,
+        netWeightKg: netWeight,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  } else {
+    const poLines = store.purchaseOrderLines.filter((l) => l.purchaseOrderId === po.id && l.description.trim());
+    for (const poLine of poLines) {
+      const material = ensureMaterialByName(store, poLine.description);
+      const packaging = store.packagingTypes[0];
+      const pkgName = packaging ? packaging.name : "Standard Packaging";
+      const pkgId = packaging ? packaging.id : randomUUID();
+      const tarePerPackage = packaging?.tareKg ?? 0;
+      const grossWeight = Math.max(0, poLine.quantityKg + tarePerPackage);
+      const netWeight = Math.max(0, poLine.quantityKg);
+      store.operationScheduleItems.push({
+        id: randomUUID(),
+        scheduleId,
+        materialId: material.id,
+        materialName: material.description,
+        packagingTypeId: pkgId,
+        packagingTypeName: pkgName,
+        packageCount: 1,
+        tarePerPackageKg: tarePerPackage,
+        totalTareWeightKg: tarePerPackage,
+        grossWeightKg: grossWeight,
+        netWeightKg: netWeight,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
   }
 
   const schedule: OperationSchedule = {
@@ -3498,16 +3594,16 @@ export function createOperationSchedule(
     partnerName,
     companyId: po.companyId,
     warehouseId: warehouse.id,
-    origin: text(body.origin),
-    destination: text(body.destination),
-    annex7Required: Boolean(body.annex7Required),
-    transportPrice: Math.max(0, num(body.transportPrice) || 0),
-    currency: text(body.currency) || "EUR",
-    pickupDate: text(body.pickupDate) || null,
-    purchaserName: text(body.purchaserName) || null,
-    purchasingPrice: Math.max(0, num(body.purchasingPrice) || 0),
-    sellerName: text(body.sellerName) || null,
-    sellingPrice: Math.max(0, num(body.sellingPrice) || 0),
+    origin: resolvedOrigin,
+    destination: resolvedDestination,
+    annex7Required: resolvedAnnex7,
+    transportPrice: resolvedTransportPrice,
+    currency: resolvedCurrency,
+    pickupDate: resolvedPickupDate,
+    purchaserName: resolvedPurchaserName,
+    purchasingPrice: resolvedPurchasingPrice,
+    sellerName: resolvedSellerName,
+    sellingPrice: resolvedSellingPrice,
     scheduledDate,
     assignedWorkerId: worker.id,
     assignedWorkerName: worker.name,
@@ -3590,8 +3686,25 @@ export function updateOperationSchedule(
     return { error: "Completed schedules cannot be edited." };
   }
 
-  if (body.poSoNumber !== undefined && text(body.poSoNumber)) {
-    schedule.poSoNumber = text(body.poSoNumber).toUpperCase();
+  if (body.purchaseOrderId !== undefined || (body.poSoNumber !== undefined && text(body.poSoNumber))) {
+    const newPoId = text(body.purchaseOrderId || body.orderId);
+    const newPoNum = text(body.poSoNumber).toUpperCase();
+    const matchedPo = (newPoId ? store.purchaseOrders.find((p) => p.id === newPoId && !p.isRemoved) : undefined)
+      ?? (newPoNum ? store.purchaseOrders.find((p) => !p.isRemoved && same(p.number, newPoNum)) : undefined);
+    if (matchedPo) {
+      const mType = matchedPo.type || (matchedPo.number.toUpperCase().startsWith("SO") ? "SO" : "PO");
+      if (schedule.type === "unloading" && mType === "SO") {
+        return { error: `Unloading schedules must link to a Purchase Order (PO). ${matchedPo.number} is a Sales Order (SO).` };
+      }
+      if (schedule.type === "loading" && mType === "PO") {
+        return { error: `Loading schedules must link to a Sales Order (SO). ${matchedPo.number} is a Purchase Order (PO).` };
+      }
+      schedule.purchaseOrderId = matchedPo.id;
+      schedule.poSoNumber = matchedPo.number;
+      schedule.companyId = matchedPo.companyId;
+    } else if (newPoNum) {
+      schedule.poSoNumber = newPoNum;
+    }
   }
   if (body.partnerName !== undefined || body.supplier !== undefined || body.customer !== undefined) {
     const pName = text(body.partnerName || body.supplier || body.customer);
@@ -4430,7 +4543,7 @@ export function applyCommand(store: StoreData, actor: UserRecord, name: string, 
       return removePoSoNumber(store, actor, body, now);
     case "deletePurchase":
     case "deleteOrder":
-      return asCommand(deletePurchaseOrder(store, text(body.number), actor, now), "Purchase order was deleted.");
+      return asCommand(deletePurchaseOrder(store, text(body.id || body.orderId || body.number || body.poNumber), actor, now), "Order was deleted.");
     case "assignWorker":
       return asCommand(assignRequestWorker(store, text(body.requestId), text(body.workerId), actor, now), "Worker was assigned.");
     case "addInbound":
@@ -4659,11 +4772,11 @@ function createPurchase(store: StoreData, actor: UserRecord, body: Record<string
   const blocked = deny(actor.role, "create-order", "Only Staff can create a PO/SO order.");
   if (blocked) return blocked;
   const orderType = (text(body.type) || (text(body.number).toUpperCase().startsWith("SO") ? "SO" : "PO")).toUpperCase() as "PO" | "SO";
-  const partner = text(body.partner || body.supplier || body.customer);
+  const partner = text(body.partner || body.supplier || body.customer || body.buyer);
   const material = text(body.material);
-  const quantityKg = num(body.quantityKg);
-  const valueEur = num(body.valueEur);
-  const warehouseId = text(body.warehouseId) || null;
+  const quantityKg = body.quantityKg !== undefined ? num(body.quantityKg) : 0;
+  const rawPrice = body.valueEur !== undefined ? body.valueEur : (body.purchasingPrice !== undefined ? body.purchasingPrice : body.sellingPrice);
+  const valueEur = rawPrice !== undefined ? num(rawPrice) : 0;
 
   if (!partner || !material || !Number.isFinite(quantityKg) || quantityKg < 0 || !Number.isFinite(valueEur) || valueEur < 0) {
     return { error: `${orderType === "SO" ? "Customer" : "Supplier"}, material, quantity, and value are required.` };
@@ -4679,6 +4792,30 @@ function createPurchase(store: StoreData, actor: UserRecord, body: Record<string
   const title = text(body.title) || `${partner} - ${material}`;
   const companyKind = orderType === "SO" ? "customer" : "supplier";
   const company = upsertCompany(store, partner, companyKind, randomUUID);
+
+  const whInput = text(body.warehouseId || body.warehouse);
+  let warehouseId: string | null = null;
+  if (whInput) {
+    const foundWh = store.warehouses.find((w) => w.id === whInput || same(w.name, whInput));
+    if (foundWh) {
+      warehouseId = foundWh.id;
+    } else if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(whInput)) {
+      warehouseId = whInput;
+    } else {
+      const createdWh = upsertWarehouse(store, whInput, "Not recorded", randomUUID);
+      warehouseId = createdWh.id;
+    }
+  }
+
+  const purchaserName = text(body.purchaserName) || null;
+  const sellerName = text(body.sellerName) || null;
+  const transportPrice = Math.max(0, num(body.transportPrice) || 0);
+  const origin = text(body.origin);
+  const destination = text(body.destination);
+  const pickupDate = text(body.pickupDate) || null;
+  const scheduledDate = text(body.scheduledDate || body.scheduledUnloadingDate || body.scheduledLoadingDate) || null;
+  const annex7Required = Boolean(body.annex7Required);
+
   const order: PurchaseOrder = {
     id: randomUUID(),
     number,
@@ -4690,13 +4827,20 @@ function createPurchase(store: StoreData, actor: UserRecord, body: Record<string
     notes: text(body.notes),
     type: orderType,
     warehouseId,
+    purchaserName,
+    sellerName,
+    transportPrice,
+    origin,
+    destination,
+    pickupDate,
+    annex7Required,
     isRemoved: false,
     removedAt: null,
     removedBy: null,
     assignedWorkerId: null,
     assignedBy: null,
     assignedAt: null,
-    scheduledDate: null,
+    scheduledDate,
     executionStatus: "unassigned",
     completionNotes: null,
     completedAt: null,
@@ -4776,14 +4920,34 @@ function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, 
   if (body.workerId !== undefined || body.assignedWorker !== undefined || body.assignedWorkerId !== undefined) {
     return { error: "Staff cannot change the Worker assigned to an operation." };
   }
-  const order = orderByNumber(store, text(body.number));
+  const lookupId = text(body.id || body.orderId);
+  const lookupNumber = text(body.originalNumber || body.number);
+  const order = (lookupId ? store.purchaseOrders.find((item) => item.id === lookupId) : undefined)
+    ?? (lookupNumber ? orderByNumber(store, lookupNumber) : undefined);
   if (!order) return { error: "That purchase order does not exist." };
   if (order.isRemoved) return { error: "A removed PO/SO number entry cannot be edited." };
-  if (order.status === "declined") return { error: "A declined purchase order cannot be edited." };
-  const partner = text(body.partner || body.supplier || body.customer);
-  const material = text(body.material);
-  const quantityKg = num(body.quantityKg);
-  const valueEur = num(body.valueEur);
+
+  const oldNumber = order.number;
+  const requestedNewNumber = text(body.newNumber || ((body.originalNumber || body.id || body.orderId) ? body.number : ""));
+  if (requestedNewNumber && !same(requestedNewNumber, order.number)) {
+    const duplicate = store.purchaseOrders.find(
+      (item) => item.id !== order.id && !item.isRemoved && same(item.number, requestedNewNumber)
+    );
+    if (duplicate) {
+      return { error: `That order number (${requestedNewNumber}) already exists.` };
+    }
+    order.number = requestedNewNumber;
+  }
+
+  const existingCompany = store.companies.find((c) => c.id === order.companyId);
+  const existingLine = store.purchaseOrderLines.find((item) => item.purchaseOrderId === order.id);
+
+  const partner = text(body.partner || body.supplier || body.customer || body.buyer) || existingCompany?.name || "";
+  const material = text(body.material) || existingLine?.description || "";
+  const quantityKg = body.quantityKg !== undefined ? num(body.quantityKg) : (existingLine?.quantityKg ?? 0);
+  const rawPrice = body.valueEur !== undefined ? body.valueEur : (body.purchasingPrice !== undefined ? body.purchasingPrice : body.sellingPrice);
+  const valueEur = rawPrice !== undefined ? num(rawPrice) : order.valueEur;
+
   if (!partner || !material || !Number.isFinite(quantityKg) || quantityKg < 0 || !Number.isFinite(valueEur) || valueEur < 0) {
     return { error: "Partner, material, quantity, and value are required." };
   }
@@ -4792,7 +4956,7 @@ function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, 
   order.companyId = company.id;
   order.valueEur = valueEur;
   if (body.currency !== undefined) {
-    (order as unknown as { currency?: string }).currency = (text(body.currency) || "EUR").toUpperCase();
+    order.currency = (text(body.currency) || "EUR").toUpperCase();
   }
   if (body.title !== undefined) {
     order.title = text(body.title) || order.title;
@@ -4800,17 +4964,94 @@ function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, 
   if (body.notes !== undefined) {
     order.notes = text(body.notes);
   }
-  if (body.warehouseId !== undefined) {
-    order.warehouseId = text(body.warehouseId) || null;
+  if (body.warehouseId !== undefined || body.warehouse !== undefined) {
+    const whInput = text(body.warehouseId ?? body.warehouse);
+    if (!whInput) {
+      order.warehouseId = null;
+    } else {
+      const foundWh = store.warehouses.find((w) => w.id === whInput || same(w.name, whInput));
+      if (foundWh) {
+        order.warehouseId = foundWh.id;
+      } else if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(whInput)) {
+        order.warehouseId = whInput;
+      } else {
+        const createdWh = upsertWarehouse(store, whInput, "Not recorded", randomUUID);
+        order.warehouseId = createdWh.id;
+      }
+    }
+  }
+  if (body.purchaserName !== undefined) {
+    order.purchaserName = text(body.purchaserName) || null;
+  }
+  if (body.sellerName !== undefined) {
+    order.sellerName = text(body.sellerName) || null;
+  }
+  if (body.transportPrice !== undefined) {
+    order.transportPrice = Math.max(0, num(body.transportPrice) || 0);
+  }
+  if (body.origin !== undefined) {
+    order.origin = text(body.origin);
+  }
+  if (body.destination !== undefined) {
+    order.destination = text(body.destination);
+  }
+  if (body.pickupDate !== undefined) {
+    order.pickupDate = text(body.pickupDate) || null;
+  }
+  if (body.scheduledDate !== undefined || body.scheduledUnloadingDate !== undefined || body.scheduledLoadingDate !== undefined) {
+    order.scheduledDate = text(body.scheduledDate ?? body.scheduledUnloadingDate ?? body.scheduledLoadingDate) || null;
+  }
+  if (body.annex7Required !== undefined) {
+    order.annex7Required = Boolean(body.annex7Required);
   }
   order.updatedAt = now;
-  const line = store.purchaseOrderLines.find((item) => item.purchaseOrderId === order.id);
-  if (line) {
-    line.description = material;
-    line.quantityKg = quantityKg;
+
+  if (existingLine) {
+    existingLine.description = material;
+    existingLine.quantityKg = quantityKg;
   } else {
     store.purchaseOrderLines.push({ id: randomUUID(), purchaseOrderId: order.id, materialId: null, description: material, quantityKg });
   }
+
+  // Sync linked non-completed shipments
+  const linkedShipment = store.shipments.find((s) => s.purchaseOrderId === order.id);
+  if (linkedShipment && linkedShipment.status !== "Completed" && linkedShipment.status !== "Dispatched") {
+    if (order.warehouseId) linkedShipment.warehouseId = order.warehouseId;
+    if (order.origin !== undefined) linkedShipment.originCountry = order.origin;
+    if (order.destination !== undefined) linkedShipment.destinationCountry = order.destination;
+    if (order.annex7Required !== undefined) linkedShipment.annex7Required = order.annex7Required;
+  }
+
+  // Sync linked non-completed operation schedules while preserving historical accuracy on completed schedules
+  for (const sched of store.operationSchedules || []) {
+    if (sched.purchaseOrderId === order.id || same(sched.poSoNumber, oldNumber) || same(sched.poSoNumber, order.number)) {
+      sched.purchaseOrderId = order.id;
+      if (sched.status !== "completed") {
+        sched.poSoNumber = order.number;
+        sched.partnerName = partner;
+        sched.companyId = company.id;
+        if (order.warehouseId) sched.warehouseId = order.warehouseId;
+        if (body.origin !== undefined) sched.origin = order.origin || "";
+        if (body.destination !== undefined) sched.destination = order.destination || "";
+        if (body.annex7Required !== undefined) sched.annex7Required = Boolean(order.annex7Required);
+        if (body.transportPrice !== undefined) sched.transportPrice = order.transportPrice ?? sched.transportPrice;
+        if (body.currency !== undefined) sched.currency = order.currency;
+        if (body.pickupDate !== undefined) sched.pickupDate = order.pickupDate ?? null;
+        if (body.purchaserName !== undefined) sched.purchaserName = order.purchaserName ?? null;
+        if (body.sellerName !== undefined) sched.sellerName = order.sellerName ?? null;
+        if (isSalesOrder) {
+          sched.sellingPrice = order.valueEur;
+        } else {
+          sched.purchasingPrice = order.valueEur;
+        }
+        if ((body.scheduledDate !== undefined || body.scheduledUnloadingDate !== undefined || body.scheduledLoadingDate !== undefined) && order.scheduledDate) {
+          sched.scheduledDate = order.scheduledDate;
+        }
+        sched.updatedAt = now;
+      }
+    }
+  }
+
   audit(store, actor.id, "order-edited", "purchase-order", order.id, `${order.number} was edited.`, now);
   return { notice: `${order.number} was updated.` };
 }
@@ -4818,11 +5059,13 @@ function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, 
 function removePoSoNumber(store: StoreData, actor: UserRecord, body: Record<string, unknown>, now: string): CommandResult {
   const blocked = deny(actor.role, "remove-order", "Only Staff can remove a PO/SO number.");
   if (blocked) return blocked;
+  const lookupId = text(body.id || body.orderId);
   const number = text(body.number || body.poNumber);
-  if (!number) return { error: "Order number is required." };
-  const order = orderByNumber(store, number);
-  if (!order) return { error: `Order ${number} does not exist.` };
-  if (order.isRemoved || (typeof order.notes === "string" && order.notes.includes("[REMOVED]"))) return { error: `Order ${number} has already been removed.` };
+  if (!number && !lookupId) return { error: "Order number is required." };
+  const order = (lookupId ? store.purchaseOrders.find((item) => item.id === lookupId) : undefined)
+    ?? (number ? orderByNumber(store, number) : undefined);
+  if (!order) return { error: `Order ${number || lookupId} does not exist.` };
+  if (order.isRemoved || (typeof order.notes === "string" && order.notes.includes("[REMOVED]"))) return { error: `Order ${order.number} has already been removed.` };
 
   order.isRemoved = true;
   order.removedAt = now;

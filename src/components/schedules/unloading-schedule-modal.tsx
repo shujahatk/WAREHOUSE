@@ -84,9 +84,12 @@ function UnloadingScheduleModalContent({
   const { state, createOperationSchedule, updateOperationSchedule, uploadScheduleAttachment } = useDemo();
   const isEditing = Boolean(initialSchedule);
 
-  // Purchase Orders for linking
+  // Purchase Orders for linking (Inbound / Unloading only links to active Purchase Orders)
   const purchaseOrders = useMemo(
-    () => (state.orders || []).filter((o) => !o.number.toUpperCase().startsWith("SO-")),
+    () =>
+      (state.orders || []).filter(
+        (o) => !o.isRemoved && (o.type === "PO" || (!o.type && !o.number.toUpperCase().startsWith("SO-")))
+      ),
     [state.orders]
   );
 
@@ -121,6 +124,7 @@ function UnloadingScheduleModalContent({
   }, [state.packaging]);
 
   // A. Purchase & Supplier details state
+  const [selectedOrderId, setSelectedOrderId] = useState(initialSchedule?.purchaseOrderId || "");
   const [poNumber, setPoNumber] = useState(initialSchedule?.poSoNumber || "");
   const [supplier, setSupplier] = useState(initialSchedule?.partnerName || "");
   const [purchaserName, setPurchaserName] = useState(initialSchedule?.purchaserName || "");
@@ -200,19 +204,31 @@ function UnloadingScheduleModalContent({
     setPoNumber(selectedPoNum);
     const matched = purchaseOrders.find((o) => o.number.toUpperCase() === selectedPoNum.toUpperCase());
     if (matched) {
-      if (matched.supplier) setSupplier(matched.supplier);
-      if (matched.valueEur) setPurchasingPrice(String(matched.valueEur));
+      setSelectedOrderId(matched.id || "");
+      if (matched.supplier || matched.customerCompany) setSupplier(matched.supplier || matched.customerCompany);
+      if (matched.purchaserName) setPurchaserName(matched.purchaserName);
+      if (matched.valueEur !== undefined) setPurchasingPrice(String(matched.valueEur));
+      if (matched.transportPrice !== undefined && matched.transportPrice > 0) {
+        setTransportPrice(String(matched.transportPrice));
+      }
       if (matched.currency) setCurrency(matched.currency);
-      if (matched.warehouse) {
+      if (matched.origin) setOrigin(matched.origin);
+      if (matched.destination) setDestination(matched.destination);
+      if (matched.pickupDate) setPickupDate(matched.pickupDate.slice(0, 10));
+      if (matched.scheduledDate) setScheduledDate(matched.scheduledDate.slice(0, 10));
+      if (matched.annex7Required !== undefined) setAnnex7Required(Boolean(matched.annex7Required));
+      if (matched.warehouseId) {
+        setWarehouseId(matched.warehouseId);
+      } else if (matched.warehouse && matched.warehouse !== "—") {
         const wh = state.directory.warehouses.find(
           (w) => w.name.toLowerCase() === matched.warehouse.toLowerCase()
         );
         if (wh) {
           setWarehouseId(wh.id);
-          if (!destination) setDestination(wh.name);
+          if (!matched.destination && !destination) setDestination(wh.name);
         }
       }
-      if (matched.material && items.length === 1 && !items[0].materialName) {
+      if (matched.material && matched.material !== "—" && items.length === 1 && !items[0].materialName) {
         updateItem(items[0].id, {
           materialName: matched.material,
           grossWeightKg:
@@ -221,6 +237,8 @@ function UnloadingScheduleModalContent({
               : 0,
         });
       }
+    } else {
+      setSelectedOrderId("");
     }
   };
 
@@ -366,6 +384,7 @@ function UnloadingScheduleModalContent({
       const payload = {
         id: initialSchedule?.id,
         type: "unloading",
+        purchaseOrderId: selectedOrderId || initialSchedule?.purchaseOrderId || undefined,
         poSoNumber: poNumber.trim().toUpperCase(),
         partnerName: supplier.trim(),
         origin: origin.trim(),
@@ -585,22 +604,20 @@ function UnloadingScheduleModalContent({
                   <button
                     type="button"
                     onClick={() => setAnnex7Required(true)}
-                    className={`rounded-md py-1.5 text-xs font-bold transition ${
-                      annex7Required
-                        ? "bg-emerald-700 text-white shadow-2xs"
-                        : "text-neutral-600 hover:bg-neutral-100"
-                    }`}
+                    className={`rounded-md py-1.5 text-xs font-bold transition ${annex7Required
+                      ? "bg-emerald-700 text-white shadow-2xs"
+                      : "text-neutral-600 hover:bg-neutral-100"
+                      }`}
                   >
                     Yes (Required)
                   </button>
                   <button
                     type="button"
                     onClick={() => setAnnex7Required(false)}
-                    className={`rounded-md py-1.5 text-xs font-bold transition ${
-                      !annex7Required
-                        ? "bg-neutral-800 text-white shadow-2xs"
-                        : "text-neutral-600 hover:bg-neutral-100"
-                    }`}
+                    className={`rounded-md py-1.5 text-xs font-bold transition ${!annex7Required
+                      ? "bg-neutral-800 text-white shadow-2xs"
+                      : "text-neutral-600 hover:bg-neutral-100"
+                      }`}
                   >
                     No
                   </button>
@@ -892,13 +909,12 @@ function UnloadingScheduleModalContent({
                     key={cat.kind}
                     type="button"
                     onClick={() => setSelectedAttachmentKind(cat.kind)}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold border transition ${
-                      selectedAttachmentKind === cat.kind
-                        ? "border-emerald-600 bg-emerald-50 text-emerald-900"
-                        : count > 0
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold border transition ${selectedAttachmentKind === cat.kind
+                      ? "border-emerald-600 bg-emerald-50 text-emerald-900"
+                      : count > 0
                         ? "border-blue-200 bg-blue-50 text-blue-800"
                         : "border-neutral-200 bg-white text-neutral-600"
-                    }`}
+                      }`}
                   >
                     {cat.label} ({count})
                   </button>
@@ -1052,8 +1068,8 @@ function UnloadingScheduleModalContent({
               {isSubmitting
                 ? "Saving Schedule..."
                 : isEditing
-                ? "Save Unloading Schedule Changes"
-                : "Create Unloading Schedule"}
+                  ? "Save Unloading Schedule Changes"
+                  : "Create Unloading Schedule"}
             </button>
           </div>
         </form>

@@ -466,7 +466,7 @@ test("5. Purchase Orders: Custom PO titles and unique sequential PO-YYYY-XXXX nu
   }
 });
 
-test("6. Admin sidebar cleanup: Stock Movements, Transfers, and Directories absent for Admin, preserved for Staff", () => {
+test("6. Sidebar role boundaries: Staff restricted to Main & Operations; Admin retains system administration and directories", () => {
   // Navigation filtering for Admin (owner)
   const adminSections = navSections
     .map((section) => ({
@@ -478,14 +478,12 @@ test("6. Admin sidebar cleanup: Stock Movements, Transfers, and Directories abse
   const adminTitles = adminSections.map((s) => s.title);
   const adminHrefs = adminSections.flatMap((s) => s.items.map((i) => i.href));
 
-  // Admin must NOT see Directories section in sidebar
-  assert.equal(adminTitles.includes("Directories"), false, "Directories section must not appear for Admin");
-
-  // Admin must NOT see Stock Movements or Transfers in Warehouse section
-  assert.equal(adminHrefs.includes("/stock-movements"), false, "Stock Movements must not appear for Admin");
-  assert.equal(adminHrefs.includes("/transfers"), false, "Transfers must not appear for Admin");
-
-  // Admin MUST have access to Inventory (with full history and container tabs), Reports, Audit, Settings
+  // Admin retains full system oversight: Directories, Transfers, Inventory, Reports, Audit, Settings
+  assert.equal(adminTitles.includes("Directories"), true, "Directories section must remain for Admin");
+  assert.equal(adminHrefs.includes("/suppliers"), true, "Suppliers must remain for Admin");
+  assert.equal(adminHrefs.includes("/customers"), true, "Customers must remain for Admin");
+  assert.equal(adminHrefs.includes("/materials"), true, "Materials must remain for Admin");
+  assert.equal(adminHrefs.includes("/transfers"), true, "Transfers must remain for Admin");
   assert.equal(adminHrefs.includes("/inventory"), true, "Inventory must remain for Admin");
   assert.equal(adminHrefs.includes("/reports"), true, "Reports must remain for Admin");
   assert.equal(adminHrefs.includes("/audit"), true, "Audit Log must remain for Admin");
@@ -502,13 +500,25 @@ test("6. Admin sidebar cleanup: Stock Movements, Transfers, and Directories abse
   const staffTitles = staffSections.map((s) => s.title);
   const staffHrefs = staffSections.flatMap((s) => s.items.map((i) => i.href));
 
-  // Staff MUST see Directories, Stock Movements, and Transfers
-  assert.equal(staffTitles.includes("Directories"), true, "Directories section must appear for Staff");
-  assert.equal(staffHrefs.includes("/stock-movements"), true, "Stock Movements must appear for Staff");
-  assert.equal(staffHrefs.includes("/transfers"), true, "Transfers must appear for Staff");
-  assert.equal(staffHrefs.includes("/suppliers"), true, "Suppliers must appear for Staff");
-  assert.equal(staffHrefs.includes("/customers"), true, "Customers must appear for Staff");
-  assert.equal(staffHrefs.includes("/materials"), true, "Materials & Packaging must appear for Staff");
+  // Staff sidebar must contain ONLY Main and Operations
+  assert.deepEqual(staffTitles, ["Main", "Operations"]);
+  assert.deepEqual(staffHrefs, [
+    "/dashboard",
+    "/purchases",
+    "/schedules/unloading",
+    "/schedules/loading",
+    "/verification",
+  ]);
+
+  // Removed modules must NOT appear for Staff
+  assert.equal(staffTitles.includes("Directories"), false, "Directories section must not appear for Staff");
+  assert.equal(staffTitles.includes("Warehouse"), false, "Warehouse section must not appear for Staff");
+  assert.equal(staffHrefs.includes("/stock-movements"), false, "Stock Movements must not appear for Staff");
+  assert.equal(staffHrefs.includes("/transfers"), false, "Transfers must not appear for Staff");
+  assert.equal(staffHrefs.includes("/suppliers"), false, "Suppliers must not appear for Staff");
+  assert.equal(staffHrefs.includes("/customers"), false, "Customers must not appear for Staff");
+  assert.equal(staffHrefs.includes("/materials"), false, "Materials & Packaging must not appear for Staff");
+  assert.equal(staffHrefs.includes("/inventory"), false, "Inventory must not appear for Staff");
 });
 
 test("7. Strict Admin read-only operational enforcement & Staff approval boundary", async () => {

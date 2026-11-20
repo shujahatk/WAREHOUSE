@@ -54,14 +54,12 @@ export function WorkerDashboard() {
     ? demurrageSnapshot(criticalDemurrageContainer, now)
     : null;
 
-  // Worker's assigned operation schedules
+  // Worker's assigned operation schedules (strictly assigned only)
   const allSchedules = state.schedules ?? [];
   const mySchedules = allSchedules.filter((s) => {
     if (s.assignedWorkerId && identity.id && s.assignedWorkerId === identity.id) return true;
     if (s.assignedWorkerName && s.assignedWorkerName.toLowerCase() === identity.name.toLowerCase()) return true;
-    // If not strictly assigned, visible if in worker's warehouse
-    if (!s.assignedWorkerId && identity.warehouse && s.warehouseName === identity.warehouse) return true;
-    return true; // worker has visibility to warehouse operations
+    return false;
   });
 
   const schedulesScheduled = mySchedules.filter((s) => s.status === "scheduled");

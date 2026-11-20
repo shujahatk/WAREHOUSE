@@ -158,7 +158,19 @@ export type ContainerStatus = "Planned" | "Registered" | "Unloading" | "In trans
 export type OutboundStatus = "Planned" | "Loading" | "Loaded" | "Dispatched";
 export type TransferStatus = "Submitted" | "Completed";
 
+export type LinkedOrderScheduleSummary = {
+  id: string;
+  scheduleNumber: string;
+  type: "unloading" | "loading";
+  status: string;
+  scheduledDate: string;
+  assignedWorkerName: string | null;
+  totalNetWeightKg: number;
+};
+
 export type DemoOrder = {
+  id?: string;
+  companyId?: string;
   number: string;
   title: string;
   supplier: string;
@@ -166,6 +178,13 @@ export type DemoOrder = {
   warehouse: string;
   warehouseId?: string | null;
   type?: "PO" | "SO";
+  purchaserName?: string | null;
+  sellerName?: string | null;
+  transportPrice?: number;
+  origin?: string;
+  destination?: string;
+  pickupDate?: string | null;
+  annex7Required?: boolean;
   isRemoved?: boolean;
   removedAt?: string | null;
   removedBy?: string | null;
@@ -176,6 +195,8 @@ export type DemoOrder = {
   incoterms: string;
   status: OrderStatus;
   date: string;
+  createdAt?: string;
+  updatedAt?: string;
   owner: string;
   supplierEmail: string;
   forwarder: string;
@@ -195,6 +216,7 @@ export type DemoOrder = {
   completedAt?: string | null;
   completedBy?: string | null;
   evidencePhotos?: TaskEvidencePhoto[];
+  linkedSchedules?: LinkedOrderScheduleSummary[];
 };
 
 export type TaskEvidencePhoto = {

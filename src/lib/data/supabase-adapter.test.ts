@@ -345,6 +345,19 @@ function createMockSupabaseFetch() {
     }
 
     if (url.includes("/rest/v1/purchase_orders")) {
+      const idMatch = url.match(/id=eq\.([^&]+)/);
+      if (idMatch) {
+        const decodedId = decodeURIComponent(idMatch[1]);
+        const found = purchaseOrders.filter((p) => p.id === decodedId);
+        if (method === "PATCH") {
+          if (found[0]) {
+            Object.assign(found[0], parsedBody as Record<string, unknown>);
+            return jsonResponse([found[0]], 200);
+          }
+          return jsonResponse([], 200);
+        }
+        return jsonResponse(found, 200);
+      }
       const numMatch = url.match(/number=eq\.([^&]+)/);
       if (numMatch) {
         const decoded = decodeURIComponent(numMatch[1]);
@@ -578,13 +591,13 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
     /You do not have permission to perform this action/,
   );
 
-  // 2. Staff CANNOT approve POs or approve requests, and CANNOT edit an already approved PO
+  // 2. Staff CANNOT approve POs, but CAN edit POs (including approved POs); Workers CANNOT edit POs
   await assert.rejects(
     () => services.purchaseOrders.approve({ number: "PO-100", actorId: STAFF_ID }),
     /You do not have permission to perform this action/,
   );
 
-  const lockedEdit = await services.purchaseOrders.edit({
+  const staffEditPo = await services.purchaseOrders.edit({
     number: "PO-APPROVED",
     supplier: "Nordic Metals",
     material: "Copper",
@@ -592,10 +605,20 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
     valueEur: 9000,
     actorId: STAFF_ID,
   });
-  assert.equal(lockedEdit.ok, false);
-  if (!lockedEdit.ok) {
-    assert.match(lockedEdit.error, /Approved or declined purchase orders are locked/i);
-  }
+  assert.equal(staffEditPo.ok, true);
+
+  await assert.rejects(
+    () =>
+      services.purchaseOrders.edit({
+        number: "PO-APPROVED",
+        supplier: "Nordic Metals",
+        material: "Copper",
+        quantityKg: 2000,
+        valueEur: 9000,
+        actorId: WORKER_BORNEM_ID,
+      }),
+    /You do not have permission to perform this action/,
+  );
 
   // 3. Admin CAN approve POs via rpc_admin_decide_order and approve requests via rpc_decide_request
   const poApproved = await services.purchaseOrders.approve({

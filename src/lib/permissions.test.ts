@@ -95,23 +95,30 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
   assert.equal(canAccess("owner", "/audit"), true);
   assert.equal(canAccess("owner", "/settings"), true);
 
-  // Staff (manager) can access Main, Operations, Warehouse, Directories, but NOT Administration and NOT Offers
+  // Staff (manager) can access ONLY Main (Dashboard) and Operations (PO & SO Orders, Schedules, Verification)
   assert.equal(canAccess("manager", "/dashboard"), true);
+  assert.equal(canAccess("manager", "/purchases"), true);
+  assert.equal(canAccess("manager", "/purchases/PO213344"), true);
+  assert.equal(canAccess("manager", "/schedules/unloading"), true);
+  assert.equal(canAccess("manager", "/schedules/loading"), true);
+  assert.equal(canAccess("manager", "/verification"), true);
+  assert.equal(canAccess("manager", "/notifications"), true);
+
+  // Removed modules must be denied for Staff (both in sidebar and direct URL access)
+  assert.equal(canAccess("manager", "/inventory"), false);
+  assert.equal(canAccess("manager", "/stock-movements"), false);
+  assert.equal(canAccess("manager", "/transfers"), false);
+  assert.equal(canAccess("manager", "/warehouses"), false);
+  assert.equal(canAccess("manager", "/suppliers"), false);
+  assert.equal(canAccess("manager", "/customers"), false);
+  assert.equal(canAccess("manager", "/materials"), false);
+  assert.equal(canAccess("manager", "/analytics"), false);
   assert.equal(canAccess("manager", "/offers"), false);
   assert.equal(canAccess("manager", "/offers/purchasing"), false);
   assert.equal(canAccess("manager", "/offers/selling"), false);
-  assert.equal(canAccess("manager", "/tasks"), true);
-  assert.equal(canAccess("manager", "/purchases"), true);
-  assert.equal(canAccess("manager", "/purchases/PO213344"), true);
-  assert.equal(canAccess("manager", "/containers/CNTR-4587"), true);
-  assert.equal(canAccess("manager", "/outbound/OUT-1184"), true);
-  assert.equal(canAccess("manager", "/inventory"), true);
-  assert.equal(canAccess("manager", "/stock-movements"), true);
-  assert.equal(canAccess("manager", "/transfers"), true);
-  assert.equal(canAccess("manager", "/warehouses"), true);
-  assert.equal(canAccess("manager", "/suppliers"), true);
-  assert.equal(canAccess("manager", "/customers"), true);
-  assert.equal(canAccess("manager", "/materials"), true);
+  assert.equal(canAccess("manager", "/tasks"), false);
+  assert.equal(canAccess("manager", "/containers/CNTR-4587"), false);
+  assert.equal(canAccess("manager", "/outbound/OUT-1184"), false);
   assert.equal(canAccess("manager", "/users"), false);
   assert.equal(canAccess("manager", "/reports"), false);
   assert.equal(canAccess("manager", "/audit"), false);
@@ -208,6 +215,8 @@ test("action permissions strictly enforce Admin, Staff, and Worker boundaries", 
   // Staff (manager) permissions
   assert.equal(canPerform("manager", "create-order"), true);
   assert.equal(canPerform("manager", "edit-order"), true);
+  assert.equal(canPerform("manager", "delete-order"), true);
+  assert.equal(canPerform("manager", "remove-order"), true);
   assert.equal(canPerform("manager", "manage-suppliers"), true);
   assert.equal(canPerform("manager", "manage-customers"), true);
   assert.equal(canPerform("manager", "register-shipment"), true);
@@ -215,8 +224,7 @@ test("action permissions strictly enforce Admin, Staff, and Worker boundaries", 
   assert.equal(canPerform("manager", "add-document"), true);
   assert.equal(canPerform("manager", "add-annex"), true);
   assert.equal(canPerform("manager", "save-cmr"), true);
-  // Staff CANNOT delete/cancel orders or requests, assign workers, approve requests, or adjust/transfer stock
-  assert.equal(canPerform("manager", "delete-order"), false);
+  // Staff CANNOT delete/cancel worker requests, approve requests/orders, or adjust/transfer stock
   assert.equal(canPerform("manager", "approve-order"), false);
   assert.equal(canPerform("manager", "reject-order"), false);
   assert.equal(canPerform("manager", "delete-request"), false);

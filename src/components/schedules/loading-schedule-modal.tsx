@@ -85,9 +85,12 @@ function LoadingScheduleModalContent({
   const { state, createOperationSchedule, updateOperationSchedule, uploadScheduleAttachment } = useDemo();
   const isEditing = Boolean(initialSchedule);
 
-  // Sales Orders for linking
+  // Sales Orders for linking (Outbound / Loading only links to active Sales Orders)
   const salesOrders = useMemo(
-    () => (state.orders || []).filter((o) => o.number.toUpperCase().startsWith("SO-") || true),
+    () =>
+      (state.orders || []).filter(
+        (o) => !o.isRemoved && (o.type === "SO" || o.number.toUpperCase().startsWith("SO-"))
+      ),
     [state.orders]
   );
 
@@ -122,6 +125,7 @@ function LoadingScheduleModalContent({
   }, [state.packaging]);
 
   // A. Sales & Customer Details State
+  const [selectedOrderId, setSelectedOrderId] = useState(initialSchedule?.purchaseOrderId || "");
   const [soNumber, setSoNumber] = useState(initialSchedule?.poSoNumber || "");
   const [customer, setCustomer] = useState(initialSchedule?.partnerName || "");
   const [sellerName, setSellerName] = useState(initialSchedule?.sellerName || "");
@@ -220,19 +224,30 @@ function LoadingScheduleModalContent({
     setSoNumber(selectedSoNum);
     const matched = salesOrders.find((o) => o.number.toUpperCase() === selectedSoNum.toUpperCase());
     if (matched) {
-      if (matched.supplier) setCustomer(matched.supplier);
-      if (matched.valueEur) setSellingPrice(String(matched.valueEur));
+      setSelectedOrderId(matched.id || "");
+      if (matched.customerCompany || matched.supplier) setCustomer(matched.customerCompany || matched.supplier);
+      if (matched.sellerName) setSellerName(matched.sellerName);
+      if (matched.valueEur !== undefined) setSellingPrice(String(matched.valueEur));
+      if (matched.transportPrice !== undefined && matched.transportPrice > 0) {
+        setTransportPrice(String(matched.transportPrice));
+      }
       if (matched.currency) setCurrency(matched.currency);
-      if (matched.warehouse) {
+      if (matched.origin) setOrigin(matched.origin);
+      if (matched.destination) setDestination(matched.destination);
+      if (matched.scheduledDate) setScheduledDate(matched.scheduledDate.slice(0, 10));
+      if (matched.annex7Required !== undefined) setAnnex7Required(Boolean(matched.annex7Required));
+      if (matched.warehouseId) {
+        setWarehouseId(matched.warehouseId);
+      } else if (matched.warehouse && matched.warehouse !== "—") {
         const wh = state.directory.warehouses.find(
           (w) => w.name.toLowerCase() === matched.warehouse.toLowerCase()
         );
         if (wh) {
           setWarehouseId(wh.id);
-          setOrigin(wh.name);
+          if (!matched.origin) setOrigin(wh.name);
         }
       }
-      if (matched.material && items.length === 1 && !items[0].materialName) {
+      if (matched.material && matched.material !== "—" && items.length === 1 && !items[0].materialName) {
         updateItem(items[0].id, {
           materialName: matched.material,
           grossWeightKg:
@@ -241,6 +256,8 @@ function LoadingScheduleModalContent({
               : 0,
         });
       }
+    } else {
+      setSelectedOrderId("");
     }
   };
 
@@ -386,6 +403,7 @@ function LoadingScheduleModalContent({
       const payload = {
         id: initialSchedule?.id,
         type: "loading",
+        purchaseOrderId: selectedOrderId || initialSchedule?.purchaseOrderId || undefined,
         poSoNumber: soNumber.trim().toUpperCase(),
         partnerName: customer.trim(),
         origin: origin.trim(),

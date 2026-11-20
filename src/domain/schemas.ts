@@ -110,6 +110,13 @@ export const purchaseOrderSchema = z.object({
   notes: z.string(),
   type: z.enum(["PO", "SO"]).default("PO"),
   warehouseId: id.nullable().default(null),
+  purchaserName: z.string().nullable().optional(),
+  sellerName: z.string().nullable().optional(),
+  transportPrice: z.number().nonnegative().optional(),
+  origin: z.string().optional(),
+  destination: z.string().optional(),
+  pickupDate: z.string().nullable().optional(),
+  annex7Required: z.boolean().optional(),
   isRemoved: z.boolean().default(false),
   removedAt: stamp.nullable().default(null),
   removedBy: id.nullable().default(null),
@@ -125,6 +132,65 @@ export const purchaseOrderSchema = z.object({
   createdAt: stamp,
   updatedAt: stamp,
 });
+
+export type OrderMetadataEnvelope = {
+  number?: string;
+  type?: "PO" | "SO";
+  currency?: string;
+  warehouseId?: string | null;
+  purchaserName?: string | null;
+  sellerName?: string | null;
+  transportPrice?: number;
+  origin?: string;
+  destination?: string;
+  pickupDate?: string | null;
+  scheduledDate?: string | null;
+  annex7Required?: boolean;
+  isRemoved?: boolean;
+  removedAt?: string | null;
+  removedBy?: string | null;
+  schedules?: OperationSchedule[];
+  scheduleItems?: OperationScheduleItem[];
+  scheduleAttachments?: OperationScheduleAttachment[];
+};
+
+const ORDER_META_PREFIX = "__SF_ORDER_META__:";
+
+export function parseOrderNotes(rawNotes: string | null | undefined): {
+  cleanNotes: string;
+  meta: OrderMetadataEnvelope | null;
+} {
+  const str = String(rawNotes ?? "");
+  if (!str.startsWith(ORDER_META_PREFIX)) {
+    const isRemoved = str.includes("[REMOVED]");
+    const clean = str.replace(/\[REMOVED\][^\n]*\n?/g, "").trim();
+    return {
+      cleanNotes: isRemoved ? clean : str,
+      meta: isRemoved ? { isRemoved: true } : null,
+    };
+  }
+  const newlineIdx = str.indexOf("\n");
+  const jsonPart = newlineIdx === -1 ? str.slice(ORDER_META_PREFIX.length) : str.slice(ORDER_META_PREFIX.length, newlineIdx);
+  const remainder = newlineIdx === -1 ? "" : str.slice(newlineIdx + 1);
+  try {
+    const parsed = JSON.parse(jsonPart) as OrderMetadataEnvelope;
+    const isRemoved = Boolean(parsed.isRemoved || remainder.includes("[REMOVED]"));
+    const clean = remainder.replace(/\[REMOVED\][^\n]*\n?/g, "").trim();
+    return {
+      cleanNotes: clean,
+      meta: { ...parsed, ...(isRemoved ? { isRemoved: true } : {}) },
+    };
+  } catch {
+    return { cleanNotes: str, meta: null };
+  }
+}
+
+export function serializeOrderNotes(cleanNotes: string | null | undefined, meta: OrderMetadataEnvelope): string {
+  const clean = String(cleanNotes ?? "").trim();
+  const payload = JSON.stringify(meta);
+  const removedTag = meta.isRemoved ? "\n[REMOVED]" : "";
+  return `${ORDER_META_PREFIX}${payload}\n${clean}${removedTag}`.trim();
+}
 
 export const purchaseOrderLineSchema = z.object({
   id,

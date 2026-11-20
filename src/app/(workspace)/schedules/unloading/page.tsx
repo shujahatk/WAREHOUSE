@@ -20,10 +20,20 @@ export default function UnloadingSchedulePage() {
   const [editingSchedule, setEditingSchedule] = useState<OperationScheduleView | null>(null);
   const [selectedSchedule, setSelectedSchedule] = useState<OperationScheduleView | null>(null);
 
-  // Unloading schedules only
+  const isWorker = identity.role === "worker";
+
+  // Unloading schedules only (strictly scoped to assigned worker if Worker role)
   const unloadingSchedules = useMemo(() => {
-    return (state.schedules || []).filter((s) => s.type === "unloading");
-  }, [state.schedules]);
+    return (state.schedules || []).filter((s) => {
+      if (s.type !== "unloading") return false;
+      if (isWorker) {
+        const matchId = Boolean(s.assignedWorkerId && identity.id && s.assignedWorkerId === identity.id);
+        const matchName = Boolean(s.assignedWorkerName && identity.name && s.assignedWorkerName.toLowerCase() === identity.name.toLowerCase());
+        return matchId || matchName;
+      }
+      return true;
+    });
+  }, [state.schedules, isWorker, identity.id, identity.name]);
 
   // KPIs
   const scheduledCount = unloadingSchedules.filter((s) => s.status === "scheduled").length;

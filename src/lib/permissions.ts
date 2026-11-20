@@ -4,7 +4,6 @@ export type Role = ActiveRole | "offers_user" | "customer" | "data-entry" | "man
 export const ACTIVE_ROLES: readonly ActiveRole[] = ["owner", "manager", "worker", "moderator"] as const;
 
 const ALL_ACTIVE: Role[] = ["owner", "manager", "worker", "moderator", "offers_user"];
-const WAREHOUSE_ROLES: Role[] = ["owner", "manager", "worker"];
 const ADMIN_AND_STAFF: Role[] = ["owner", "manager"];
 const OFFERS_ACCESS_ROLES: Role[] = ["owner", "moderator", "offers_user"];
 const ADMIN_ONLY: Role[] = ["owner"];
@@ -16,25 +15,25 @@ const ROUTE_RULES: { prefix: string; roles: Role[] }[] = [
   { prefix: "/offers", roles: OFFERS_ACCESS_ROLES },
   { prefix: "/users", roles: ADMIN_ONLY },
   { prefix: "/reports", roles: ADMIN_ONLY },
-  { prefix: "/analytics", roles: ADMIN_AND_STAFF },
+  { prefix: "/analytics", roles: ADMIN_ONLY },
   { prefix: "/notifications", roles: ALL_ACTIVE },
   { prefix: "/audit", roles: ADMIN_ONLY },
   { prefix: "/settings", roles: ADMIN_ONLY },
-  { prefix: "/transfers", roles: ADMIN_AND_STAFF },
+  { prefix: "/transfers", roles: ADMIN_ONLY },
   { prefix: "/purchases", roles: ADMIN_AND_STAFF },
-  { prefix: "/customers", roles: ADMIN_AND_STAFF },
-  { prefix: "/suppliers", roles: ADMIN_AND_STAFF },
-  { prefix: "/warehouses", roles: ADMIN_AND_STAFF },
-  { prefix: "/materials", roles: ADMIN_AND_STAFF },
+  { prefix: "/customers", roles: ADMIN_ONLY },
+  { prefix: "/suppliers", roles: ADMIN_ONLY },
+  { prefix: "/warehouses", roles: ADMIN_ONLY },
+  { prefix: "/materials", roles: ADMIN_ONLY },
   { prefix: "/schedules", roles: ["owner", "manager", "worker"] },
   { prefix: "/verification", roles: ["owner", "manager"] },
-  { prefix: "/tasks", roles: WAREHOUSE_ROLES },
+  { prefix: "/tasks", roles: ["owner", "worker"] },
   { prefix: "/dashboard", roles: ["owner", "manager", "worker", "moderator"] },
-  { prefix: "/containers", roles: WAREHOUSE_ROLES },
-  { prefix: "/outbound", roles: WAREHOUSE_ROLES },
-  { prefix: "/inventory", roles: WAREHOUSE_ROLES },
-  { prefix: "/documents", roles: WAREHOUSE_ROLES },
-  { prefix: "/stock-movements", roles: WAREHOUSE_ROLES },
+  { prefix: "/containers", roles: ["owner", "worker"] },
+  { prefix: "/outbound", roles: ["owner", "worker"] },
+  { prefix: "/inventory", roles: ["owner", "worker"] },
+  { prefix: "/documents", roles: ["owner", "worker"] },
+  { prefix: "/stock-movements", roles: ["owner", "worker"] },
 ];
 
 export function isActiveRole(role: string): role is ActiveRole {
@@ -146,7 +145,7 @@ const ACTION_ROLES: Record<AppAction, Role[]> = {
   "submit-schedule": ["owner", "manager", "worker"],
   "approve-order": ["owner"],
   "reject-order": ["owner"],
-  "delete-order": [],
+  "delete-order": ["manager"],
   "edit-order": ["manager"],
   "create-order": ["manager"],
   "remove-order": ["manager"],

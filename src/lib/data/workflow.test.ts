@@ -359,16 +359,21 @@ test("core rule: worker creates request, Admin approves, worker completes approv
     assert.equal(updatedPo?.valueEur, 625);
     assert.equal(updatedPo?.notes, "Updated transport and material quantity after unloading started");
 
-    // Operational PO/SO records cannot be deleted by Staff or Admin
-    const staffDeletePoBlocked = await store.run(managerAuth.value.sessionId, "deletePurchase", {
+    // Admin and Worker cannot delete PO/SO records; Staff can delete PO/SO records
+    const workerDeletePoBlocked = await store.run(workerAuth.value.sessionId, "deletePurchase", {
       number: "PO-STAFF-100",
     });
-    assert.match(staffDeletePoBlocked.error ?? "", /Operational PO\/SO records cannot be deleted/);
+    assert.ok(workerDeletePoBlocked.error);
 
     const adminDeletePoBlocked = await store.run(ownerAuth.value.sessionId, "deletePurchase", {
       number: "PO-STAFF-100",
     });
-    assert.match(adminDeletePoBlocked.error ?? "", /Operational PO\/SO records cannot be deleted/);
+    assert.ok(adminDeletePoBlocked.error);
+
+    const staffDeletePo = await store.run(managerAuth.value.sessionId, "deletePurchase", {
+      number: "PO-STAFF-100",
+    });
+    assert.equal(staffDeletePo.error, undefined);
 
     // 12c. Worker can delete a declined request
     const inbound2 = await store.run(workerAuth.value.sessionId, "addInbound", {

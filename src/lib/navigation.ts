@@ -19,7 +19,6 @@ const OFFICE: ActiveRole[] = ["owner", "manager"];
 const OFFERS_ROLES: Role[] = ["owner", "moderator", "offers_user"];
 const OFFERS_INTERNAL_ONLY: Role[] = ["owner", "moderator"];
 const ADMIN: ActiveRole[] = ["owner"];
-const STAFF: ActiveRole[] = ["manager"];
 
 export const navSections: NavSection[] = [
   {
@@ -41,10 +40,10 @@ export const navSections: NavSection[] = [
   {
     title: "Warehouse",
     items: [
-      { href: "/inventory", label: "Inventory", icon: "inventory", roles: WAREHOUSE_OPS },
-      { href: "/stock-movements", label: "Stock Movements", icon: "movements", roles: ["manager", "worker"] },
-      { href: "/transfers", label: "Transfers", icon: "transfers", roles: STAFF },
-      { href: "/warehouses", label: "Warehouses", icon: "warehouses", roles: OFFICE },
+      { href: "/inventory", label: "Inventory", icon: "inventory", roles: ["owner", "worker"] },
+      { href: "/stock-movements", label: "Stock Movements", icon: "movements", roles: ["owner", "worker"] },
+      { href: "/transfers", label: "Transfers", icon: "transfers", roles: ADMIN },
+      { href: "/warehouses", label: "Warehouses", icon: "warehouses", roles: ADMIN },
     ],
   },
   {
@@ -59,9 +58,9 @@ export const navSections: NavSection[] = [
   {
     title: "Directories",
     items: [
-      { href: "/suppliers", label: "Suppliers", icon: "suppliers", roles: STAFF },
-      { href: "/customers", label: "Customers", icon: "customers", roles: STAFF },
-      { href: "/materials", label: "Materials & Packaging", icon: "inventory", roles: STAFF },
+      { href: "/suppliers", label: "Suppliers", icon: "suppliers", roles: ADMIN },
+      { href: "/customers", label: "Customers", icon: "customers", roles: ADMIN },
+      { href: "/materials", label: "Materials & Packaging", icon: "inventory", roles: ADMIN },
     ],
   },
   {

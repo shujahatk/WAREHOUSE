@@ -441,9 +441,9 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     const finalBalance = snap8.stockBalances.find((b) => b.id === bornemHdpeBalance.id);
     assert.equal(finalBalance?.weightKg, 8000);
 
-    // 7. Non-owner / authenticated user DELETE on purchase orders is strictly blocked
+    // 7. Worker and Admin DELETE on purchase orders is strictly blocked, while Staff has full PO/SO CRUD
     assert.equal(can(workerAuth.value.profile, "order:delete"), false);
-    assert.equal(can(staffAuth.value.profile, "order:delete"), false);
+    assert.equal(can(staffAuth.value.profile, "order:delete"), true);
     assert.equal(can(adminAuth.value.profile, "order:delete"), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });

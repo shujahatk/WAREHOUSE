@@ -59,31 +59,52 @@ test("1. Role Boundaries: Navigation & Permissions for Staff, Worker, and Admin"
     "Staff navigation must not contain All Requests"
   );
 
-  // Staff MUST see Unloading Schedules, Loading Schedules, and Verification
-  assert.ok(
-    staffLinks.includes("Unloading Schedule"),
-    "Staff navigation must contain Unloading Schedule"
-  );
-  assert.ok(
-    staffLinks.includes("Loading Schedule"),
-    "Staff navigation must contain Loading Schedule"
-  );
-  assert.ok(
-    staffLinks.includes("Pending Verification"),
-    "Staff navigation must contain Pending Verification"
-  );
+  // Staff MUST see Dashboard, PO & SO Orders, Unloading Schedules, Loading Schedules, and Verification ONLY
+  assert.deepEqual(staffLinks, [
+    "Dashboard",
+    "PO & SO Orders",
+    "Unloading Schedule",
+    "Loading Schedule",
+    "Pending Verification",
+  ]);
+
+  // Removed modules must not appear in Staff sidebar
+  assert.ok(!staffLinks.includes("Inventory"));
+  assert.ok(!staffLinks.includes("Stock Movements"));
+  assert.ok(!staffLinks.includes("Transfers"));
+  assert.ok(!staffLinks.includes("Warehouses"));
+  assert.ok(!staffLinks.includes("Suppliers"));
+  assert.ok(!staffLinks.includes("Customers"));
+  assert.ok(!staffLinks.includes("Materials & Packaging"));
 
   // Permission checks
+  assert.equal(canAccess("manager", "/dashboard"), true);
+  assert.equal(canAccess("manager", "/purchases"), true);
   assert.equal(canAccess("manager", "/schedules/unloading"), true);
   assert.equal(canAccess("manager", "/schedules/loading"), true);
   assert.equal(canAccess("manager", "/verification"), true);
+
+  // Direct URL access denied for removed modules
+  assert.equal(canAccess("manager", "/inventory"), false);
+  assert.equal(canAccess("manager", "/stock-movements"), false);
+  assert.equal(canAccess("manager", "/transfers"), false);
+  assert.equal(canAccess("manager", "/warehouses"), false);
+  assert.equal(canAccess("manager", "/suppliers"), false);
+  assert.equal(canAccess("manager", "/customers"), false);
+  assert.equal(canAccess("manager", "/materials"), false);
+
   assert.equal(canPerform("manager", "create-schedule"), true);
   assert.equal(canPerform("manager", "verify-schedule"), true);
 
-  // Worker permissions: Worker CANNOT verify schedules
+  // Worker permissions: Worker CANNOT verify schedules, CANNOT access purchases or verification
   assert.equal(canPerform("worker", "verify-schedule"), false);
   assert.equal(canPerform("worker", "start-schedule"), true);
   assert.equal(canPerform("worker", "submit-schedule"), true);
+  assert.equal(canAccess("worker", "/purchases"), false);
+  assert.equal(canAccess("worker", "/verification"), false);
+  assert.equal(canAccess("worker", "/schedules/unloading"), true);
+  assert.equal(canAccess("worker", "/schedules/loading"), true);
+  assert.equal(canAccess("worker", "/inventory"), true);
 });
 
 test("2. Staff Direct Schedule Creation (PO Unloading & SO Loading) without Admin Approval", async () => {

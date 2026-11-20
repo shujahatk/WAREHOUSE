@@ -100,16 +100,16 @@ export function WorkerBottomNav() {
       isActive: pathname === "/dashboard",
     },
     {
-      href: "/containers",
-      label: "Inbound",
+      href: "/schedules/unloading",
+      label: "Unloading",
       icon: InboundIcon,
-      isActive: pathname === "/containers" || pathname.startsWith("/containers/"),
+      isActive: pathname === "/schedules/unloading" || pathname.startsWith("/schedules/unloading") || pathname.startsWith("/containers"),
     },
     {
-      href: "/outbound",
-      label: "Outbound",
+      href: "/schedules/loading",
+      label: "Loading",
       icon: OutboundIcon,
-      isActive: pathname === "/outbound" || pathname.startsWith("/outbound/"),
+      isActive: pathname === "/schedules/loading" || pathname.startsWith("/schedules/loading") || pathname.startsWith("/outbound"),
     },
     {
       href: "/inventory",

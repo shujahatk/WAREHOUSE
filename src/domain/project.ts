@@ -95,12 +95,37 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
         };
       });
 
+    const linkedSchedules = (store.operationSchedules || [])
+      .filter((s) => s.purchaseOrderId === order.id || (s.poSoNumber && s.poSoNumber.toLowerCase() === order.number.toLowerCase()))
+      .map((s) => {
+        const items = (store.operationScheduleItems || []).filter((i) => i.scheduleId === s.id);
+        const totalNetWeightKg = items.reduce((sum, i) => sum + (i.netWeightKg || 0), 0);
+        return {
+          id: s.id,
+          scheduleNumber: s.scheduleNumber,
+          type: s.type,
+          status: s.status,
+          scheduledDate: s.scheduledDate,
+          assignedWorkerName: s.assignedWorkerName || (s.assignedWorkerId ? userById.get(s.assignedWorkerId)?.name ?? null : null),
+          totalNetWeightKg,
+        };
+      });
+
     return {
+      id: order.id,
+      companyId: order.companyId,
       number: order.number,
       title,
       type: order.type || (order.number.toUpperCase().startsWith("SO") ? "SO" : "PO"),
       warehouseId: order.warehouseId ?? linked?.warehouseId ?? null,
       warehouse: warehouse || "—",
+      purchaserName: order.purchaserName ?? null,
+      sellerName: order.sellerName ?? null,
+      transportPrice: order.transportPrice ?? 0,
+      origin: order.origin || linked?.originCountry || "",
+      destination: order.destination || linked?.destinationCountry || "",
+      pickupDate: order.pickupDate ?? null,
+      annex7Required: order.annex7Required !== undefined ? Boolean(order.annex7Required) : Boolean(linked?.annex7Required ?? false),
       isRemoved: Boolean(order.isRemoved || (typeof order.notes === "string" && order.notes.includes("[REMOVED]"))),
       removedAt: order.removedAt ?? null,
       removedBy: order.removedBy ?? null,
@@ -113,6 +138,8 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       incoterms: "",
       status: orderStatus[order.status] ?? "Planned",
       date: order.createdAt.slice(0, 10),
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
       owner: userById.get(order.createdBy)?.name ?? "",
       supplierEmail: "",
       forwarder: "",
@@ -132,6 +159,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       completedAt: order.completedAt ?? null,
       completedBy: order.completedBy ?? (completer?.name ?? null),
       evidencePhotos,
+      linkedSchedules,
     };
   });
 

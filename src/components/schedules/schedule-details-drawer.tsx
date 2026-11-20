@@ -100,9 +100,8 @@ export function ScheduleDetailsDrawer({ schedule, isOpen, onClose, onEdit }: Pro
           <div>
             <div className="flex items-center gap-2">
               <span
-                className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${
-                  isUnloading ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
-                }`}
+                className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${isUnloading ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+                  }`}
               >
                 {isUnloading ? "Unloading Schedule" : "Loading Schedule"}
               </span>
@@ -330,36 +329,36 @@ export function ScheduleDetailsDrawer({ schedule, isOpen, onClose, onEdit }: Pro
               schedule.transportCompany ||
               schedule.driverName ||
               schedule.cmrNumber) && (
-              <div className="mt-3 pt-3 border-t border-neutral-200">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 block mb-2">
-                  Vehicle, Driver &amp; Dispatch Information
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                  <div>
-                    <span className="text-neutral-400 block">Vehicle Registration</span>
-                    <span className="font-semibold text-neutral-900">
-                      {schedule.vehicleRegistrationNumber || "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-neutral-400 block">Transport Company</span>
-                    <span className="font-medium text-neutral-800">{schedule.transportCompany || "—"}</span>
-                  </div>
-                  <div>
-                    <span className="text-neutral-400 block">Driver Name</span>
-                    <span className="font-medium text-neutral-800">{schedule.driverName || "—"}</span>
-                  </div>
-                  <div>
-                    <span className="text-neutral-400 block">Driver Contact</span>
-                    <span className="font-medium text-neutral-800">{schedule.driverContactNumber || "—"}</span>
-                  </div>
-                  <div>
-                    <span className="text-neutral-400 block">CMR Number / Reference</span>
-                    <span className="font-semibold text-neutral-900">{schedule.cmrNumber || "—"}</span>
+                <div className="mt-3 pt-3 border-t border-neutral-200">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 block mb-2">
+                    Vehicle, Driver &amp; Dispatch Information
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-neutral-400 block">Vehicle Registration</span>
+                      <span className="font-semibold text-neutral-900">
+                        {schedule.vehicleRegistrationNumber || "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-400 block">Transport Company</span>
+                      <span className="font-medium text-neutral-800">{schedule.transportCompany || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-400 block">Driver Name</span>
+                      <span className="font-medium text-neutral-800">{schedule.driverName || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-400 block">Driver Contact</span>
+                      <span className="font-medium text-neutral-800">{schedule.driverContactNumber || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-400 block">CMR Number / Reference</span>
+                      <span className="font-semibold text-neutral-900">{schedule.cmrNumber || "—"}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {schedule.workerRemarks ? (
               <div className="mt-3 pt-3 border-t border-neutral-200 text-xs">

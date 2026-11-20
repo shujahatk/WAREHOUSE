@@ -85,11 +85,25 @@ export interface PurchaseOrderRepository {
   list(actorId?: string): Promise<PurchaseOrder[]>;
   lines(purchaseOrderId: string): Promise<PurchaseOrderLine[]>;
   create(input: {
+    type?: "PO" | "SO";
+    number?: string;
+    title?: string;
     supplier: string;
     material: string;
     quantityKg: number;
     valueEur: number;
     currency?: string;
+    warehouseId?: string | null;
+    warehouse?: string | null;
+    purchaserName?: string | null;
+    sellerName?: string | null;
+    transportPrice?: number;
+    origin?: string;
+    destination?: string;
+    pickupDate?: string | null;
+    scheduledDate?: string | null;
+    annex7Required?: boolean;
+    notes?: string;
     actorId: string;
   }): Promise<Result<PurchaseOrder>>;
   submit(input: {
@@ -100,15 +114,29 @@ export interface PurchaseOrderRepository {
   approve(input: { number: string; actorId: string }): Promise<Result<PurchaseOrder>>;
   reject(input: { number: string; actorId: string }): Promise<Result<PurchaseOrder>>;
   edit(input: {
+    id?: string;
     number: string;
+    newNumber?: string;
+    title?: string;
     supplier: string;
     material: string;
     quantityKg: number;
     valueEur: number;
     currency?: string;
+    warehouseId?: string | null;
+    warehouse?: string | null;
+    purchaserName?: string | null;
+    sellerName?: string | null;
+    transportPrice?: number;
+    origin?: string;
+    destination?: string;
+    pickupDate?: string | null;
+    scheduledDate?: string | null;
+    annex7Required?: boolean;
+    notes?: string;
     actorId: string;
   }): Promise<Result<PurchaseOrder>>;
-  delete(input: { number: string; actorId: string }): Promise<Result<PurchaseOrder>>;
+  delete(input: { id?: string; number: string; actorId: string }): Promise<Result<PurchaseOrder>>;
 }
 
 export interface ShipmentRepository {

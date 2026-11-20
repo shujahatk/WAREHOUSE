@@ -139,6 +139,7 @@ test("Staff (manager) can create/edit PO/SO even after start, manage suppliers/c
   assert.equal(can(manager, "order:create"), true);
   assert.equal(can(manager, "order:edit", { status: "submitted" }), true);
   assert.equal(can(manager, "order:edit", { status: "approved" }), true);
+  assert.equal(can(manager, "order:delete"), true);
   assert.equal(can(manager, "order:view"), true);
   assert.equal(can(manager, "supplier:manage"), true);
   assert.equal(can(manager, "customer:manage"), true);
@@ -154,7 +155,6 @@ test("Staff (manager) can create/edit PO/SO even after start, manage suppliers/c
   // Strictly prohibited for Staff (including Administration: users, reports, audit, settings)
   assert.equal(can(manager, "report:view"), false);
   assert.equal(can(manager, "audit:view"), false);
-  assert.equal(can(manager, "order:delete"), false);
   assert.equal(can(manager, "order:approve"), false);
   assert.equal(can(manager, "order:reject"), false);
   assert.equal(can(manager, "request:delete"), false);

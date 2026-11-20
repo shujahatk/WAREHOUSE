@@ -46,6 +46,9 @@ import {
   type OperationSchedule,
   type OperationScheduleItem,
   type OperationScheduleAttachment,
+  type OrderMetadataEnvelope,
+  parseOrderNotes,
+  serializeOrderNotes,
 } from "../../domain/schemas.ts";
 import { emptyWorkspace, parseOperationalRequestDescription, serializeOperationalRequestDescription, type Actor, type GeneralRequestOperationalDetails, type WorkspaceState } from "../../domain/view.ts";
 import { isActiveRole } from "../permissions.ts";
@@ -125,34 +128,64 @@ function mapPackagingType(row: Record<string, unknown>): PackagingType {
 }
 
 function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
-  const notesStr = String(row.notes ?? "");
+  const rawNotesStr = String(row.notes ?? "");
+  const { cleanNotes, meta } = parseOrderNotes(rawNotesStr);
+  const resolvedNumber = (meta?.number && meta.number.trim()) ? meta.number.trim() : String(row.number);
   const isRemoved = Boolean(
     row.is_removed ??
     row.isRemoved ??
-    notesStr.includes("[REMOVED]")
+    meta?.isRemoved ??
+    rawNotesStr.includes("[REMOVED]")
   );
 
   return {
     id: String(row.id),
-    number: String(row.number),
-    title: String(row.title ?? (row.number ? `Order ${row.number}` : "")),
+    number: resolvedNumber,
+    title: String(row.title ?? (resolvedNumber ? `Order ${resolvedNumber}` : "")),
     companyId: String(row.company_id),
     status: (row.status as PurchaseOrder["status"]) ?? "submitted",
     valueEur: Number(row.value_eur ?? 0),
-    currency: String(row.currency ?? "EUR"),
-    notes: notesStr,
+    currency: String(row.currency ?? meta?.currency ?? "EUR"),
+    notes: cleanNotes,
     createdBy: String(row.created_by),
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
-    type: (row.type as "PO" | "SO") || (String(row.number).toUpperCase().startsWith("SO") ? "SO" : "PO"),
-    warehouseId: typeof row.warehouse_id === "string" ? row.warehouse_id : (typeof row.warehouseId === "string" ? row.warehouseId : null),
+    type: (row.type as "PO" | "SO") || meta?.type || (resolvedNumber.toUpperCase().startsWith("SO") ? "SO" : "PO"),
+    warehouseId: typeof row.warehouse_id === "string"
+      ? row.warehouse_id
+      : (typeof row.warehouseId === "string" ? row.warehouseId : (meta?.warehouseId ?? null)),
+    purchaserName: typeof row.purchaser_name === "string"
+      ? row.purchaser_name
+      : (typeof row.purchaserName === "string" ? row.purchaserName : (meta?.purchaserName ?? null)),
+    sellerName: typeof row.seller_name === "string"
+      ? row.seller_name
+      : (typeof row.sellerName === "string" ? row.sellerName : (meta?.sellerName ?? null)),
+    transportPrice: row.transport_price !== undefined
+      ? Number(row.transport_price)
+      : (row.transportPrice !== undefined ? Number(row.transportPrice) : (meta?.transportPrice ?? 0)),
+    origin: typeof row.origin === "string" ? row.origin : (meta?.origin ?? ""),
+    destination: typeof row.destination === "string" ? row.destination : (meta?.destination ?? ""),
+    pickupDate: typeof row.pickup_date === "string"
+      ? row.pickup_date
+      : (typeof row.pickupDate === "string" ? row.pickupDate : (meta?.pickupDate ?? null)),
+    annex7Required: row.annex7_required !== undefined
+      ? Boolean(row.annex7_required)
+      : (row.annex7Required !== undefined ? Boolean(row.annex7Required) : Boolean(meta?.annex7Required ?? false)),
     isRemoved,
-    removedAt: typeof row.removed_at === "string" ? row.removed_at : (typeof row.removedAt === "string" ? row.removedAt : (isRemoved ? String(row.updated_at ?? row.created_at) : null)),
-    removedBy: typeof row.removed_by === "string" ? row.removed_by : (typeof row.removedBy === "string" ? row.removedBy : null),
+    removedAt: typeof row.removed_at === "string"
+      ? row.removed_at
+      : (typeof row.removedAt === "string"
+        ? row.removedAt
+        : (meta?.removedAt ?? (isRemoved ? String(row.updated_at ?? row.created_at) : null))),
+    removedBy: typeof row.removed_by === "string"
+      ? row.removed_by
+      : (typeof row.removedBy === "string" ? row.removedBy : (meta?.removedBy ?? null)),
     assignedWorkerId: typeof row.assigned_worker_id === "string" ? row.assigned_worker_id : (typeof row.assignedWorkerId === "string" ? row.assignedWorkerId : null),
     assignedBy: typeof row.assigned_by === "string" ? row.assigned_by : (typeof row.assignedBy === "string" ? row.assignedBy : null),
     assignedAt: typeof row.assigned_at === "string" ? row.assigned_at : (typeof row.assignedAt === "string" ? row.assignedAt : null),
-    scheduledDate: typeof row.scheduled_date === "string" ? row.scheduled_date : (typeof row.scheduledDate === "string" ? row.scheduledDate : null),
+    scheduledDate: typeof row.scheduled_date === "string"
+      ? row.scheduled_date
+      : (typeof row.scheduledDate === "string" ? row.scheduledDate : (meta?.scheduledDate ?? null)),
     executionStatus: (row.execution_status as "unassigned" | "assigned" | "in_progress" | "completed") || "unassigned",
     completionNotes: typeof row.completion_notes === "string" ? row.completion_notes : (typeof row.completionNotes === "string" ? row.completionNotes : null),
     completedAt: typeof row.completed_at === "string" ? row.completed_at : (typeof row.completedAt === "string" ? row.completedAt : null),
@@ -815,6 +848,42 @@ export class SupabaseAdapter {
     if (schedulesRes.ok) store.operationSchedules = schedulesRes.value.map(mapOperationSchedule);
     if (scheduleItemsRes.ok) store.operationScheduleItems = scheduleItemsRes.value.map(mapOperationScheduleItem);
     if (scheduleAttachmentsRes.ok) store.operationScheduleAttachments = scheduleAttachmentsRes.value.map(mapOperationScheduleAttachment);
+
+    if (ordersRes.ok) {
+      const existingSchedIds = new Set(store.operationSchedules.map((s) => s.id));
+      const existingItemIds = new Set(store.operationScheduleItems.map((i) => i.id));
+      const existingAttIds = new Set(store.operationScheduleAttachments.map((a) => a.id));
+      for (const rawOrderRow of ordersRes.value) {
+        const { meta } = parseOrderNotes(String(rawOrderRow.notes ?? ""));
+        if (meta?.schedules && Array.isArray(meta.schedules)) {
+          for (const sched of meta.schedules) {
+            if (sched && sched.id && !existingSchedIds.has(sched.id)) {
+              existingSchedIds.add(sched.id);
+              store.operationSchedules.push({
+                ...sched,
+                purchaseOrderId: sched.purchaseOrderId || String(rawOrderRow.id),
+              });
+            }
+          }
+        }
+        if (meta?.scheduleItems && Array.isArray(meta.scheduleItems)) {
+          for (const item of meta.scheduleItems) {
+            if (item && item.id && !existingItemIds.has(item.id)) {
+              existingItemIds.add(item.id);
+              store.operationScheduleItems.push(item);
+            }
+          }
+        }
+        if (meta?.scheduleAttachments && Array.isArray(meta.scheduleAttachments)) {
+          for (const att of meta.scheduleAttachments) {
+            if (att && att.id && !existingAttIds.has(att.id)) {
+              existingAttIds.add(att.id);
+              store.operationScheduleAttachments.push(att);
+            }
+          }
+        }
+      }
+    }
     const persistentNotifs: NotificationRecord[] = notificationsRes.ok ? notificationsRes.value.map(mapNotification) : [];
     const existingTargetKeys = new Set(
       persistentNotifs.map((n) => `${n.eventType}:${n.targetType || ""}:${n.targetId || ""}`)
@@ -1270,35 +1339,37 @@ export class SupabaseAdapter {
             break;
           }
           const orderType = (text(body.type) || (text(body.number).toUpperCase().startsWith("SO") ? "SO" : "PO")).toUpperCase() as "PO" | "SO";
-          const partner = text(body.partner || body.supplier || body.customer);
+          const partner = text(body.partner || body.supplier || body.customer || body.buyer);
           const material = text(body.material);
-          const quantityKg = num(body.quantityKg);
-          const valueEur = num(body.valueEur);
-          const customNumber = text(body.number);
-          const warehouseId = text(body.warehouseId) || null;
+          const quantityKg = body.quantityKg !== undefined ? num(body.quantityKg) : 0;
+          const rawPrice = body.valueEur !== undefined ? body.valueEur : (body.purchasingPrice !== undefined ? body.purchasingPrice : body.sellingPrice);
+          const valueEur = rawPrice !== undefined ? num(rawPrice) : 0;
 
           if (!partner || !material || quantityKg < 0 || valueEur < 0) {
             error = `${orderType === "SO" ? "Customer" : "Supplier"}, material, quantity, and value are required.`;
             break;
           }
 
-          const compRes = await this.client.insert<Record<string, unknown>>(
-            "companies",
-            { name: partner, kind: orderType === "SO" ? "customer" : "supplier", active: true },
-            token,
-            { upsert: true, onConflict: "name,kind" },
-          );
-          if (!compRes.ok) {
-            error = compRes.error;
-            break;
-          }
-
           const res = await svc.purchaseOrders.create({
+            type: orderType,
+            number: text(body.number) || undefined,
+            title: text(body.title) || undefined,
             supplier: partner,
             material,
             quantityKg,
             valueEur,
             currency: text(body.currency) || undefined,
+            warehouseId: text(body.warehouseId) || null,
+            warehouse: text(body.warehouse) || null,
+            purchaserName: text(body.purchaserName) || null,
+            sellerName: text(body.sellerName) || null,
+            transportPrice: body.transportPrice !== undefined ? Math.max(0, num(body.transportPrice) || 0) : 0,
+            origin: text(body.origin),
+            destination: text(body.destination),
+            pickupDate: text(body.pickupDate) || null,
+            scheduledDate: text(body.scheduledDate || body.scheduledUnloadingDate || body.scheduledLoadingDate) || null,
+            annex7Required: Boolean(body.annex7Required),
+            notes: text(body.notes),
             actorId: profile.id,
           });
           if (!res.ok) {
@@ -1330,12 +1401,32 @@ export class SupabaseAdapter {
             error = "Staff cannot change the Worker assigned to an operation.";
             break;
           }
+          const rawPrice = body.valueEur !== undefined ? body.valueEur : (body.purchasingPrice !== undefined ? body.purchasingPrice : body.sellingPrice);
+          const lookupNum = text(body.originalNumber || body.number);
+          const newNum = text(body.newNumber || ((body.originalNumber || body.id || body.orderId) ? body.number : ""));
           const res = await svc.purchaseOrders.edit({
-            number: text(body.number),
-            supplier: text(body.partner || body.supplier || body.customer),
+            id: text(body.id || body.orderId) || undefined,
+            number: lookupNum,
+            newNumber: newNum && newNum.toLowerCase() !== lookupNum.toLowerCase() ? newNum : undefined,
+            title: body.title !== undefined ? text(body.title) : undefined,
+            supplier: text(body.partner || body.supplier || body.customer || body.buyer),
             material: text(body.material),
-            quantityKg: num(body.quantityKg),
-            valueEur: num(body.valueEur),
+            quantityKg: body.quantityKg !== undefined ? num(body.quantityKg) : 0,
+            valueEur: rawPrice !== undefined ? num(rawPrice) : 0,
+            currency: body.currency !== undefined ? text(body.currency) : undefined,
+            warehouseId: body.warehouseId !== undefined ? (text(body.warehouseId) || null) : undefined,
+            warehouse: body.warehouse !== undefined ? (text(body.warehouse) || null) : undefined,
+            purchaserName: body.purchaserName !== undefined ? (text(body.purchaserName) || null) : undefined,
+            sellerName: body.sellerName !== undefined ? (text(body.sellerName) || null) : undefined,
+            transportPrice: body.transportPrice !== undefined ? Math.max(0, num(body.transportPrice) || 0) : undefined,
+            origin: body.origin !== undefined ? text(body.origin) : undefined,
+            destination: body.destination !== undefined ? text(body.destination) : undefined,
+            pickupDate: body.pickupDate !== undefined ? (text(body.pickupDate) || null) : undefined,
+            scheduledDate: (body.scheduledDate !== undefined || body.scheduledUnloadingDate !== undefined || body.scheduledLoadingDate !== undefined)
+              ? (text(body.scheduledDate ?? body.scheduledUnloadingDate ?? body.scheduledLoadingDate) || null)
+              : undefined,
+            annex7Required: body.annex7Required !== undefined ? Boolean(body.annex7Required) : undefined,
+            notes: body.notes !== undefined ? text(body.notes) : undefined,
             actorId: profile.id,
           });
           if (!res.ok) error = res.error;
@@ -1343,54 +1434,29 @@ export class SupabaseAdapter {
           break;
         }
         case "removePoSoNumber":
-        case "removeOrder": {
-          if (profile.role !== "manager" && profile.role !== "owner") {
-            error = "Only Staff can remove a PO/SO number.";
+        case "removeOrder":
+        case "deletePurchase":
+        case "deleteOrder": {
+          if (profile.role !== "manager") {
+            error = "Only Staff can delete or remove a PO/SO order.";
             break;
           }
           const numVal = text(body.number || body.poNumber);
-          if (!numVal) {
+          const idVal = text(body.id || body.orderId);
+          if (!numVal && !idVal) {
             error = "Order number is required.";
             break;
           }
-          const rpcRes = await this.client.rpc<Record<string, unknown>>(
-            "rpc_remove_poso_number",
-            { p_number: numVal },
-            token
-          );
-          if (rpcRes.ok) {
-            notice = `${numVal} number entry has been removed. Operational history preserved.`;
-            break;
-          }
-
-          // Resilient fallback: Update notes with [REMOVED] marker (without changing status, which would trigger status-change guard exception)
-          const fallbackRes = await this.client.update(
-            "purchase_orders",
-            `number=eq.${encodeURIComponent(numVal)}`,
-            {
-              notes: `[REMOVED] Order number entry removed by ${profile.name} on ${this.now()}. Operational records preserved.`,
-              updated_at: this.now(),
-            },
-            token
-          );
-
-          if (!fallbackRes.ok && !fallbackRes.error?.includes("No matching record")) {
-            const errLower = (fallbackRes.error || "").toLowerCase();
-            if (errLower.includes("is_removed") || errLower.includes("schema cache") || errLower.includes("column")) {
-              notice = `${numVal} number entry has been removed. Operational history preserved.`;
-            } else {
-              error = fallbackRes.error;
-            }
+          const res = await svc.purchaseOrders.delete({
+            id: idVal || undefined,
+            number: numVal,
+            actorId: profile.id,
+          });
+          if (!res.ok) {
+            error = res.error;
           } else {
-            notice = `${numVal} number entry has been removed. Operational history preserved.`;
+            notice = `${res.value.number} number entry has been removed. Operational history preserved.`;
           }
-          break;
-        }
-        case "deletePurchase":
-        case "deleteOrder": {
-          const res = await svc.purchaseOrders.delete({ number: text(body.number), actorId: profile.id });
-          if (!res.ok) error = res.error;
-          else notice = "Purchase order was deleted.";
           break;
         }
         case "addInbound":
@@ -2302,25 +2368,317 @@ export class SupabaseAdapter {
             error = "Only Staff or Admin can create schedules.";
             break;
           }
-          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+          const schedType: "unloading" | "loading" = text(body.type) === "loading" ? "loading" : "unloading";
+          const explicitPoId = text(body.purchaseOrderId || body.orderId || body.poId || body.soId);
+
+          const [ordersRes, compsRes, whsRes, usersRes, linesRes, pkgRes] = await Promise.all([
+            this.client.select<Record<string, unknown>>("purchase_orders", "select=*&order=created_at.asc", token),
+            this.client.select<Record<string, unknown>>("companies", "select=*", token),
+            this.client.select<Record<string, unknown>>("warehouses", "select=*", token),
+            this.client.select<Record<string, unknown>>("users", "select=*", token),
+            this.client.select<Record<string, unknown>>("purchase_order_lines", "select=*", token),
+            this.client.select<Record<string, unknown>>("packaging_types", "select=*", token),
+          ]);
+
+          const rawOrders = ordersRes.ok ? ordersRes.value : [];
+          const mappedOrders = rawOrders.map((r) => ({ raw: r, po: mapPurchaseOrder(r) }));
+          const companies = compsRes.ok ? compsRes.value.map(mapCompany) : [];
+          const warehouses = whsRes.ok ? whsRes.value.map(mapWarehouse) : [];
+          const users = usersRes.ok ? usersRes.value.map(mapUserProfile) : [];
+          const allLines = linesRes.ok ? linesRes.value.map(mapPurchaseOrderLine) : [];
+          const packagings = pkgRes.ok ? pkgRes.value.map(mapPackagingType) : [];
+
+          let matchedEntry = explicitPoId
+            ? mappedOrders.find((e) => e.po.id === explicitPoId && !e.po.isRemoved)
+            : undefined;
+          const rawPoSoNumber = text(body.poSoNumber).toUpperCase() || (matchedEntry ? matchedEntry.po.number.toUpperCase() : "");
+          if (!rawPoSoNumber) {
+            error = schedType === "unloading" ? "PO Number is required." : "SO Number is required.";
+            break;
+          }
+          if (!matchedEntry) {
+            matchedEntry = mappedOrders.find((e) => !e.po.isRemoved && e.po.number.toLowerCase() === rawPoSoNumber.toLowerCase());
+          }
+
+          if (matchedEntry) {
+            const existingType = matchedEntry.po.type || (matchedEntry.po.number.toUpperCase().startsWith("SO") ? "SO" : "PO");
+            if (schedType === "unloading" && existingType === "SO") {
+              error = `Unloading schedules must link to a Purchase Order (PO). ${matchedEntry.po.number} is a Sales Order (SO).`;
+              break;
+            }
+            if (schedType === "loading" && existingType === "PO") {
+              error = `Loading schedules must link to a Sales Order (SO). ${matchedEntry.po.number} is a Purchase Order (PO).`;
+              break;
+            }
+          }
+
+          const existingCompany = matchedEntry ? companies.find((c) => c.id === matchedEntry!.po.companyId) : undefined;
+          const partnerName = text(body.partnerName || body.supplier || body.customer || body.buyer) || existingCompany?.name || "";
+          if (!partnerName) {
+            error = schedType === "unloading" ? "Supplier name is required." : "Customer / Buyer name is required.";
+            break;
+          }
+
+          const whInput = text(body.warehouseId || body.warehouse) || (matchedEntry?.po.warehouseId ?? "");
+          const warehouse = warehouses.find((w) => w.id === whInput || w.name.toLowerCase() === whInput.toLowerCase()) || warehouses[0];
+          if (!warehouse) {
+            error = "Please select a valid warehouse.";
+            break;
+          }
+
+          const scheduledDate =
+            text(body.scheduledDate || body.scheduledUnloadingDate || body.scheduledLoadingDate) ||
+            (matchedEntry?.po.scheduledDate ?? "");
+          if (!scheduledDate) {
+            error = "Scheduled date is required.";
+            break;
+          }
+
+          const workerInput = text(body.assignedWorkerId || body.workerId);
+          const worker = users.find((u) => (u.id === workerInput || u.name.toLowerCase() === workerInput.toLowerCase()) && u.active && u.role === "worker");
+          if (!worker) {
+            error = "Please select an active warehouse worker.";
+            break;
+          }
+
+          const resolvedOrigin = text(body.origin) || matchedEntry?.po.origin || "";
+          const resolvedDestination = text(body.destination) || matchedEntry?.po.destination || "";
+          const resolvedAnnex7 = body.annex7Required !== undefined ? Boolean(body.annex7Required) : Boolean(matchedEntry?.po.annex7Required);
+          const resolvedTransportPrice = body.transportPrice !== undefined ? Math.max(0, num(body.transportPrice) || 0) : (matchedEntry?.po.transportPrice ?? 0);
+          const resolvedCurrency = text(body.currency) || matchedEntry?.po.currency || "EUR";
+          const resolvedPickupDate = text(body.pickupDate) || matchedEntry?.po.pickupDate || null;
+          const resolvedPurchaserName = text(body.purchaserName) || matchedEntry?.po.purchaserName || null;
+          const resolvedPurchasingPrice =
+            schedType === "unloading"
+              ? (body.purchasingPrice !== undefined && body.purchasingPrice !== "" ? Math.max(0, num(body.purchasingPrice) || 0) : (matchedEntry?.po.valueEur ?? 0))
+              : 0;
+          const resolvedSellerName = text(body.sellerName) || matchedEntry?.po.sellerName || null;
+          const resolvedSellingPrice =
+            schedType === "loading"
+              ? (body.sellingPrice !== undefined && body.sellingPrice !== "" ? Math.max(0, num(body.sellingPrice) || 0) : (matchedEntry?.po.valueEur ?? 0))
+              : 0;
+
+          if (!matchedEntry) {
+            const firstRawItem = Array.isArray(body.items) && body.items.length > 0 ? record(body.items[0]) : {};
+            const defaultMat = text(firstRawItem.materialName || firstRawItem.materialType || firstRawItem.material) || "General Material";
+            const defaultQty = Math.max(1, num(firstRawItem.grossWeightKg || firstRawItem.netWeightKg) || 1000);
+            const createPoRes = await svc.purchaseOrders.create({
+              type: schedType === "unloading" ? "PO" : "SO",
+              number: rawPoSoNumber,
+              title: `${partnerName} - ${schedType === "unloading" ? "Unloading" : "Loading"}`,
+              supplier: partnerName,
+              material: defaultMat,
+              quantityKg: defaultQty,
+              valueEur: schedType === "unloading" ? resolvedPurchasingPrice : resolvedSellingPrice,
+              currency: resolvedCurrency,
+              warehouseId: warehouse.id,
+              purchaserName: resolvedPurchaserName,
+              sellerName: resolvedSellerName,
+              transportPrice: resolvedTransportPrice,
+              origin: resolvedOrigin,
+              destination: resolvedDestination,
+              pickupDate: resolvedPickupDate,
+              scheduledDate,
+              annex7Required: resolvedAnnex7,
+              notes: "Created via Staff Schedule Module",
+              actorId: profile.id,
+            });
+            if (!createPoRes.ok) {
+              error = createPoRes.error;
+              break;
+            }
+            const refetched = await this.client.select<Record<string, unknown>>(
+              "purchase_orders",
+              `select=*&id=eq.${encodeURIComponent(createPoRes.value.id)}`,
+              token,
+            );
+            if (!refetched.ok || refetched.value.length === 0) {
+              error = "Failed to load created order.";
+              break;
+            }
+            matchedEntry = { raw: refetched.value[0], po: mapPurchaseOrder(refetched.value[0]) };
+          }
+
+          const targetPo = matchedEntry.po;
+          const targetRaw = matchedEntry.raw;
+
+          // Count existing schedules to generate unique scheduleNumber
+          let maxSeq = 0;
+          const year = new Date(this.now()).getUTCFullYear() || 2026;
+          const prefix = schedType === "unloading" ? "SCH-UNL" : "SCH-LOD";
+          for (const e of mappedOrders) {
+            const m = parseOrderNotes(String(e.raw.notes ?? "")).meta;
+            for (const s of m?.schedules || []) {
+              if (s.scheduleNumber && s.scheduleNumber.startsWith(`${prefix}-${year}-`)) {
+                const n = parseInt(s.scheduleNumber.split("-").pop() || "0", 10);
+                if (!isNaN(n) && n > maxSeq) maxSeq = n;
+              }
+            }
+          }
+          const scheduleNumber = `${prefix}-${year}-${String(maxSeq + 1).padStart(4, "0")}`;
+          const scheduleId = randomUUID();
+          const nowIso = this.now();
+
+          const newItems: OperationScheduleItem[] = [];
+          const rawItems = Array.isArray(body.items) ? body.items : [];
+          if (rawItems.length > 0) {
+            for (const rawItem of rawItems) {
+              const itemRec = record(rawItem);
+              const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
+              if (!matName) continue;
+              const pkgIdInput = text(itemRec.packagingTypeId || itemRec.packagingId || itemRec.packagingTypeName || itemRec.packagingType);
+              const pkg = packagings.find((p) => p.id === pkgIdInput || p.name.toLowerCase() === pkgIdInput.toLowerCase()) || packagings[0];
+              const packageCount = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || itemRec.count) || 1));
+              const tareInput = itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.packagingTareWeightKg ?? itemRec.tareWeightKg ?? itemRec.tareKg ?? itemRec.tare;
+              const tarePerPackage = tareInput !== undefined && num(tareInput) >= 0 ? num(tareInput) : (pkg?.tareKg ?? 0);
+              const grossWeight = Math.max(0, num(itemRec.grossWeightKg ?? itemRec.grossKg) || 0);
+              const totalTare = roundKg(packageCount * tarePerPackage);
+              const netWeight = Math.max(0, roundKg(grossWeight - totalTare));
+              newItems.push({
+                id: randomUUID(),
+                scheduleId,
+                materialId: randomUUID(),
+                materialName: matName,
+                packagingTypeId: pkg ? pkg.id : randomUUID(),
+                packagingTypeName: text(itemRec.packagingTypeName || itemRec.packagingType) || (pkg ? pkg.name : "Standard Packaging"),
+                packageCount,
+                tarePerPackageKg: tarePerPackage,
+                totalTareWeightKg: totalTare,
+                grossWeightKg: grossWeight,
+                netWeightKg: netWeight,
+                createdAt: nowIso,
+                updatedAt: nowIso,
+              });
+            }
+          } else {
+            const poLines = allLines.filter((l) => l.purchaseOrderId === targetPo.id && l.description.trim());
+            for (const poLine of poLines) {
+              const pkg = packagings[0];
+              const tarePerPackage = pkg?.tareKg ?? 0;
+              newItems.push({
+                id: randomUUID(),
+                scheduleId,
+                materialId: poLine.materialId || randomUUID(),
+                materialName: poLine.description,
+                packagingTypeId: pkg ? pkg.id : randomUUID(),
+                packagingTypeName: pkg ? pkg.name : "Standard Packaging",
+                packageCount: 1,
+                tarePerPackageKg: tarePerPackage,
+                totalTareWeightKg: tarePerPackage,
+                grossWeightKg: Math.max(0, poLine.quantityKg + tarePerPackage),
+                netWeightKg: Math.max(0, poLine.quantityKg),
+                createdAt: nowIso,
+                updatedAt: nowIso,
+              });
+            }
+          }
+
+          const newSchedule: OperationSchedule = {
+            id: scheduleId,
+            scheduleNumber,
+            type: schedType,
+            poSoNumber: targetPo.number,
+            purchaseOrderId: targetPo.id,
+            shipmentId: null,
+            partnerName,
+            companyId: targetPo.companyId,
+            warehouseId: warehouse.id,
+            origin: resolvedOrigin,
+            destination: resolvedDestination,
+            annex7Required: resolvedAnnex7,
+            transportPrice: resolvedTransportPrice,
+            currency: resolvedCurrency,
+            pickupDate: resolvedPickupDate,
+            purchaserName: resolvedPurchaserName,
+            purchasingPrice: resolvedPurchasingPrice,
+            sellerName: resolvedSellerName,
+            sellingPrice: resolvedSellingPrice,
+            scheduledDate,
+            assignedWorkerId: worker.id,
+            assignedWorkerName: worker.name,
+            vehicleRegistrationNumber: text(body.vehicleRegistrationNumber),
+            transportCompany: text(body.transportCompany),
+            driverName: text(body.driverName),
+            driverContactNumber: text(body.driverContactNumber),
+            cmrNumber: text(body.cmrNumber),
+            actualArrivalTime: text(body.actualArrivalTime) || null,
+            status: "scheduled",
+            instructions: text(body.instructions),
+            workerRemarks: text(body.workerRemarks || body.operationalRemarks),
+            returnReason: null,
+            infoRequestNote: null,
+            actualStartTime: text(body.actualStartTime || body.actualLoadingStartTime) || null,
+            actualEndTime: text(body.actualEndTime || body.actualLoadingCompletionTime) || null,
+            submittedAt: null,
+            verifiedAt: null,
+            verifiedBy: null,
+            verifiedByName: null,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+            createdBy: profile.id,
+            createdByName: profile.name,
+          };
+
+          const { cleanNotes, meta: existingMeta } = parseOrderNotes(String(targetRaw.notes ?? ""));
+          const updatedMeta: OrderMetadataEnvelope = {
+            ...(existingMeta || {}),
+            number: targetPo.number,
+            type: targetPo.type,
+            currency: targetPo.currency || resolvedCurrency,
+            warehouseId: targetPo.warehouseId || warehouse.id,
+            purchaserName: targetPo.purchaserName || resolvedPurchaserName,
+            sellerName: targetPo.sellerName || resolvedSellerName,
+            transportPrice: targetPo.transportPrice || resolvedTransportPrice,
+            origin: targetPo.origin || resolvedOrigin,
+            destination: targetPo.destination || resolvedDestination,
+            pickupDate: targetPo.pickupDate || resolvedPickupDate,
+            scheduledDate,
+            annex7Required: targetPo.annex7Required ?? resolvedAnnex7,
+            schedules: [...(existingMeta?.schedules || []), newSchedule],
+            scheduleItems: [...(existingMeta?.scheduleItems || []), ...newItems],
+            scheduleAttachments: existingMeta?.scheduleAttachments || [],
+          };
+
+          const serialized = serializeOrderNotes(cleanNotes, updatedMeta);
+          const upPoRes = await this.client.update<Record<string, unknown>>(
+            "purchase_orders",
+            `id=eq.${encodeURIComponent(targetPo.id)}`,
+            {
+              notes: serialized,
+              scheduled_date: scheduledDate,
+              assigned_worker_id: worker.id,
+              assigned_by: profile.id,
+              assigned_at: nowIso,
+              execution_status: "assigned",
+              updated_at: nowIso,
+            },
+            token,
+          );
+          if (!upPoRes.ok) {
+            error = upPoRes.error;
+            break;
+          }
+
+          // Also invoke rpc_create_operation_schedule if available in PostgREST
+          await this.client.rpc<Record<string, unknown>>(
             "rpc_create_operation_schedule",
             {
-              p_type: text(body.type) === "loading" ? "loading" : "unloading",
-              p_poso_number: text(body.poSoNumber).toUpperCase(),
-              p_partner_name: text(body.partnerName || body.supplier || body.customer || body.buyer),
-              p_warehouse_id: text(body.warehouseId || body.warehouse),
-              p_scheduled_date: text(body.scheduledDate),
-              p_assigned_worker_id: text(body.assignedWorkerId || body.workerId),
-              p_origin: text(body.origin),
-              p_destination: text(body.destination),
-              p_annex7_required: Boolean(body.annex7Required),
-              p_transport_price: num(body.transportPrice) || 0,
-              p_currency: text(body.currency) || "EUR",
-              p_pickup_date: text(body.pickupDate) || null,
-              p_purchaser_name: text(body.purchaserName) || null,
-              p_purchasing_price: num(body.purchasingPrice) || 0,
-              p_seller_name: text(body.sellerName) || null,
-              p_selling_price: num(body.sellingPrice) || 0,
+              p_type: schedType,
+              p_poso_number: targetPo.number,
+              p_partner_name: partnerName,
+              p_warehouse_id: warehouse.id,
+              p_scheduled_date: scheduledDate,
+              p_assigned_worker_id: worker.id,
+              p_origin: resolvedOrigin,
+              p_destination: resolvedDestination,
+              p_annex7_required: resolvedAnnex7,
+              p_transport_price: resolvedTransportPrice,
+              p_currency: resolvedCurrency,
+              p_pickup_date: resolvedPickupDate,
+              p_purchaser_name: resolvedPurchaserName,
+              p_purchasing_price: resolvedPurchasingPrice,
+              p_seller_name: resolvedSellerName,
+              p_selling_price: resolvedSellingPrice,
               p_instructions: text(body.instructions),
               p_items: Array.isArray(body.items) ? body.items : [],
               p_vehicle_registration_number: text(body.vehicleRegistrationNumber),
@@ -2335,8 +2693,8 @@ export class SupabaseAdapter {
             },
             token
           );
-          if (!rpcRes.ok) error = rpcRes.error;
-          else notice = String(rpcRes.value?.message || "Schedule created successfully.");
+
+          notice = `${scheduleNumber} was created successfully and assigned to ${worker.name}.`;
           break;
         }
         case "updateOperationSchedule":
@@ -2346,33 +2704,87 @@ export class SupabaseAdapter {
             break;
           }
           const schedId = text(body.id || body.scheduleId);
-          const patch: Record<string, unknown> = { updated_at: this.now() };
-          if (body.poSoNumber) patch.poso_number = text(body.poSoNumber).toUpperCase();
-          if (body.partnerName || body.supplier || body.customer) {
-            patch.partner_name = text(body.partnerName || body.supplier || body.customer);
+          const schedNum = text(body.scheduleNumber);
+          const ordersRes = await this.client.select<Record<string, unknown>>("purchase_orders", "select=*&order=created_at.asc", token);
+          let updatedInMeta = false;
+          if (ordersRes.ok) {
+            for (const rawRow of ordersRes.value) {
+              const { cleanNotes, meta } = parseOrderNotes(String(rawRow.notes ?? ""));
+              if (!meta?.schedules) continue;
+              const targetSched = meta.schedules.find((s) => s.id === schedId || (schedNum && s.scheduleNumber === schedNum));
+              if (!targetSched) continue;
+              if (targetSched.status === "completed") {
+                error = "Completed schedules cannot be edited.";
+                break;
+              }
+              if (body.poSoNumber) targetSched.poSoNumber = text(body.poSoNumber).toUpperCase();
+              if (body.partnerName || body.supplier || body.customer) {
+                targetSched.partnerName = text(body.partnerName || body.supplier || body.customer);
+              }
+              if (body.warehouseId) targetSched.warehouseId = text(body.warehouseId);
+              if (body.assignedWorkerId) targetSched.assignedWorkerId = text(body.assignedWorkerId);
+              if (body.scheduledDate) targetSched.scheduledDate = text(body.scheduledDate);
+              if (body.origin !== undefined) targetSched.origin = text(body.origin);
+              if (body.destination !== undefined) targetSched.destination = text(body.destination);
+              if (body.annex7Required !== undefined) targetSched.annex7Required = Boolean(body.annex7Required);
+              if (body.transportPrice !== undefined) targetSched.transportPrice = num(body.transportPrice) || 0;
+              if (body.currency !== undefined) targetSched.currency = text(body.currency) || "EUR";
+              if (body.pickupDate !== undefined) targetSched.pickupDate = text(body.pickupDate) || null;
+              if (body.purchaserName !== undefined) targetSched.purchaserName = text(body.purchaserName) || null;
+              if (body.purchasingPrice !== undefined) targetSched.purchasingPrice = num(body.purchasingPrice) || 0;
+              if (body.sellerName !== undefined) targetSched.sellerName = text(body.sellerName) || null;
+              if (body.sellingPrice !== undefined) targetSched.sellingPrice = num(body.sellingPrice) || 0;
+              if (body.instructions !== undefined) targetSched.instructions = text(body.instructions);
+              if (body.vehicleRegistrationNumber !== undefined) targetSched.vehicleRegistrationNumber = text(body.vehicleRegistrationNumber);
+              if (body.transportCompany !== undefined) targetSched.transportCompany = text(body.transportCompany);
+              if (body.driverName !== undefined) targetSched.driverName = text(body.driverName);
+              if (body.driverContactNumber !== undefined) targetSched.driverContactNumber = text(body.driverContactNumber);
+              if (body.cmrNumber !== undefined) targetSched.cmrNumber = text(body.cmrNumber);
+              targetSched.updatedAt = this.now();
+
+              const upRes = await this.client.update(
+                "purchase_orders",
+                `id=eq.${encodeURIComponent(String(rawRow.id))}`,
+                { notes: serializeOrderNotes(cleanNotes, meta), updated_at: this.now() },
+                token,
+              );
+              if (upRes.ok) {
+                updatedInMeta = true;
+                notice = `${targetSched.scheduleNumber} was updated successfully.`;
+              }
+              break;
+            }
           }
-          if (body.warehouseId) patch.warehouse_id = text(body.warehouseId);
-          if (body.assignedWorkerId) patch.assigned_worker_id = text(body.assignedWorkerId);
-          if (body.scheduledDate) patch.scheduled_date = text(body.scheduledDate);
-          if (body.origin !== undefined) patch.origin = text(body.origin);
-          if (body.destination !== undefined) patch.destination = text(body.destination);
-          if (body.annex7Required !== undefined) patch.annex7_required = Boolean(body.annex7Required);
-          if (body.transportPrice !== undefined) patch.transport_price = num(body.transportPrice) || 0;
-          if (body.currency !== undefined) patch.currency = text(body.currency) || "EUR";
-          if (body.pickupDate !== undefined) patch.pickup_date = text(body.pickupDate) || null;
-          if (body.purchaserName !== undefined) patch.purchaser_name = text(body.purchaserName) || null;
-          if (body.purchasingPrice !== undefined) patch.purchasing_price = num(body.purchasingPrice) || 0;
-          if (body.sellerName !== undefined) patch.seller_name = text(body.sellerName) || null;
-          if (body.sellingPrice !== undefined) patch.selling_price = num(body.sellingPrice) || 0;
-          if (body.instructions !== undefined) patch.instructions = text(body.instructions);
-          if (body.vehicleRegistrationNumber !== undefined) patch.vehicle_registration_number = text(body.vehicleRegistrationNumber);
-          if (body.transportCompany !== undefined) patch.transport_company = text(body.transportCompany);
-          if (body.driverName !== undefined) patch.driver_name = text(body.driverName);
-          if (body.driverContactNumber !== undefined) patch.driver_contact_number = text(body.driverContactNumber);
-          if (body.cmrNumber !== undefined) patch.cmr_number = text(body.cmrNumber);
-          const updateRes = await this.client.update("operation_schedules", `id=eq.${encodeURIComponent(schedId)}`, patch, token);
-          if (!updateRes.ok) error = updateRes.error;
-          else notice = "Schedule updated.";
+          if (error) break;
+          if (!updatedInMeta) {
+            const patch: Record<string, unknown> = { updated_at: this.now() };
+            if (body.poSoNumber) patch.poso_number = text(body.poSoNumber).toUpperCase();
+            if (body.partnerName || body.supplier || body.customer) {
+              patch.partner_name = text(body.partnerName || body.supplier || body.customer);
+            }
+            if (body.warehouseId) patch.warehouse_id = text(body.warehouseId);
+            if (body.assignedWorkerId) patch.assigned_worker_id = text(body.assignedWorkerId);
+            if (body.scheduledDate) patch.scheduled_date = text(body.scheduledDate);
+            if (body.origin !== undefined) patch.origin = text(body.origin);
+            if (body.destination !== undefined) patch.destination = text(body.destination);
+            if (body.annex7Required !== undefined) patch.annex7_required = Boolean(body.annex7Required);
+            if (body.transportPrice !== undefined) patch.transport_price = num(body.transportPrice) || 0;
+            if (body.currency !== undefined) patch.currency = text(body.currency) || "EUR";
+            if (body.pickupDate !== undefined) patch.pickup_date = text(body.pickupDate) || null;
+            if (body.purchaserName !== undefined) patch.purchaser_name = text(body.purchaserName) || null;
+            if (body.purchasingPrice !== undefined) patch.purchasing_price = num(body.purchasingPrice) || 0;
+            if (body.sellerName !== undefined) patch.seller_name = text(body.sellerName) || null;
+            if (body.sellingPrice !== undefined) patch.selling_price = num(body.sellingPrice) || 0;
+            if (body.instructions !== undefined) patch.instructions = text(body.instructions);
+            if (body.vehicleRegistrationNumber !== undefined) patch.vehicle_registration_number = text(body.vehicleRegistrationNumber);
+            if (body.transportCompany !== undefined) patch.transport_company = text(body.transportCompany);
+            if (body.driverName !== undefined) patch.driver_name = text(body.driverName);
+            if (body.driverContactNumber !== undefined) patch.driver_contact_number = text(body.driverContactNumber);
+            if (body.cmrNumber !== undefined) patch.cmr_number = text(body.cmrNumber);
+            const updateRes = await this.client.update("operation_schedules", `id=eq.${encodeURIComponent(schedId)}`, patch, token);
+            if (!updateRes.ok) error = updateRes.error;
+            else notice = "Schedule updated.";
+          }
           break;
         }
         case "assignScheduleWorker": {
@@ -3237,60 +3649,127 @@ export class SupabaseAdapter {
         create: async (input) => {
           const { actor, token } = await this.resolveActor(input.actorId);
           this.authorize(actor, "order:create");
+          const orderType = ((input.type || (input.number?.toUpperCase().startsWith("SO") ? "SO" : "PO")).toUpperCase() === "SO" ? "SO" : "PO") as "PO" | "SO";
           if (!input.supplier.trim() || !input.material.trim() || input.quantityKg < 0 || input.valueEur < 0) {
-            return fail("Supplier, material, quantity, and value are required.");
+            return fail(`${orderType === "SO" ? "Customer" : "Supplier"}, material, quantity, and value are required.`);
           }
+
+          const allOrdersRes = await this.client.select<Record<string, unknown>>(
+            "purchase_orders",
+            "select=*&order=created_at.asc",
+            token,
+          );
+          const rawRows = allOrdersRes.ok ? allOrdersRes.value : [];
+          const existingOrders = rawRows.map(mapPurchaseOrder);
+
+          const requestedNumber = input.number?.trim() || "";
+          if (requestedNumber) {
+            const dup = existingOrders.find((o) => !o.isRemoved && o.number.toLowerCase() === requestedNumber.toLowerCase());
+            if (dup) {
+              return fail(`That order number (${requestedNumber}) already exists.`);
+            }
+          }
+
+          let number = requestedNumber;
+          if (!number) {
+            const year = new Date(this.now()).getUTCFullYear() || 2026;
+            const prefix = orderType === "SO" ? "SO" : "PO";
+            let highest = 0;
+            const regex = new RegExp(`^${prefix}-${year}-(\\d{4,})$`, "i");
+            for (const po of existingOrders) {
+              const m = po.number.match(regex);
+              if (m) {
+                const v = parseInt(m[1], 10);
+                if (v > highest) highest = v;
+              }
+            }
+            for (const raw of rawRows) {
+              const m = String(raw.number ?? "").match(regex);
+              if (m) {
+                const v = parseInt(m[1], 10);
+                if (v > highest) highest = v;
+              }
+            }
+            let nextSeq = highest + 1;
+            const usedNumbers = new Set([
+              ...existingOrders.map((o) => o.number.toLowerCase()),
+              ...rawRows.map((r) => String(r.number ?? "").toLowerCase()),
+            ]);
+            while (usedNumbers.has(`${prefix}-${year}-${String(nextSeq).padStart(4, "0")}`.toLowerCase())) {
+              nextSeq += 1;
+            }
+            number = `${prefix}-${year}-${String(nextSeq).padStart(4, "0")}`;
+          }
+
+          const companyKind = orderType === "SO" ? "customer" : "supplier";
           const compRes = await this.client.insert<Record<string, unknown>>(
             "companies",
-            { name: input.supplier.trim(), kind: "supplier", active: true },
+            { name: input.supplier.trim(), kind: companyKind, active: true },
             token,
             { upsert: true, onConflict: "name,kind" },
           );
           if (!compRes.ok) return compRes;
+          const companyId = String(compRes.value?.id ?? randomUUID());
 
-          // Try atomic rpc_create_purchase_order first
-          const rpcRes = await this.client.rpc<{ order_id: string; number: string; title: string; status: string }>(
-            "rpc_create_purchase_order",
-            {
-              p_title: "",
-              p_custom_number: "",
-              p_company_id: String(compRes.value.id),
-              p_material_description: input.material.trim(),
-              p_quantity_kg: input.quantityKg,
-              p_value_eur: input.valueEur,
-              p_notes: "",
-            },
-            token,
-          );
-
-          if (rpcRes.ok && rpcRes.value?.order_id) {
-            const fetched = await this.client.select<Record<string, unknown>>(
-              "purchase_orders",
-              `id=eq.${rpcRes.value.order_id}`,
-              token,
-            );
-            if (fetched.ok && fetched.value.length > 0) {
-              return ok(mapPurchaseOrder(fetched.value[0]));
+          let warehouseId: string | null = null;
+          const whInput = (input.warehouseId || input.warehouse || "").trim();
+          if (whInput) {
+            const whRes = await this.client.select<Record<string, unknown>>("warehouses", "select=id,name", token);
+            if (whRes.ok) {
+              const foundWh = whRes.value.find(
+                (w) => String(w.id) === whInput || String(w.name ?? "").toLowerCase() === whInput.toLowerCase()
+              );
+              if (foundWh) warehouseId = String(foundWh.id);
+              else if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(whInput)) warehouseId = whInput;
             }
           }
 
-          const existingOrders = await this.services().purchaseOrders.list(input.actorId);
-          const number = `PO-${existingOrders.length + 1}`;
+          const title = input.title?.trim() || `${input.supplier.trim()} - ${input.material.trim()}`;
+          const meta: OrderMetadataEnvelope = {
+            number,
+            type: orderType,
+            currency: (input.currency || "EUR").toUpperCase(),
+            warehouseId,
+            purchaserName: input.purchaserName ?? null,
+            sellerName: input.sellerName ?? null,
+            transportPrice: Math.max(0, Number(input.transportPrice ?? 0)),
+            origin: input.origin ?? "",
+            destination: input.destination ?? "",
+            pickupDate: input.pickupDate ?? null,
+            scheduledDate: input.scheduledDate ?? null,
+            annex7Required: Boolean(input.annex7Required),
+            isRemoved: false,
+          };
+          const serializedNotes = serializeOrderNotes(input.notes ?? "", meta);
+
           const poRes = await this.client.insert<Record<string, unknown>>(
             "purchase_orders",
             {
               number,
-              company_id: String(compRes.value.id),
+              title,
+              company_id: companyId,
               status: "submitted",
               value_eur: input.valueEur,
-              currency: input.currency || "EUR",
-              notes: "",
+              notes: serializedNotes,
+              scheduled_date: input.scheduledDate || null,
               created_by: actor.id,
             },
             token,
           );
           if (!poRes.ok) return poRes;
-          const po = mapPurchaseOrder(poRes.value);
+          const po = mapPurchaseOrder(
+            poRes.value ?? {
+              id: randomUUID(),
+              number,
+              title,
+              company_id: companyId,
+              status: "submitted",
+              value_eur: input.valueEur,
+              notes: serializedNotes,
+              scheduled_date: input.scheduledDate || null,
+              created_by: actor.id,
+            }
+          );
 
           const lineRes = await this.client.insert<Record<string, unknown>>(
             "purchase_order_lines",
@@ -3334,53 +3813,257 @@ export class SupabaseAdapter {
         },
         edit: async (input) => {
           const { actor, token } = await this.resolveActor(input.actorId);
-          const existingList = await this.client.select<Record<string, unknown>>(
+          const allOrdersRes = await this.client.select<Record<string, unknown>>(
             "purchase_orders",
-            `select=*&number=eq.${encodeURIComponent(input.number)}`,
+            "select=*&order=created_at.asc",
             token,
           );
-          const existing = existingList.ok && existingList.value[0] ? mapPurchaseOrder(existingList.value[0]) : undefined;
+          const rawRows = allOrdersRes.ok ? allOrdersRes.value : [];
+          const mappedRows = rawRows.map((r) => ({ raw: r, po: mapPurchaseOrder(r) }));
+
+          const matched = (input.id ? mappedRows.find((e) => e.po.id === input.id) : undefined)
+            ?? mappedRows.find(
+              (e) =>
+                e.po.number.toLowerCase() === input.number.toLowerCase() ||
+                String(e.raw.number ?? "").toLowerCase() === input.number.toLowerCase()
+            );
+
+          const existing = matched?.po;
+          const rawRow = matched?.raw;
           this.authorize(actor, "order:edit", { status: existing?.status });
-          if (!existing) return fail("That purchase order does not exist.");
-          if (existing.status === "approved" || existing.status === "declined") {
-            return fail("Approved or declined purchase orders are locked and cannot be edited.");
+          if (!existing || !rawRow) return fail("That purchase order does not exist.");
+          if (existing.isRemoved) return fail("A removed PO/SO number entry cannot be edited.");
+
+          const requestedNewNumber = input.newNumber?.trim() || "";
+          const targetNumber = requestedNewNumber || existing.number;
+          if (requestedNewNumber && requestedNewNumber.toLowerCase() !== existing.number.toLowerCase()) {
+            const dup = mappedRows.find(
+              (e) =>
+                e.po.id !== existing.id &&
+                !e.po.isRemoved &&
+                (e.po.number.toLowerCase() === requestedNewNumber.toLowerCase() ||
+                  String(e.raw.number ?? "").toLowerCase() === requestedNewNumber.toLowerCase())
+            );
+            if (dup) {
+              return fail(`That order number (${requestedNewNumber}) already exists.`);
+            }
           }
 
+          const orderType = existing.type || (targetNumber.toUpperCase().startsWith("SO") ? "SO" : "PO");
+          const companyKind = orderType === "SO" ? "customer" : "supplier";
           const compRes = await this.client.insert<Record<string, unknown>>(
             "companies",
-            { name: input.supplier.trim(), kind: "supplier", active: true },
+            { name: input.supplier.trim(), kind: companyKind, active: true },
             token,
             { upsert: true, onConflict: "name,kind" },
           );
           if (!compRes.ok) return compRes;
+          const companyId = String(compRes.value?.id ?? existing.companyId ?? randomUUID());
 
-          const poRes = await this.client.update<Record<string, unknown>>(
+          let warehouseId = existing.warehouseId ?? null;
+          if (input.warehouseId !== undefined || input.warehouse !== undefined) {
+            const whInput = String(input.warehouseId ?? input.warehouse ?? "").trim();
+            if (!whInput) {
+              warehouseId = null;
+            } else {
+              const whRes = await this.client.select<Record<string, unknown>>("warehouses", "select=id,name", token);
+              if (whRes.ok) {
+                const foundWh = whRes.value.find(
+                  (w) => String(w.id) === whInput || String(w.name ?? "").toLowerCase() === whInput.toLowerCase()
+                );
+                if (foundWh) warehouseId = String(foundWh.id);
+                else if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(whInput)) warehouseId = whInput;
+              }
+            }
+          }
+
+          const { cleanNotes: oldCleanNotes, meta: oldMeta } = parseOrderNotes(String(rawRow.notes ?? ""));
+          const nextNotes = input.notes !== undefined ? input.notes : oldCleanNotes;
+          const nextCurrency = input.currency !== undefined ? (input.currency || "EUR").toUpperCase() : (existing.currency || "EUR");
+          const nextPurchaser = input.purchaserName !== undefined ? input.purchaserName : (existing.purchaserName ?? null);
+          const nextSeller = input.sellerName !== undefined ? input.sellerName : (existing.sellerName ?? null);
+          const nextTransportPrice = input.transportPrice !== undefined ? Math.max(0, Number(input.transportPrice)) : (existing.transportPrice ?? 0);
+          const nextOrigin = input.origin !== undefined ? input.origin : (existing.origin ?? "");
+          const nextDestination = input.destination !== undefined ? input.destination : (existing.destination ?? "");
+          const nextPickupDate = input.pickupDate !== undefined ? input.pickupDate : (existing.pickupDate ?? null);
+          const nextScheduledDate = input.scheduledDate !== undefined ? input.scheduledDate : (existing.scheduledDate ?? null);
+          const nextAnnex7 = input.annex7Required !== undefined ? Boolean(input.annex7Required) : Boolean(existing.annex7Required);
+
+          // Synchronize linked non-completed schedules while preserving completed schedules' historical snapshots
+          const nowIso = this.now();
+          const syncedSchedules = (oldMeta?.schedules || []).map((sched) => {
+            if (sched.status === "completed") {
+              return { ...sched, purchaseOrderId: existing.id };
+            }
+            return {
+              ...sched,
+              purchaseOrderId: existing.id,
+              poSoNumber: targetNumber,
+              partnerName: input.supplier.trim(),
+              companyId,
+              warehouseId: warehouseId || sched.warehouseId,
+              origin: input.origin !== undefined ? nextOrigin : sched.origin,
+              destination: input.destination !== undefined ? nextDestination : sched.destination,
+              annex7Required: input.annex7Required !== undefined ? nextAnnex7 : sched.annex7Required,
+              transportPrice: input.transportPrice !== undefined ? nextTransportPrice : sched.transportPrice,
+              currency: input.currency !== undefined ? nextCurrency : sched.currency,
+              pickupDate: input.pickupDate !== undefined ? nextPickupDate : sched.pickupDate,
+              purchaserName: input.purchaserName !== undefined ? nextPurchaser : sched.purchaserName,
+              sellerName: input.sellerName !== undefined ? nextSeller : sched.sellerName,
+              purchasingPrice: orderType === "PO" ? input.valueEur : sched.purchasingPrice,
+              sellingPrice: orderType === "SO" ? input.valueEur : sched.sellingPrice,
+              scheduledDate: (input.scheduledDate !== undefined && nextScheduledDate) ? nextScheduledDate : sched.scheduledDate,
+              updatedAt: nowIso,
+            };
+          });
+
+          const updatedMeta: OrderMetadataEnvelope = {
+            ...(oldMeta || {}),
+            number: targetNumber,
+            type: orderType,
+            currency: nextCurrency,
+            warehouseId,
+            purchaserName: nextPurchaser,
+            sellerName: nextSeller,
+            transportPrice: nextTransportPrice,
+            origin: nextOrigin,
+            destination: nextDestination,
+            pickupDate: nextPickupDate,
+            scheduledDate: nextScheduledDate,
+            annex7Required: nextAnnex7,
+            isRemoved: false,
+            schedules: syncedSchedules,
+          };
+
+          const serializedNotes = serializeOrderNotes(nextNotes, updatedMeta);
+          const updatePayload: Record<string, unknown> = {
+            company_id: companyId,
+            value_eur: input.valueEur,
+            notes: serializedNotes,
+            updated_at: nowIso,
+          };
+          if (input.title !== undefined && input.title.trim()) {
+            updatePayload.title = input.title.trim();
+          }
+          if (input.scheduledDate !== undefined) {
+            updatePayload.scheduled_date = nextScheduledDate;
+          }
+
+          let poRes = await this.client.update<Record<string, unknown>>(
+            "purchase_orders",
+            `id=eq.${encodeURIComponent(existing.id)}`,
+            targetNumber !== String(rawRow.number ?? "")
+              ? { ...updatePayload, number: targetNumber }
+              : updatePayload,
+            token,
+          );
+          if (!poRes.ok && targetNumber !== String(rawRow.number ?? "")) {
+            // Legacy trigger fallback: keep base column `number` and persist `targetNumber` in `meta.number`
+            poRes = await this.client.update<Record<string, unknown>>(
+              "purchase_orders",
+              `id=eq.${encodeURIComponent(existing.id)}`,
+              updatePayload,
+              token,
+            );
+          }
+          if (!poRes.ok) return poRes;
+
+          const existingLines = await this.client.select<Record<string, unknown>>(
+            "purchase_order_lines",
+            `select=id&purchase_order_id=eq.${encodeURIComponent(existing.id)}`,
+            token,
+          );
+          if (existingLines.ok && existingLines.value.length > 0) {
+            await this.client.update<Record<string, unknown>>(
+              "purchase_order_lines",
+              `purchase_order_id=eq.${encodeURIComponent(existing.id)}`,
+              {
+                description: input.material.trim(),
+                quantity_kg: input.quantityKg,
+              },
+              token,
+            );
+          } else {
+            await this.client.insert<Record<string, unknown>>(
+              "purchase_order_lines",
+              {
+                purchase_order_id: existing.id,
+                material_id: null,
+                description: input.material.trim(),
+                quantity_kg: input.quantityKg,
+              },
+              token,
+            );
+          }
+
+          return ok(mapPurchaseOrder(poRes.value ?? { ...rawRow, ...updatePayload, number: targetNumber }));
+        },
+        delete: async (input) => {
+          const { actor, token } = await this.resolveActor(input.actorId);
+          this.authorize(actor, "order:delete");
+
+          const allOrdersRes = await this.client.select<Record<string, unknown>>(
+            "purchase_orders",
+            "select=*&order=created_at.asc",
+            token,
+          );
+          const rawRows = allOrdersRes.ok ? allOrdersRes.value : [];
+          const mappedRows = rawRows.map((r) => ({ raw: r, po: mapPurchaseOrder(r) }));
+
+          const matched = (input.id ? mappedRows.find((e) => e.po.id === input.id) : undefined)
+            ?? mappedRows.find(
+              (e) =>
+                e.po.number.toLowerCase() === input.number.toLowerCase() ||
+                String(e.raw.number ?? "").toLowerCase() === input.number.toLowerCase()
+            );
+
+          if (!matched) {
+            return fail(`Order ${input.number || input.id} does not exist.`);
+          }
+
+          const { raw: rawRow, po: existing } = matched;
+          if (existing.isRemoved) {
+            return fail(`Order ${existing.number} has already been removed.`);
+          }
+
+          const nowIso = this.now();
+          const { cleanNotes, meta: oldMeta } = parseOrderNotes(String(rawRow.notes ?? ""));
+          const updatedMeta: OrderMetadataEnvelope = {
+            ...(oldMeta || {}),
+            number: existing.number,
+            type: existing.type,
+            currency: existing.currency,
+            warehouseId: existing.warehouseId,
+            purchaserName: existing.purchaserName ?? null,
+            sellerName: existing.sellerName ?? null,
+            transportPrice: existing.transportPrice ?? 0,
+            origin: existing.origin ?? "",
+            destination: existing.destination ?? "",
+            pickupDate: existing.pickupDate ?? null,
+            scheduledDate: existing.scheduledDate ?? null,
+            annex7Required: Boolean(existing.annex7Required),
+            isRemoved: true,
+            removedAt: nowIso,
+            removedBy: actor.id,
+          };
+
+          const serializedNotes = serializeOrderNotes(
+            cleanNotes || `Order removed by ${actor.name} on ${nowIso}. Operational history preserved.`,
+            updatedMeta,
+          );
+
+          const updRes = await this.client.update<Record<string, unknown>>(
             "purchase_orders",
             `id=eq.${encodeURIComponent(existing.id)}`,
             {
-              company_id: String(compRes.value.id),
-              value_eur: input.valueEur,
-              updated_at: this.now(),
+              notes: serializedNotes,
+              updated_at: nowIso,
             },
             token,
           );
-          if (!poRes.ok) return poRes;
 
-          await this.client.update<Record<string, unknown>>(
-            "purchase_order_lines",
-            `purchase_order_id=eq.${encodeURIComponent(existing.id)}`,
-            {
-              description: input.material.trim(),
-              quantity_kg: input.quantityKg,
-            },
-            token,
-          );
-          return ok(mapPurchaseOrder(poRes.value));
-        },
-        delete: async (input) => {
-          const { actor } = await this.resolveActor(input.actorId);
-          this.authorize(actor, "order:delete");
-          return fail("Operational PO/SO records cannot be deleted.");
+          if (!updRes.ok) return updRes;
+          return ok(mapPurchaseOrder(updRes.value ?? { ...rawRow, notes: serializedNotes, updated_at: nowIso }));
         },
       },
 

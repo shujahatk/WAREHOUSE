@@ -296,17 +296,18 @@ export class LocalAdapter {
           }),
         edit: async (input) =>
           this.withActor(input.actorId, (store, actor) => {
-            const existing = store.purchaseOrders.find((item) => item.number === input.number);
+            const existing = store.purchaseOrders.find((item) => item.id === input.id || item.number === input.number);
             authorize(actor, "order:edit", { status: existing?.status });
             const result = applyCommand(store, actor, "editPurchase", input, now());
             if (result.error) return { ok: false as const, error: result.error };
-            const order = store.purchaseOrders.find((item) => item.number === input.number);
+            const targetNumber = input.newNumber || input.number;
+            const order = store.purchaseOrders.find((item) => item.id === input.id || item.number === targetNumber);
             return order ? { ok: true as const, value: order } : { ok: false as const, error: "Order was not updated." };
           }),
         delete: async (input) =>
           this.withActor(input.actorId, (store, actor) => {
             authorize(actor, "order:delete");
-            return deletePurchaseOrder(store, input.number, actor, now());
+            return deletePurchaseOrder(store, input.id || input.number, actor, now());
           }),
       },
       shipments: {

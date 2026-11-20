@@ -27,8 +27,56 @@ export type WorkspaceApi = {
   signOut: () => Promise<void>;
   approve: (number: string) => Text;
   reject: (number: string) => Text;
-  editPurchase: (number: string, draft: { supplier?: string; customer?: string; partner?: string; material: string; quantityKg: number; valueEur: number; currency?: string; title?: string; notes?: string; warehouseId?: string | null }) => Text;
-  createPurchase: (draft: { supplier?: string; customer?: string; partner?: string; material: string; quantityKg: number; valueEur: number; currency?: string; title?: string; number?: string; notes?: string; type?: "PO" | "SO"; warehouseId?: string | null }) => Text;
+  editPurchase: (
+    number: string,
+    draft: {
+      id?: string;
+      newNumber?: string;
+      supplier?: string;
+      customer?: string;
+      partner?: string;
+      purchaserName?: string | null;
+      sellerName?: string | null;
+      material: string;
+      quantityKg: number;
+      valueEur: number;
+      transportPrice?: number;
+      currency?: string;
+      origin?: string;
+      destination?: string;
+      warehouse?: string | null;
+      warehouseId?: string | null;
+      pickupDate?: string | null;
+      scheduledDate?: string | null;
+      annex7Required?: boolean;
+      title?: string;
+      notes?: string;
+    }
+  ) => Text;
+  createPurchase: (draft: {
+    supplier?: string;
+    customer?: string;
+    partner?: string;
+    purchaserName?: string | null;
+    sellerName?: string | null;
+    material: string;
+    quantityKg: number;
+    valueEur: number;
+    transportPrice?: number;
+    currency?: string;
+    origin?: string;
+    destination?: string;
+    warehouse?: string | null;
+    warehouseId?: string | null;
+    pickupDate?: string | null;
+    scheduledDate?: string | null;
+    annex7Required?: boolean;
+    title?: string;
+    number?: string;
+    notes?: string;
+    type?: "PO" | "SO";
+  }) => Text;
+  deletePurchase: (numberOrId: string) => Text;
   removePoSoNumber: (number: string) => Text;
   unload: (number: string) => Text;
   dispatch: (number: string) => Text;
@@ -319,8 +367,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       },
       approve: (number) => run("approve", { number }),
       reject: (number) => run("reject", { number }),
-      editPurchase: (number, draft) => run("editPurchase", { number, ...draft }),
+      editPurchase: (number, draft) => run("editPurchase", { number, originalNumber: number, ...draft }),
       createPurchase: (draft) => run("createPurchase", draft),
+      deletePurchase: (numberOrId) => run("deletePurchase", { number: numberOrId, id: numberOrId }),
       removePoSoNumber: (number) => run("removePoSoNumber", { number }),
       unload: (number) => run("unload", { number }),
       dispatch: (number) => run("dispatch", { number }),

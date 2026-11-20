@@ -201,9 +201,10 @@ export function can(
   if (user.role === "manager") {
     switch (action) {
       case "order:create":
+      case "order:delete":
         return true;
       case "order:edit":
-        return resource?.status !== "declined";
+        return true;
       case "order:view":
       case "supplier:manage":
       case "customer:manage":
@@ -230,7 +231,6 @@ export function can(
         return resource?.status !== "completed" && resource?.status !== "deleted";
       // Explicitly denied for Staff:
       case "report:view":
-      case "order:delete":
       case "order:reject":
       case "order:approve":
       case "request:delete":

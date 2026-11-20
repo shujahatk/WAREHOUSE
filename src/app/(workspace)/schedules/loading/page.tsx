@@ -20,10 +20,20 @@ export default function LoadingSchedulePage() {
   const [editingSchedule, setEditingSchedule] = useState<OperationScheduleView | null>(null);
   const [selectedSchedule, setSelectedSchedule] = useState<OperationScheduleView | null>(null);
 
-  // Loading schedules only
+  const isWorker = identity.role === "worker";
+
+  // Loading schedules only (strictly scoped to assigned worker if Worker role)
   const loadingSchedules = useMemo(() => {
-    return (state.schedules || []).filter((s) => s.type === "loading");
-  }, [state.schedules]);
+    return (state.schedules || []).filter((s) => {
+      if (s.type !== "loading") return false;
+      if (isWorker) {
+        const matchId = Boolean(s.assignedWorkerId && identity.id && s.assignedWorkerId === identity.id);
+        const matchName = Boolean(s.assignedWorkerName && identity.name && s.assignedWorkerName.toLowerCase() === identity.name.toLowerCase());
+        return matchId || matchName;
+      }
+      return true;
+    });
+  }, [state.schedules, isWorker, identity.id, identity.name]);
 
   // KPIs
   const scheduledCount = loadingSchedules.filter((s) => s.status === "scheduled").length;
