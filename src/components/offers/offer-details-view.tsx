@@ -212,7 +212,7 @@ export function OfferDetailsView({
       <div className="flex flex-col gap-4 border-b border-neutral-200/90 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-xs text-neutral-500 font-medium">
-            <Link href="/offers" className="hover:text-neutral-900 transition">
+            <Link href="/offers/purchasing" className="hover:text-neutral-900 transition">
               Offers Portal
             </Link>
             <span>/</span>

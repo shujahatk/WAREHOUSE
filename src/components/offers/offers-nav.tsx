@@ -29,12 +29,6 @@ export function OffersNav({
 
   const tabs = [
     {
-      href: "/offers",
-      label: isOffersUser ? "Offers Portal Overview" : "Command Dashboard",
-      count: undefined,
-      description: "KPI metrics & trading summary",
-    },
-    {
       href: "/offers/purchasing",
       label: "Purchasing Offers",
       count: purchasingCount,

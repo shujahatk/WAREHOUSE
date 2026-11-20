@@ -64,6 +64,8 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
   assert.equal(allNavHrefs.includes("/roadmap"), false);
   assert.equal(allNavHrefs.includes("/chat"), false);
   assert.equal(allNavHrefs.includes("/sales"), false);
+  assert.equal(allNavHrefs.includes("/warehouses"), false); // Standalone Warehouses removed from all roles
+  assert.equal(allNavHrefs.includes("/offers"), false); // Standalone Offers Dashboard removed from all roles
 
   // Verify removed modules cannot be accessed by direct URL for ANY role
   for (const role of ["owner", "manager", "worker", "moderator", "customer", "management", "data-entry"] as const) {
@@ -71,6 +73,7 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
     assert.equal(canAccess(role, "/chat"), false);
     assert.equal(canAccess(role, "/chat/PO213344"), false);
     assert.equal(canAccess(role, "/sales"), false);
+    assert.equal(canAccess(role, "/warehouses"), false);
   }
 
   // Admin (owner) has full route access across all active modules & Administration, including Offers
@@ -86,7 +89,7 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
   assert.equal(canAccess("owner", "/inventory"), true);
   assert.equal(canAccess("owner", "/stock-movements"), true);
   assert.equal(canAccess("owner", "/transfers"), true);
-  assert.equal(canAccess("owner", "/warehouses"), true);
+  assert.equal(canAccess("owner", "/warehouses"), false); // Standalone Warehouses removed for all roles
   assert.equal(canAccess("owner", "/suppliers"), true);
   assert.equal(canAccess("owner", "/customers"), true);
   assert.equal(canAccess("owner", "/materials"), true);

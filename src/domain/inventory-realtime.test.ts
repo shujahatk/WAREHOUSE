@@ -488,6 +488,8 @@ test("6. Sidebar role boundaries: Staff restricted to Main & Operations; Admin r
   assert.equal(adminHrefs.includes("/reports"), true, "Reports must remain for Admin");
   assert.equal(adminHrefs.includes("/audit"), true, "Audit Log must remain for Admin");
   assert.equal(adminHrefs.includes("/settings"), true, "Settings must remain for Admin");
+  assert.equal(adminHrefs.includes("/warehouses"), false, "Standalone Warehouses must be removed for Admin");
+  assert.equal(adminHrefs.includes("/offers"), false, "Standalone Offers Dashboard must be removed for Admin");
 
   // Navigation filtering for Staff (manager)
   const staffSections = navSections

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { useSession } from "@/components/shell/auth-gate";
 import { OffersNav } from "@/components/offers/offers-nav";
-import { OffersStats, type OfferFilterKey } from "@/components/offers/offers-stats";
+import type { OfferFilterKey } from "@/components/offers/offers-stats";
 import { OffersTable } from "@/components/offers/offers-table";
 import { OfferQuickViewDrawer } from "@/components/offers/offer-quick-view-drawer";
 import { OfferFormModal } from "@/components/offers/offer-form-modal";
@@ -120,65 +120,90 @@ export default function PurchasingOffersPage() {
         </div>
       ) : null}
 
-      {/* 2. Key Purchasing Sourcing KPI Metrics Bar */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-            Total Sourced Value
+      {/* 2. Streamlined Summary & Filter Bar */}
+      <div className="flex flex-col gap-4 rounded-xl border border-neutral-200/90 bg-white p-4 shadow-2xs">
+        {/* Compact Key Metric Chips */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 pb-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1 font-medium text-neutral-700 border border-neutral-200/70">
+              <span className="text-neutral-400">Total Sourced:</span>
+              <strong className="font-mono text-neutral-900">{formatCurrencySummary(metrics.currencyTotals)}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 font-medium text-emerald-800 border border-emerald-200/70">
+              <span className="text-emerald-600">Volume:</span>
+              <strong className="font-mono">{(metrics.totalQty / 1000).toFixed(1)} MT</strong>
+              <span className="text-[10px] text-emerald-600">({metrics.truckLoads} loads)</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1 font-medium text-neutral-700 border border-neutral-200/70">
+              <span className="text-neutral-400">Avg Price:</span>
+              <strong className="font-mono text-neutral-900">€{metrics.avgPrice.toFixed(2)}/kg</strong>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1 font-medium text-neutral-700 border border-neutral-200/70">
+              <span className="text-neutral-400">Origins:</span>
+              <strong className="text-neutral-900">{metrics.countriesCount} Countries</strong>
+            </span>
+          </div>
+
+          <span className="text-xs text-neutral-400 font-medium">
+            {purchasingOffers.length} Total Offers
           </span>
-          <p className="mt-1 text-xl font-black text-neutral-950 font-mono">
-            {formatCurrencySummary(metrics.currencyTotals)}
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-400">
-            Across {purchasingOffers.length} supplier proposals
-          </p>
         </div>
 
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-            Material Sourcing Volume
-          </span>
-          <p className="mt-1 text-2xl font-black text-emerald-800 font-mono">
-            {(metrics.totalQty / 1000).toFixed(1)} MT
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-400">
-            {metrics.truckLoads} full truckloads sourced
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-            Average Sourced Price
-          </span>
-          <p className="mt-1 text-2xl font-black text-neutral-950 font-mono">
-            €{metrics.avgPrice.toFixed(2)}
-            <span className="text-xs font-normal text-neutral-500 ml-1">/ kg</span>
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-400">
-            Weighted across active grades
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-            Supplier Geography
-          </span>
-          <p className="mt-1 text-2xl font-black text-neutral-950 font-mono">
-            {metrics.countriesCount} Countries
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-400">
-            Origin freight logistics network
-          </p>
+        {/* Interactive Status Filter Pills */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { key: "all", label: "All Offers", count: purchasingOffers.length },
+            {
+              key: "pending",
+              label: "Pending",
+              count: purchasingOffers.filter((o) => o.statusKey === "draft" || o.statusKey === "received").length,
+            },
+            {
+              key: "under_review",
+              label: "Under Review",
+              count: purchasingOffers.filter((o) => o.statusKey === "under_review").length,
+            },
+            {
+              key: "negotiating",
+              label: "Negotiating",
+              count: purchasingOffers.filter((o) => o.statusKey === "negotiating").length,
+            },
+            {
+              key: "won",
+              label: "Won / Sold",
+              count: purchasingOffers.filter((o) => o.statusKey === "won" || o.statusKey === "accepted" || o.statusKey === "sold" || Boolean(o.soldAt)).length,
+            },
+            {
+              key: "lost",
+              label: "Lost",
+              count: purchasingOffers.filter((o) => o.statusKey === "lost").length,
+            },
+          ].map((pill) => {
+            const active = activeFilter === pill.key;
+            return (
+              <button
+                key={pill.key}
+                type="button"
+                onClick={() => setActiveFilter(pill.key as OfferFilterKey)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+                  active
+                    ? "bg-neutral-900 text-white shadow-2xs font-semibold"
+                    : "bg-neutral-100/80 text-neutral-600 hover:bg-neutral-200/70 hover:text-neutral-900"
+                }`}
+              >
+                <span>{pill.label}</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                    active ? "bg-neutral-800 text-neutral-200" : "bg-neutral-200/80 text-neutral-600"
+                  }`}
+                >
+                  {pill.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
-
-      {/* 3. Status Filter Cards */}
-      <OffersStats
-        offers={purchasingOffers}
-        activeFilter={activeFilter}
-        onSelectFilter={(f) => setActiveFilter(f)}
-        title="Purchasing Pipeline & Verification Velocity"
-      />
 
       {/* 4. Purchasing Data Grid */}
       <section className="space-y-4">

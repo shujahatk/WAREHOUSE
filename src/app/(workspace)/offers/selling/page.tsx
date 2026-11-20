@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
 import { useSession } from "@/components/shell/auth-gate";
 import { OffersNav } from "@/components/offers/offers-nav";
-import { OffersStats, type OfferFilterKey } from "@/components/offers/offers-stats";
+import type { OfferFilterKey } from "@/components/offers/offers-stats";
 import { OffersTable } from "@/components/offers/offers-table";
 import { OfferQuickViewDrawer } from "@/components/offers/offer-quick-view-drawer";
 import { SellingOfferModal } from "@/components/offers/selling-offer-modal";
@@ -195,64 +195,33 @@ export default function SellingOffersPage() {
         </div>
       ) : null}
 
-      {/* 2. Key Selling Margins & Pipeline Metrics Bar */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-            Active Sales Pipeline Value
+      {/* 2. Streamlined Sales Summary Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200/90 bg-white p-3.5 shadow-2xs">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1 font-medium text-neutral-700 border border-neutral-200/70">
+            <span className="text-neutral-400">Active Pipeline:</span>
+            <strong className="font-mono text-neutral-900">{formatCurrencySummary(metrics.activePipelineTotals)}</strong>
           </span>
-          <p className="mt-1 text-xl font-black text-neutral-950 font-mono">
-            {formatCurrencySummary(metrics.activePipelineTotals)}
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-400">
-            {metrics.approvedActive} approved &bull; open client proposals
-          </p>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 font-medium text-emerald-800 border border-emerald-200/70">
+            <span className="text-emerald-600">Estimated Margins:</span>
+            <strong className="font-mono">
+              {metrics.totalMarginEur >= 0 ? "+" : ""}€{metrics.totalMarginEur.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 font-medium text-amber-800 border border-amber-200/70">
+            <span className="text-amber-600">Pending Review:</span>
+            <strong>{metrics.pendingReviews} Offers</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1 font-medium text-neutral-700 border border-neutral-200/70">
+            <span className="text-neutral-400">Closed Sold:</span>
+            <strong className="font-mono text-neutral-900">{formatCurrencySummary(metrics.soldTotals)}</strong>
+          </span>
         </div>
 
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-            Estimated Sourced Margins
-          </span>
-          <p className="mt-1 text-2xl font-black text-emerald-800 font-mono">
-            {metrics.totalMarginEur >= 0 ? "+" : ""}€{metrics.totalMarginEur.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-400">
-            Calculated across {metrics.marginDealsCount} linked PO proposals
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-            Pending Admin Reviews
-          </span>
-          <p className="mt-1 text-2xl font-black text-amber-700 font-mono">
-            {metrics.pendingReviews} Offers
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-400">
-            Awaiting executive pricing clearance
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-4.5 shadow-2xs">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-            Closed Sold Volume
-          </span>
-          <p className="mt-1 text-xl font-black text-neutral-950 font-mono">
-            {formatCurrencySummary(metrics.soldTotals)}
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-400">
-            Commercial agreements finalized
-          </p>
-        </div>
+        <span className="text-xs text-neutral-400 font-medium">
+          {sellingOffers.length} Total Selling Offers
+        </span>
       </div>
-
-      {/* 3. Status Filter Cards */}
-      <OffersStats
-        offers={sellingOffers}
-        activeFilter={activeKpiFilter}
-        onSelectFilter={(f) => setActiveKpiFilter(f)}
-        title="Sales Velocity & Conversion Statistics"
-      />
 
       {/* 4. Selling Desk Data Grid with Preset Status Tabs */}
       <section className="space-y-4">

@@ -46,10 +46,10 @@ export default function OfferDetailPage() {
           The requested offer does not exist or may have been deleted.
         </p>
         <Link
-          href="/offers"
+          href="/offers/purchasing"
           className="mt-4 inline-block rounded-lg bg-neutral-950 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800"
         >
-          &larr; Back to Offers Dashboard
+          &larr; Back to Offers Catalog
         </Link>
       </div>
     );
@@ -72,7 +72,7 @@ export default function OfferDetailPage() {
             You do not have permission to view other users&apos; selling proposals. Offers Users can only view published purchasing offers and track their own submitted proposals.
           </p>
           <Link
-            href="/offers"
+            href="/offers/purchasing"
             className="mt-4 inline-block rounded-lg bg-neutral-950 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800"
           >
             &larr; Back to Offers Portal

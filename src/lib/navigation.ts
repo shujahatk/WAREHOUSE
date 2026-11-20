@@ -43,13 +43,11 @@ export const navSections: NavSection[] = [
       { href: "/inventory", label: "Inventory", icon: "inventory", roles: ["owner", "worker"] },
       { href: "/stock-movements", label: "Stock Movements", icon: "movements", roles: ["owner", "worker"] },
       { href: "/transfers", label: "Transfers", icon: "transfers", roles: ADMIN },
-      { href: "/warehouses", label: "Warehouses", icon: "warehouses", roles: ADMIN },
     ],
   },
   {
     title: "Offers",
     items: [
-      { href: "/offers", label: "Offers Dashboard", icon: "dashboard", roles: OFFERS_ROLES },
       { href: "/offers/purchasing", label: "Purchasing Offers", icon: "purchases", roles: OFFERS_ROLES },
       { href: "/offers/selling", label: "Selling Offers", icon: "sales", roles: OFFERS_INTERNAL_ONLY },
       { href: "/offers/sold", label: "Sold", icon: "check", roles: OFFERS_INTERNAL_ONLY },
@@ -87,7 +85,7 @@ export const mobileTabs: NavItem[] = [
   { href: "/schedules/unloading", label: "Unloading", icon: "containers", roles: WAREHOUSE_OPS },
   { href: "/schedules/loading", label: "Loading", icon: "outbound", roles: WAREHOUSE_OPS },
   { href: "/verification", label: "Verify", icon: "check", roles: OFFICE },
-  { href: "/offers", label: "Offers", icon: "dashboard", roles: OFFERS_ROLES },
+  { href: "/offers/purchasing", label: "Offers", icon: "purchases", roles: OFFERS_ROLES },
 ];
 
 export const moreNav: NavItem[] = navSections
@@ -96,6 +94,6 @@ export const moreNav: NavItem[] = navSections
 
 export function navActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
-  if (href === "/offers") return pathname === "/offers";
+  if (href === "/offers/purchasing") return pathname === "/offers/purchasing" || pathname === "/offers";
   return pathname === href || pathname.startsWith(`${href}/`);
 }

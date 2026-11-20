@@ -51,7 +51,7 @@ export function LoginForm() {
         bc.close();
       } catch {}
       if (result.role === "offers_user") {
-        router.replace("/offers");
+        router.replace("/offers/purchasing");
       } else {
         router.replace("/dashboard");
       }
