@@ -404,8 +404,10 @@ export const stockMovementSchema = z.object({
   warehouseId: id,
   weightKg: z.number().refine((value) => Number.isFinite(value) && value > 0, "A stock movement must be greater than zero kilograms."),
   direction: movementDirectionSchema,
-  requestId: id,
-  requestLineId: id,
+  requestId: id.optional().nullable(),
+  requestLineId: id.optional().nullable(),
+  scheduleId: id.optional().nullable(),
+  scheduleItemId: id.optional().nullable(),
   createdAt: stamp,
   createdBy: id,
 });
@@ -524,6 +526,120 @@ export const blobSchema = z.object({
   bytesBase64: z.string(),
 });
 
+export const operationScheduleTypeSchema = z.enum(["unloading", "loading"]);
+export type OperationScheduleType = z.infer<typeof operationScheduleTypeSchema>;
+
+export const operationScheduleStatusSchema = z.enum([
+  "scheduled",
+  "in_progress",
+  "draft",
+  "submitted",
+  "returned_for_correction",
+  "resubmitted",
+  "completed",
+]);
+export type OperationScheduleStatus = z.infer<typeof operationScheduleStatusSchema>;
+
+export const operationScheduleItemSchema = z.object({
+  id,
+  scheduleId: id,
+  materialId: id,
+  materialName: label,
+  packagingTypeId: id,
+  packagingTypeName: label,
+  packageCount: z.number().int().positive("Package count must be greater than zero."),
+  tarePerPackageKg: z.number().nonnegative("Tare per package must be zero or greater."),
+  totalTareWeightKg: z.number().nonnegative("Total tare weight must be zero or greater."),
+  grossWeightKg: z.number().nonnegative("Gross weight must be zero or greater."),
+  netWeightKg: z.number().nonnegative("Net weight must be zero or greater."),
+  createdAt: stamp,
+  updatedAt: stamp,
+});
+export type OperationScheduleItem = z.infer<typeof operationScheduleItemSchema>;
+
+export const operationScheduleAttachmentKindSchema = z.enum([
+  "material_photo",
+  "packaging_photo",
+  "before_loading_photo",
+  "during_loading_photo",
+  "loaded_vehicle_photo",
+  "weighbridge_ticket",
+  "delivery_document",
+  "cmr_document",
+  "annex_vii",
+  "other",
+  "photo",
+  "document",
+  "weight_ticket",
+  "cmr",
+  "cargo",
+  "seal",
+  "damage",
+]);
+export type OperationScheduleAttachmentKind = z.infer<typeof operationScheduleAttachmentKindSchema>;
+
+export const operationScheduleAttachmentSchema = z.object({
+  id,
+  scheduleId: id,
+  documentId: id.nullable().default(null),
+  name: label,
+  kind: operationScheduleAttachmentKindSchema.default("photo"),
+  url: z.string().min(1),
+  size: z.number().int().nonnegative().default(0),
+  mime: z.string().default("application/octet-stream"),
+  uploadedBy: id,
+  uploadedByName: z.string().default(""),
+  uploadedAt: stamp,
+});
+export type OperationScheduleAttachment = z.infer<typeof operationScheduleAttachmentSchema>;
+
+export const operationScheduleSchema = z.object({
+  id,
+  scheduleNumber: label,
+  type: operationScheduleTypeSchema,
+  poSoNumber: label,
+  purchaseOrderId: id.nullable().default(null),
+  shipmentId: id.nullable().default(null),
+  partnerName: label,
+  companyId: id.nullable().default(null),
+  warehouseId: id,
+  origin: z.string().default(""),
+  destination: z.string().default(""),
+  annex7Required: z.boolean().default(false),
+  transportPrice: z.number().nonnegative().default(0),
+  currency: z.string().default("EUR"),
+  pickupDate: z.string().nullable().default(null),
+  purchaserName: z.string().nullable().default(null),
+  purchasingPrice: z.number().nonnegative().default(0),
+  sellerName: z.string().nullable().default(null),
+  sellingPrice: z.number().nonnegative().default(0),
+  scheduledDate: z.string(),
+  assignedWorkerId: id,
+  assignedWorkerName: z.string().default(""),
+  vehicleRegistrationNumber: z.string().default(""),
+  transportCompany: z.string().default(""),
+  driverName: z.string().default(""),
+  driverContactNumber: z.string().default(""),
+  cmrNumber: z.string().default(""),
+  actualArrivalTime: z.string().nullable().default(null),
+  status: operationScheduleStatusSchema.default("scheduled"),
+  instructions: z.string().default(""),
+  workerRemarks: z.string().default(""),
+  returnReason: z.string().nullable().default(null),
+  infoRequestNote: z.string().nullable().default(null),
+  actualStartTime: z.string().nullable().default(null),
+  actualEndTime: z.string().nullable().default(null),
+  submittedAt: stamp.nullable().default(null),
+  verifiedAt: stamp.nullable().default(null),
+  verifiedBy: id.nullable().default(null),
+  verifiedByName: z.string().nullable().default(null),
+  createdAt: stamp,
+  updatedAt: stamp,
+  createdBy: id,
+  createdByName: z.string().default(""),
+});
+export type OperationSchedule = z.infer<typeof operationScheduleSchema>;
+
 export const storeSchema = z.object({
   users: z.array(userRecordSchema),
   sessions: z.array(sessionSchema),
@@ -544,6 +660,10 @@ export const storeSchema = z.object({
   offerComments: z.array(offerCommentSchema).default([]),
   offerActivities: z.array(offerActivitySchema).default([]),
   offerSequence: z.array(z.object({ kind: z.string(), year: z.number().int(), next: z.number().int().nonnegative() })).default([]),
+  operationSchedules: z.array(operationScheduleSchema).default([]),
+  operationScheduleItems: z.array(operationScheduleItemSchema).default([]),
+  operationScheduleAttachments: z.array(operationScheduleAttachmentSchema).default([]),
+  scheduleSequence: z.array(z.object({ kind: z.string(), year: z.number().int(), next: z.number().int().nonnegative() })).default([]),
   documents: z.array(documentSchema),
   blobs: z.array(blobSchema),
   stockBalances: z.array(stockBalanceSchema),
@@ -622,6 +742,10 @@ export function emptyStore(): StoreData {
     offerComments: [],
     offerActivities: [],
     offerSequence: [],
+    operationSchedules: [],
+    operationScheduleItems: [],
+    operationScheduleAttachments: [],
+    scheduleSequence: [],
     documents: [],
     blobs: [],
     stockBalances: [],

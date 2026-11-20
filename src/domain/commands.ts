@@ -35,6 +35,12 @@ import {
   type Offer,
   type OfferAttachment,
   type OfferComment,
+  type OperationSchedule,
+  type OperationScheduleItem,
+  type OperationScheduleAttachment,
+  type Material,
+  type PackagingType,
+  type Company,
 } from "./schemas.ts";
 
 export type CommandResult = { error?: string; notice?: string };
@@ -1173,29 +1179,29 @@ export function assignPoSoToGeneralRequest(
 
   const updatedDetails: GeneralRequestOperationalDetails = operationalDetails
     ? {
-        ...operationalDetails,
-        assignedPoSoNumber: rawPoSo,
-        assignedPoSoBy: actor.id,
-        assignedPoSoByName: actor.name,
-        assignedPoSoAt: now,
-      }
+      ...operationalDetails,
+      assignedPoSoNumber: rawPoSo,
+      assignedPoSoBy: actor.id,
+      assignedPoSoByName: actor.name,
+      assignedPoSoAt: now,
+    }
     : {
-        requestType: isPo ? "unloading" : "loading",
-        materialType: "General Material",
-        materialDescription: "",
-        packagingType: "Standard Packaging",
-        packageCount: 1,
-        grossWeightKg: 0,
-        tarePerPackageKg: 0,
-        totalTareWeightKg: 0,
-        netWeightKg: 0,
-        warehouseLocation: warehouseOf(store, actor) ?? "Warehouse",
-        assignedPoSoNumber: rawPoSo,
-        assignedPoSoBy: actor.id,
-        assignedPoSoByName: actor.name,
-        assignedPoSoAt: now,
-        inventoryMoved: false,
-      };
+      requestType: isPo ? "unloading" : "loading",
+      materialType: "General Material",
+      materialDescription: "",
+      packagingType: "Standard Packaging",
+      packageCount: 1,
+      grossWeightKg: 0,
+      tarePerPackageKg: 0,
+      totalTareWeightKg: 0,
+      netWeightKg: 0,
+      warehouseLocation: warehouseOf(store, actor) ?? "Warehouse",
+      assignedPoSoNumber: rawPoSo,
+      assignedPoSoBy: actor.id,
+      assignedPoSoByName: actor.name,
+      assignedPoSoAt: now,
+      inventoryMoved: false,
+    };
 
   request.description = serializeOperationalRequestDescription(updatedDetails, updatedDetails.notes);
 
@@ -1307,7 +1313,7 @@ export function createOffer(
   const location = text(payload.location);
   const truckLoads = typeof payload.truckLoads === "number" ? Math.max(0, Math.floor(payload.truckLoads)) : parseInt(String(payload.truckLoads || 1), 10) || 1;
   const description = text(payload.description);
-  
+
   const priorityRaw = text(payload.priority).toLowerCase();
   const priority = (["low", "medium", "high", "urgent"].includes(priorityRaw) ? priorityRaw : "medium") as "low" | "medium" | "high" | "urgent";
 
@@ -1377,7 +1383,7 @@ export function createOffer(
     const isImage = attRec.kind === "image" || attMime.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(attName);
     const attId = randomUUID();
     const storageKey = `offers/${offerId}/${attId}-${attName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    
+
     let byteSize = 0;
     if (typeof attRec.bytesBase64 === "string" && attRec.bytesBase64) {
       const buffer = Buffer.from(attRec.bytesBase64, "base64");
@@ -2314,8 +2320,8 @@ export function registerOffersUser(
       ? `${notes} (Company: ${company})`
       : notes
     : company
-    ? `Company: ${company}`
-    : null;
+      ? `Company: ${company}`
+      : null;
 
   const newUser: UserRecord = {
     id: userId,
@@ -2593,8 +2599,8 @@ export function deleteUser(
   }
 
   const hasRecords = store.requests.some((r) => r.createdBy === user.id) ||
-                     store.purchaseOrders.some((po) => po.createdBy === user.id) ||
-                     (store.workerGeneralRequests || []).some((gr) => gr.createdBy === user.id);
+    store.purchaseOrders.some((po) => po.createdBy === user.id) ||
+    (store.workerGeneralRequests || []).some((gr) => gr.createdBy === user.id);
 
   if (hasRecords) {
     // Preserve operational records, unlink and deactivate credentials
@@ -3278,9 +3284,1135 @@ function duplicateEquipment(store: StoreData, shipmentId: string, containerNumbe
   return store.shipments.some((item) => item.direction === "inbound" && item.id !== shipmentId && item.containerNumber.trim().toLowerCase() === needle);
 }
 
+export function nextScheduleNumber(store: StoreData, type: "unloading" | "loading", now: string): string {
+  const currentYear = new Date(now).getUTCFullYear() || new Date().getUTCFullYear();
+  if (!store.scheduleSequence) {
+    store.scheduleSequence = [];
+  }
+  const prefix = type === "unloading" ? "SCH-UNL" : "SCH-LOD";
+  let seq = store.scheduleSequence.find((entry) => entry.kind === prefix && entry.year === currentYear);
+  if (!seq) {
+    let max = 0;
+    for (const s of store.operationSchedules || []) {
+      if (s.type === type && s.scheduleNumber && s.scheduleNumber.startsWith(`${prefix}-${currentYear}-`)) {
+        const parts = s.scheduleNumber.split("-");
+        const n = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(n) && n > max) max = n;
+      }
+    }
+    seq = { kind: prefix, year: currentYear, next: max };
+    store.scheduleSequence.push(seq);
+  }
+  seq.next += 1;
+  return `${prefix}-${currentYear}-${String(seq.next).padStart(4, "0")}`;
+}
+
+function ensureMaterialByName(store: StoreData, name: string): Material {
+  const trimmed = name.trim();
+  const existing = store.materials.find(
+    (m) => m.description.toLowerCase() === trimmed.toLowerCase() || m.materialNumber.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (existing) return existing;
+  const created: Material = {
+    id: randomUUID(),
+    materialNumber: trimmed,
+    description: trimmed,
+    unit: "kg",
+    lowStockThresholdKg: 0,
+  };
+  store.materials.push(created);
+  return created;
+}
+
+function ensureCompanyByName(store: StoreData, name: string, kind: "supplier" | "customer"): Company {
+  const trimmed = name.trim();
+  const existing = store.companies.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+  if (existing) return existing;
+  const created: Company = {
+    id: randomUUID(),
+    name: trimmed,
+    kind,
+    active: true,
+  };
+  store.companies.push(created);
+  return created;
+}
+
+export function createOperationSchedule(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  if (actor.role !== "owner" && actor.role !== "manager") {
+    return { error: "Only Staff or Admin can create loading and unloading schedules." };
+  }
+
+  const type = text(body.type) === "loading" ? "loading" : "unloading";
+  const poSoNumber = text(body.poSoNumber).toUpperCase();
+  if (!poSoNumber) {
+    return { error: type === "unloading" ? "PO Number is required." : "SO Number is required." };
+  }
+
+  const partnerName = text(body.partnerName || body.supplier || body.customer || body.buyer);
+  if (!partnerName) {
+    return { error: type === "unloading" ? "Supplier name is required." : "Customer / Buyer name is required." };
+  }
+
+  const warehouseId = text(body.warehouseId || body.warehouse);
+  const warehouse = store.warehouses.find((w) => w.id === warehouseId || same(w.name, warehouseId));
+  if (!warehouse) {
+    return { error: "Please select a valid warehouse." };
+  }
+
+  const scheduledDate = text(body.scheduledDate || body.scheduledUnloadingDate || body.scheduledLoadingDate);
+  if (!scheduledDate) {
+    return { error: "Scheduled date is required." };
+  }
+
+  const assignedWorkerId = text(body.assignedWorkerId || body.workerId);
+  const worker = store.users.find((u) => (u.id === assignedWorkerId || same(u.name, assignedWorkerId)) && u.active);
+  if (!worker || worker.role !== "worker") {
+    return { error: "Please select an active warehouse worker." };
+  }
+
+  const scheduleNumber = nextScheduleNumber(store, type, now);
+  const scheduleId = randomUUID();
+
+  // Find or create linked PO/SO
+  let po = store.purchaseOrders.find((p) => same(p.number, poSoNumber));
+  if (!po) {
+    const company = ensureCompanyByName(store, partnerName, type === "unloading" ? "supplier" : "customer");
+    const val = type === "unloading" ? num(body.purchasingPrice) || 0 : num(body.sellingPrice) || 0;
+    po = {
+      id: randomUUID(),
+      number: poSoNumber,
+      title: `${partnerName} - ${type === "unloading" ? "Unloading" : "Loading"}`,
+      companyId: company.id,
+      status: "approved",
+      valueEur: Math.max(0, val),
+      currency: text(body.currency) || "EUR",
+      notes: "Created via Staff Schedule Module",
+      type: type === "unloading" ? "PO" : "SO",
+      warehouseId: warehouse.id,
+      isRemoved: false,
+      removedAt: null,
+      removedBy: null,
+      assignedWorkerId: worker.id,
+      assignedBy: actor.id,
+      assignedAt: now,
+      scheduledDate,
+      executionStatus: "assigned",
+      completionNotes: null,
+      completedAt: null,
+      completedBy: null,
+      createdBy: actor.id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    store.purchaseOrders.push(po);
+  } else {
+    po.assignedWorkerId = worker.id;
+    po.assignedBy = actor.id;
+    po.assignedAt = now;
+    po.scheduledDate = scheduledDate;
+    po.executionStatus = "assigned";
+    po.updatedAt = now;
+  }
+
+  // Ensure linked shipment
+  const direction = type === "unloading" ? "inbound" : "outbound";
+  let shipment = store.shipments.find((s) => s.purchaseOrderId === po.id || same(s.reference, poSoNumber));
+  if (!shipment) {
+    shipment = {
+      id: randomUUID(),
+      reference: poSoNumber,
+      direction,
+      purchaseOrderId: po.id,
+      containerNumber: poSoNumber,
+      warehouseId: warehouse.id,
+      originCountry: text(body.origin) || "EU",
+      destinationCountry: text(body.destination) || "EU",
+      status: "Planned",
+      carrierName: text(body.carrierName) || "Standard Freight",
+      handedOverAt: null,
+      annex7Required: Boolean(body.annex7Required),
+      sellerStatus: "Confirmed",
+      sellerCompany: partnerName,
+      sellerConfirmedBy: actor.name,
+      sellerConfirmedAt: now,
+      overrideReason: null,
+      overrideBy: null,
+      overrideAt: null,
+    };
+    store.shipments.push(shipment);
+  } else {
+    shipment.annex7Required = Boolean(body.annex7Required);
+  }
+
+  if (!store.operationSchedules) store.operationSchedules = [];
+  if (!store.operationScheduleItems) store.operationScheduleItems = [];
+
+  // Parse items
+  const rawItems = Array.isArray(body.items) ? body.items : [];
+  for (const rawItem of rawItems) {
+    const itemRec = record(rawItem);
+    const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
+    if (!matName) continue;
+    const material = ensureMaterialByName(store, matName);
+    const packagingId = text(itemRec.packagingTypeId || itemRec.packagingId || itemRec.packagingTypeName || itemRec.packagingType);
+    const packaging = store.packagingTypes.find((p) => p.id === packagingId || same(p.name, packagingId)) || store.packagingTypes[0];
+    const pkgName = text(itemRec.packagingTypeName || itemRec.packagingType) || (packaging ? packaging.name : "Standard Packaging");
+    const pkgId = packaging ? packaging.id : randomUUID();
+    const packageCount = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || itemRec.count) || 1));
+    const tareInput = itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.packagingTareWeightKg ?? itemRec.tareWeightKg ?? itemRec.tareKg ?? itemRec.tare;
+    const tarePerPackage = tareInput !== undefined && num(tareInput) >= 0 ? num(tareInput) : (packaging?.tareKg ?? 0);
+    const grossWeight = Math.max(0, num(itemRec.grossWeightKg ?? itemRec.grossKg) || 0);
+    const totalTare = roundKg(packageCount * tarePerPackage);
+    const netWeight = Math.max(0, roundKg(grossWeight - totalTare));
+
+    store.operationScheduleItems.push({
+      id: randomUUID(),
+      scheduleId,
+      materialId: material.id,
+      materialName: material.description,
+      packagingTypeId: pkgId,
+      packagingTypeName: pkgName,
+      packageCount,
+      tarePerPackageKg: tarePerPackage,
+      totalTareWeightKg: totalTare,
+      grossWeightKg: grossWeight,
+      netWeightKg: netWeight,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  const schedule: OperationSchedule = {
+    id: scheduleId,
+    scheduleNumber,
+    type,
+    poSoNumber,
+    purchaseOrderId: po.id,
+    shipmentId: shipment.id,
+    partnerName,
+    companyId: po.companyId,
+    warehouseId: warehouse.id,
+    origin: text(body.origin),
+    destination: text(body.destination),
+    annex7Required: Boolean(body.annex7Required),
+    transportPrice: Math.max(0, num(body.transportPrice) || 0),
+    currency: text(body.currency) || "EUR",
+    pickupDate: text(body.pickupDate) || null,
+    purchaserName: text(body.purchaserName) || null,
+    purchasingPrice: Math.max(0, num(body.purchasingPrice) || 0),
+    sellerName: text(body.sellerName) || null,
+    sellingPrice: Math.max(0, num(body.sellingPrice) || 0),
+    scheduledDate,
+    assignedWorkerId: worker.id,
+    assignedWorkerName: worker.name,
+    vehicleRegistrationNumber: text(body.vehicleRegistrationNumber),
+    transportCompany: text(body.transportCompany),
+    driverName: text(body.driverName),
+    driverContactNumber: text(body.driverContactNumber),
+    cmrNumber: text(body.cmrNumber),
+    actualArrivalTime: text(body.actualArrivalTime) || null,
+    status: "scheduled",
+    instructions: text(body.instructions),
+    workerRemarks: text(body.workerRemarks || body.operationalRemarks),
+    returnReason: null,
+    infoRequestNote: null,
+    actualStartTime: text(body.actualStartTime || body.actualLoadingStartTime) || null,
+    actualEndTime: text(body.actualEndTime || body.actualLoadingCompletionTime) || null,
+    submittedAt: null,
+    verifiedAt: null,
+    verifiedBy: null,
+    verifiedByName: null,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: actor.id,
+    createdByName: actor.name,
+  };
+
+  store.operationSchedules.push(schedule);
+
+  if (Array.isArray(body.attachments)) {
+    for (const rawAtt of body.attachments) {
+      uploadScheduleAttachment(store, actor, { ...record(rawAtt), scheduleId: schedule.id }, now);
+    }
+  }
+
+  // Notify assigned worker
+  notify(
+    store,
+    worker.id,
+    "schedule_assigned",
+    `New ${type === "unloading" ? "Unloading" : "Loading"} Schedule Assigned`,
+    `You have been assigned to ${scheduleNumber} (${poSoNumber}) at ${warehouse.name} scheduled for ${scheduledDate}.`,
+    now,
+    { targetType: "schedule", targetId: schedule.id, link: "/worker" }
+  );
+
+  audit(
+    store,
+    actor.id,
+    "schedule-created",
+    "schedule",
+    schedule.id,
+    `${scheduleNumber} created for ${poSoNumber} (${type}) and assigned to ${worker.name}.`,
+    now
+  );
+
+  return { notice: `${scheduleNumber} was created successfully and assigned to ${worker.name}.` };
+}
+
+export function updateOperationSchedule(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  if (actor.role !== "owner" && actor.role !== "manager") {
+    return { error: "Only Staff or Admin can modify schedules." };
+  }
+
+  const scheduleId = text(body.id || body.scheduleId);
+  const scheduleNumber = text(body.scheduleNumber);
+  const schedule = (store.operationSchedules || []).find(
+    (s) => s.id === scheduleId || (scheduleNumber && s.scheduleNumber === scheduleNumber)
+  );
+
+  if (!schedule) {
+    return { error: "Schedule not found." };
+  }
+
+  if (schedule.status === "completed") {
+    return { error: "Completed schedules cannot be edited." };
+  }
+
+  if (body.poSoNumber !== undefined && text(body.poSoNumber)) {
+    schedule.poSoNumber = text(body.poSoNumber).toUpperCase();
+  }
+  if (body.partnerName !== undefined || body.supplier !== undefined || body.customer !== undefined) {
+    const pName = text(body.partnerName || body.supplier || body.customer);
+    if (pName) schedule.partnerName = pName;
+  }
+  if (body.warehouseId !== undefined || body.warehouse !== undefined) {
+    const whId = text(body.warehouseId || body.warehouse);
+    const wh = store.warehouses.find((w) => w.id === whId || same(w.name, whId));
+    if (wh) schedule.warehouseId = wh.id;
+  }
+  if (body.assignedWorkerId !== undefined || body.workerId !== undefined) {
+    const wId = text(body.assignedWorkerId || body.workerId);
+    const worker = store.users.find((u) => (u.id === wId || same(u.name, wId)) && u.active && u.role === "worker");
+    if (worker) {
+      schedule.assignedWorkerId = worker.id;
+      schedule.assignedWorkerName = worker.name;
+    }
+  }
+  if (body.scheduledDate !== undefined) {
+    schedule.scheduledDate = text(body.scheduledDate) || schedule.scheduledDate;
+  }
+  if (body.origin !== undefined) schedule.origin = text(body.origin);
+  if (body.destination !== undefined) schedule.destination = text(body.destination);
+  if (body.annex7Required !== undefined) schedule.annex7Required = Boolean(body.annex7Required);
+  if (body.transportPrice !== undefined) schedule.transportPrice = Math.max(0, num(body.transportPrice) || 0);
+  if (body.currency !== undefined) schedule.currency = text(body.currency) || schedule.currency;
+  if (body.instructions !== undefined) schedule.instructions = text(body.instructions);
+  if (body.purchaserName !== undefined) schedule.purchaserName = text(body.purchaserName) || null;
+  if (body.purchasingPrice !== undefined) schedule.purchasingPrice = Math.max(0, num(body.purchasingPrice) || 0);
+  if (body.sellerName !== undefined) schedule.sellerName = text(body.sellerName) || null;
+  if (body.sellingPrice !== undefined) schedule.sellingPrice = Math.max(0, num(body.sellingPrice) || 0);
+  if (body.pickupDate !== undefined) schedule.pickupDate = text(body.pickupDate) || null;
+  if (body.vehicleRegistrationNumber !== undefined) schedule.vehicleRegistrationNumber = text(body.vehicleRegistrationNumber);
+  if (body.transportCompany !== undefined) schedule.transportCompany = text(body.transportCompany);
+  if (body.driverName !== undefined) schedule.driverName = text(body.driverName);
+  if (body.driverContactNumber !== undefined) schedule.driverContactNumber = text(body.driverContactNumber);
+  if (body.cmrNumber !== undefined) schedule.cmrNumber = text(body.cmrNumber);
+  if (body.actualArrivalTime !== undefined) schedule.actualArrivalTime = text(body.actualArrivalTime) || null;
+  if (body.actualStartTime !== undefined || body.actualLoadingStartTime !== undefined) {
+    schedule.actualStartTime = text(body.actualStartTime ?? body.actualLoadingStartTime) || null;
+  }
+  if (body.actualEndTime !== undefined || body.actualLoadingCompletionTime !== undefined) {
+    schedule.actualEndTime = text(body.actualEndTime ?? body.actualLoadingCompletionTime) || null;
+  }
+  if (body.workerRemarks !== undefined || body.operationalRemarks !== undefined) {
+    schedule.workerRemarks = text(body.workerRemarks ?? body.operationalRemarks);
+  }
+
+  if (Array.isArray(body.items)) {
+    store.operationScheduleItems = (store.operationScheduleItems || []).filter((i) => i.scheduleId !== schedule.id);
+    for (const rawItem of body.items) {
+      const itemRec = record(rawItem);
+      const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
+      if (!matName) continue;
+      const material = ensureMaterialByName(store, matName);
+      const packagingId = text(itemRec.packagingTypeId || itemRec.packagingId || itemRec.packagingTypeName || itemRec.packagingType);
+      const packaging = store.packagingTypes.find((p) => p.id === packagingId || same(p.name, packagingId)) || store.packagingTypes[0];
+      const pkgName = text(itemRec.packagingTypeName || itemRec.packagingType) || (packaging ? packaging.name : "Standard Packaging");
+      const pkgId = packaging ? packaging.id : randomUUID();
+      const packageCount = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || itemRec.count) || 1));
+      const tareInput = itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.packagingTareWeightKg ?? itemRec.tareWeightKg ?? itemRec.tareKg ?? itemRec.tare;
+      const tarePerPackage = tareInput !== undefined && num(tareInput) >= 0 ? num(tareInput) : (packaging?.tareKg ?? 0);
+      const grossWeight = Math.max(0, num(itemRec.grossWeightKg ?? itemRec.grossKg) || 0);
+      const totalTare = roundKg(packageCount * tarePerPackage);
+      const netWeight = Math.max(0, roundKg(grossWeight - totalTare));
+
+      store.operationScheduleItems.push({
+        id: text(itemRec.id) || randomUUID(),
+        scheduleId: schedule.id,
+        materialId: material.id,
+        materialName: material.description,
+        packagingTypeId: pkgId,
+        packagingTypeName: pkgName,
+        packageCount,
+        tarePerPackageKg: tarePerPackage,
+        totalTareWeightKg: totalTare,
+        grossWeightKg: grossWeight,
+        netWeightKg: netWeight,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  schedule.updatedAt = now;
+
+  audit(
+    store,
+    actor.id,
+    "schedule-updated",
+    "schedule",
+    schedule.id,
+    `${schedule.scheduleNumber} details were updated.`,
+    now
+  );
+
+  return { notice: `${schedule.scheduleNumber} was updated successfully.` };
+}
+
+export function assignScheduleWorker(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  if (actor.role !== "owner" && actor.role !== "manager") {
+    return { error: "Only Staff or Admin can reassign schedule workers." };
+  }
+
+  const scheduleId = text(body.id || body.scheduleId);
+  const schedule = (store.operationSchedules || []).find((s) => s.id === scheduleId);
+  if (!schedule) return { error: "Schedule not found." };
+
+  if (schedule.status === "completed") {
+    return { error: "Completed schedules cannot be reassigned." };
+  }
+
+  const workerId = text(body.workerId || body.assignedWorkerId);
+  const worker = store.users.find((u) => (u.id === workerId || same(u.name, workerId)) && u.active);
+  if (!worker || worker.role !== "worker") {
+    return { error: "Please select an active warehouse worker." };
+  }
+
+  schedule.assignedWorkerId = worker.id;
+  schedule.assignedWorkerName = worker.name;
+  schedule.updatedAt = now;
+
+  // Update linked PO
+  const po = store.purchaseOrders.find((p) => p.id === schedule.purchaseOrderId);
+  if (po) {
+    po.assignedWorkerId = worker.id;
+    po.assignedBy = actor.id;
+    po.assignedAt = now;
+  }
+
+  notify(
+    store,
+    worker.id,
+    "schedule_assigned",
+    `Schedule Reassigned to You`,
+    `You have been assigned to ${schedule.scheduleNumber} (${schedule.poSoNumber}) for ${schedule.scheduledDate}.`,
+    now,
+    { targetType: "schedule", targetId: schedule.id, link: "/worker" }
+  );
+
+  audit(
+    store,
+    actor.id,
+    "schedule-worker-assigned",
+    "schedule",
+    schedule.id,
+    `${schedule.scheduleNumber} was reassigned to ${worker.name}.`,
+    now
+  );
+
+  return { notice: `${schedule.scheduleNumber} reassigned to ${worker.name}.` };
+}
+
+export function startOperationSchedule(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  const scheduleId = text(body.id || body.scheduleId);
+  const schedule = (store.operationSchedules || []).find((s) => s.id === scheduleId);
+  if (!schedule) return { error: "Schedule not found." };
+
+  if (actor.role === "worker") {
+    if (schedule.assignedWorkerId !== actor.id) {
+      const actorWh = warehouseOf(store, actor);
+      const schedWh = store.warehouses.find((w) => w.id === schedule.warehouseId)?.name;
+      if (!actorWh || actorWh !== schedWh) {
+        return { error: "You can only start schedules assigned to you at your warehouse." };
+      }
+    }
+  }
+
+  if (schedule.status === "completed") {
+    return { error: "This operation is already completed." };
+  }
+
+  if (schedule.status === "in_progress") {
+    return { notice: `Operation is already in progress for ${schedule.scheduleNumber}.` };
+  }
+
+  schedule.status = "in_progress";
+  if (!schedule.actualStartTime) {
+    schedule.actualStartTime = now;
+  }
+  schedule.updatedAt = now;
+
+  const po = store.purchaseOrders.find((p) => p.id === schedule.purchaseOrderId);
+  if (po) {
+    po.executionStatus = "in_progress";
+    po.updatedAt = now;
+  }
+
+  const ship = store.shipments.find((s) => s.id === schedule.shipmentId);
+  if (ship && ship.status === "Planned") {
+    ship.status = schedule.type === "unloading" ? "Unloading" : "Loaded";
+  }
+
+  audit(
+    store,
+    actor.id,
+    "schedule-started",
+    "schedule",
+    schedule.id,
+    `${schedule.scheduleNumber} was started by ${actor.name}.`,
+    now
+  );
+
+  return { notice: `Operation started for ${schedule.scheduleNumber}.` };
+}
+
+export function saveOperationDraft(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  const payload = body.draft ? { ...body, ...record(body.draft) } : body;
+  const scheduleId = text(payload.id || payload.scheduleId);
+  const schedule = (store.operationSchedules || []).find((s) => s.id === scheduleId);
+  if (!schedule) return { error: "Schedule not found." };
+
+  if (schedule.status === "completed") {
+    return { error: "Cannot save draft on a completed operation." };
+  }
+
+  if (Array.isArray(payload.items)) {
+    // Replace items
+    store.operationScheduleItems = (store.operationScheduleItems || []).filter((i) => i.scheduleId !== schedule.id);
+    for (const rawItem of payload.items) {
+      const itemRec = record(rawItem);
+      const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
+      if (!matName) continue;
+      const material = ensureMaterialByName(store, matName);
+      const packagingId = text(itemRec.packagingTypeId || itemRec.packagingId || itemRec.packagingTypeName || itemRec.packagingType);
+      const packaging = store.packagingTypes.find((p) => p.id === packagingId || same(p.name, packagingId)) || store.packagingTypes[0];
+      const pkgName = text(itemRec.packagingTypeName || itemRec.packagingType) || (packaging ? packaging.name : "Standard Packaging");
+      const pkgId = packaging ? packaging.id : randomUUID();
+      const packageCount = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || itemRec.count) || 1));
+      const tareInput = itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.packagingTareWeightKg ?? itemRec.tareWeightKg ?? itemRec.tareKg ?? itemRec.tare;
+      const tarePerPackage = tareInput !== undefined && num(tareInput) >= 0 ? num(tareInput) : (packaging?.tareKg ?? 0);
+      const grossWeight = Math.max(0, num(itemRec.grossWeightKg ?? itemRec.grossKg) || 0);
+      const totalTare = roundKg(packageCount * tarePerPackage);
+      const netWeight = Math.max(0, roundKg(grossWeight - totalTare));
+
+      store.operationScheduleItems.push({
+        id: text(itemRec.id) || randomUUID(),
+        scheduleId: schedule.id,
+        materialId: material.id,
+        materialName: material.description,
+        packagingTypeId: pkgId,
+        packagingTypeName: pkgName,
+        packageCount,
+        tarePerPackageKg: tarePerPackage,
+        totalTareWeightKg: totalTare,
+        grossWeightKg: grossWeight,
+        netWeightKg: netWeight,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  if (payload.workerRemarks !== undefined || payload.operationalRemarks !== undefined) {
+    schedule.workerRemarks = text(payload.workerRemarks ?? payload.operationalRemarks);
+  }
+  if (payload.vehicleRegistrationNumber !== undefined) {
+    schedule.vehicleRegistrationNumber = text(payload.vehicleRegistrationNumber);
+  }
+  if (payload.transportCompany !== undefined) {
+    schedule.transportCompany = text(payload.transportCompany);
+  }
+  if (payload.driverName !== undefined) {
+    schedule.driverName = text(payload.driverName);
+  }
+  if (payload.driverContactNumber !== undefined) {
+    schedule.driverContactNumber = text(payload.driverContactNumber);
+  }
+  if (payload.cmrNumber !== undefined) {
+    schedule.cmrNumber = text(payload.cmrNumber);
+  }
+  if (payload.actualArrivalTime !== undefined) {
+    schedule.actualArrivalTime = text(payload.actualArrivalTime) || null;
+  }
+  if (payload.actualStartTime !== undefined || payload.actualLoadingStartTime !== undefined) {
+    const startVal = text(payload.actualStartTime ?? payload.actualLoadingStartTime);
+    if (startVal) schedule.actualStartTime = startVal;
+  }
+  if (payload.actualEndTime !== undefined || payload.actualLoadingCompletionTime !== undefined) {
+    const endVal = text(payload.actualEndTime ?? payload.actualLoadingCompletionTime);
+    if (endVal) schedule.actualEndTime = endVal;
+  }
+
+  schedule.status = "draft";
+  schedule.updatedAt = now;
+
+  audit(
+    store,
+    actor.id,
+    "schedule-draft-saved",
+    "schedule",
+    schedule.id,
+    `Draft progress saved for ${schedule.scheduleNumber} by ${actor.name}.`,
+    now
+  );
+
+  return { notice: `Draft saved for ${schedule.scheduleNumber}.` };
+}
+
+export function submitOperationSchedule(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  const payload = body.draft ? { ...body, ...record(body.draft) } : body;
+  const scheduleId = text(payload.id || payload.scheduleId);
+  const schedule = (store.operationSchedules || []).find((s) => s.id === scheduleId);
+  if (!schedule) return { error: "Schedule not found." };
+
+  if (schedule.status === "completed") {
+    return { error: "This operation is already completed." };
+  }
+
+  if (Array.isArray(payload.items)) {
+    // Update items first
+    store.operationScheduleItems = (store.operationScheduleItems || []).filter((i) => i.scheduleId !== schedule.id);
+    for (const rawItem of payload.items) {
+      const itemRec = record(rawItem);
+      const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
+      if (!matName) continue;
+      const material = ensureMaterialByName(store, matName);
+      const packagingId = text(itemRec.packagingTypeId || itemRec.packagingId || itemRec.packagingTypeName || itemRec.packagingType);
+      const packaging = store.packagingTypes.find((p) => p.id === packagingId || same(p.name, packagingId)) || store.packagingTypes[0];
+      const pkgName = text(itemRec.packagingTypeName || itemRec.packagingType) || (packaging ? packaging.name : "Standard Packaging");
+      const pkgId = packaging ? packaging.id : randomUUID();
+      const packageCount = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || itemRec.count) || 1));
+      const tareInput = itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.packagingTareWeightKg ?? itemRec.tareWeightKg ?? itemRec.tareKg ?? itemRec.tare;
+      const tarePerPackage = tareInput !== undefined && num(tareInput) >= 0 ? num(tareInput) : (packaging?.tareKg ?? 0);
+      const grossWeight = Math.max(0, num(itemRec.grossWeightKg ?? itemRec.grossKg) || 0);
+      const totalTare = roundKg(packageCount * tarePerPackage);
+      const netWeight = Math.max(0, roundKg(grossWeight - totalTare));
+
+      store.operationScheduleItems.push({
+        id: text(itemRec.id) || randomUUID(),
+        scheduleId: schedule.id,
+        materialId: material.id,
+        materialName: material.description,
+        packagingTypeId: pkgId,
+        packagingTypeName: pkgName,
+        packageCount,
+        tarePerPackageKg: tarePerPackage,
+        totalTareWeightKg: totalTare,
+        grossWeightKg: grossWeight,
+        netWeightKg: netWeight,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  const items = (store.operationScheduleItems || []).filter((i) => i.scheduleId === schedule.id);
+  if (items.length === 0) {
+    return { error: "Please enter at least one material entry before submitting." };
+  }
+
+  for (const item of items) {
+    if (item.grossWeightKg <= 0) {
+      return { error: `Gross weight must be greater than zero for ${item.materialName}.` };
+    }
+    if (item.packageCount <= 0) {
+      return { error: `Package count must be greater than zero for ${item.materialName}.` };
+    }
+    if (item.netWeightKg <= 0) {
+      return { error: `Net weight must be greater than zero for ${item.materialName}. Gross weight must exceed tare.` };
+    }
+  }
+
+  if (payload.workerRemarks !== undefined || payload.operationalRemarks !== undefined) {
+    schedule.workerRemarks = text(payload.workerRemarks ?? payload.operationalRemarks);
+  }
+  if (payload.vehicleRegistrationNumber !== undefined) {
+    schedule.vehicleRegistrationNumber = text(payload.vehicleRegistrationNumber);
+  }
+  if (payload.transportCompany !== undefined) {
+    schedule.transportCompany = text(payload.transportCompany);
+  }
+  if (payload.driverName !== undefined) {
+    schedule.driverName = text(payload.driverName);
+  }
+  if (payload.driverContactNumber !== undefined) {
+    schedule.driverContactNumber = text(payload.driverContactNumber);
+  }
+  if (payload.cmrNumber !== undefined) {
+    schedule.cmrNumber = text(payload.cmrNumber);
+  }
+  if (payload.actualArrivalTime !== undefined) {
+    schedule.actualArrivalTime = text(payload.actualArrivalTime) || null;
+  }
+  if (payload.actualStartTime !== undefined || payload.actualLoadingStartTime !== undefined) {
+    const startVal = text(payload.actualStartTime ?? payload.actualLoadingStartTime);
+    if (startVal) schedule.actualStartTime = startVal;
+  }
+  if (payload.actualEndTime !== undefined || payload.actualLoadingCompletionTime !== undefined) {
+    const endVal = text(payload.actualEndTime ?? payload.actualLoadingCompletionTime);
+    if (endVal) schedule.actualEndTime = endVal;
+  }
+
+  schedule.status = schedule.returnReason ? "resubmitted" : "submitted";
+  schedule.submittedAt = now;
+  if (!schedule.actualStartTime) schedule.actualStartTime = now;
+  if (!schedule.actualEndTime) schedule.actualEndTime = now;
+  schedule.updatedAt = now;
+
+  // Notify Staff & Admin
+  const officeUsers = store.users.filter((u) => (u.role === "owner" || u.role === "manager") && u.active);
+  for (const staffUser of officeUsers) {
+    notify(
+      store,
+      staffUser.id,
+      "schedule_submitted",
+      `Schedule Pending Verification: ${schedule.scheduleNumber}`,
+      `${actor.name} submitted ${schedule.scheduleNumber} (${schedule.poSoNumber}) for verification.`,
+      now,
+      { targetType: "schedule", targetId: schedule.id, link: "/verification" }
+    );
+  }
+
+  audit(
+    store,
+    actor.id,
+    "schedule-submitted",
+    "schedule",
+    schedule.id,
+    `${schedule.scheduleNumber} was submitted for verification by ${actor.name}.`,
+    now
+  );
+
+  return { notice: `${schedule.scheduleNumber} was submitted for verification.` };
+}
+
+export function verifyOperationSchedule(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  if (actor.role !== "owner" && actor.role !== "manager") {
+    return { error: "Only Staff or Admin can verify operations." };
+  }
+
+  const payload = body.details ? { ...body, ...record(body.details) } : body;
+  const scheduleId = text(payload.id || payload.scheduleId);
+  const schedule = (store.operationSchedules || []).find((s) => s.id === scheduleId);
+  if (!schedule) return { error: "Schedule not found." };
+
+  const action = text(payload.action); // "approve" | "return" | "request_info"
+
+  if (action === "approve") {
+    if (schedule.status === "completed") {
+      return { notice: "Schedule is already approved and completed." };
+    }
+
+    const items = (store.operationScheduleItems || []).filter((i) => i.scheduleId === schedule.id);
+    if (items.length === 0) {
+      return { error: "Cannot approve schedule with no recorded materials." };
+    }
+
+    // Idempotent inventory stock movement update
+    const alreadyApplied = (store.stockMovements || []).some((m) => m.scheduleId === schedule.id);
+    if (!alreadyApplied) {
+      const wh = store.warehouses.find((w) => w.id === schedule.warehouseId);
+      const whName = wh ? wh.name : "Warehouse";
+
+      for (const item of items) {
+        let balance = store.stockBalances.find(
+          (b) => b.materialId === item.materialId && b.warehouseId === schedule.warehouseId
+        );
+        if (!balance) {
+          balance = {
+            id: randomUUID(),
+            materialId: item.materialId,
+            warehouseId: schedule.warehouseId,
+            weightKg: 0,
+          };
+          store.stockBalances.push(balance);
+        }
+
+        const quantityBefore = balance.weightKg;
+        const change = schedule.type === "unloading" ? item.netWeightKg : -item.netWeightKg;
+        const quantityAfter = Math.max(0, roundKg(quantityBefore + change));
+        balance.weightKg = quantityAfter;
+
+        const movement: StockMovement = {
+          id: randomUUID(),
+          materialId: item.materialId,
+          warehouseId: schedule.warehouseId,
+          weightKg: item.netWeightKg,
+          direction: schedule.type === "unloading" ? "in" : "out",
+          requestId: null,
+          requestLineId: null,
+          scheduleId: schedule.id,
+          scheduleItemId: item.id,
+          createdAt: now,
+          createdBy: actor.id,
+        };
+        store.stockMovements.push(movement);
+
+        if (!store.inventoryHistory) store.inventoryHistory = [];
+        store.inventoryHistory.push({
+          id: randomUUID(),
+          materialId: item.materialId,
+          materialName: item.materialName,
+          warehouseId: schedule.warehouseId,
+          warehouseName: whName,
+          containerNumber: schedule.poSoNumber,
+          quantityBefore,
+          quantityChange: change,
+          quantityAfter,
+          packagingTypeId: item.packagingTypeId,
+          packagingTypeName: item.packagingTypeName,
+          packagingCount: item.packageCount,
+          packagingUnitTareKg: item.tarePerPackageKg,
+          totalPackagingWeightKg: item.totalTareWeightKg,
+          grossWeightKg: item.grossWeightKg,
+          operationType: schedule.type === "unloading" ? "Unloading Receipt" : "Loading Dispatch",
+          operationReason: "Schedule Verification Approval",
+          reference: schedule.scheduleNumber,
+          poNumber: schedule.type === "unloading" ? schedule.poSoNumber : null,
+          soNumber: schedule.type === "loading" ? schedule.poSoNumber : null,
+          performedBy: actor.id,
+          performedByName: actor.name,
+          createdAt: now,
+        });
+      }
+    }
+
+    schedule.status = "completed";
+    schedule.verifiedAt = now;
+    schedule.verifiedBy = actor.id;
+    schedule.verifiedByName = actor.name;
+    schedule.updatedAt = now;
+
+    // Update PO status
+    const po = store.purchaseOrders.find((p) => p.id === schedule.purchaseOrderId);
+    if (po) {
+      po.executionStatus = "completed";
+      po.completedAt = now;
+      po.completedBy = actor.id;
+    }
+
+    // Update Shipment
+    const ship = store.shipments.find((s) => s.id === schedule.shipmentId);
+    if (ship) {
+      ship.status = schedule.type === "unloading" ? "Completed" : "Dispatched";
+    }
+
+    notify(
+      store,
+      schedule.assignedWorkerId,
+      "schedule_approved",
+      `Schedule Approved & Completed: ${schedule.scheduleNumber}`,
+      `Your submission for ${schedule.scheduleNumber} (${schedule.poSoNumber}) has been approved and completed by ${actor.name}.`,
+      now,
+      { targetType: "schedule", targetId: schedule.id, link: "/worker" }
+    );
+
+    audit(
+      store,
+      actor.id,
+      "schedule-approved",
+      "schedule",
+      schedule.id,
+      `${schedule.scheduleNumber} was approved and marked completed. Stock movements posted.`,
+      now
+    );
+
+    return { notice: `${schedule.scheduleNumber} has been approved and completed. Stock balance updated.` };
+  }
+
+  if (action === "return") {
+    const reason = text(payload.reason || payload.returnReason);
+    if (!reason) {
+      return { error: "A return reason is required when returning an operation for correction." };
+    }
+
+    schedule.status = "returned_for_correction";
+    schedule.returnReason = reason;
+    schedule.updatedAt = now;
+
+    notify(
+      store,
+      schedule.assignedWorkerId,
+      "schedule_returned",
+      `Schedule Returned for Correction: ${schedule.scheduleNumber}`,
+      `Schedule ${schedule.scheduleNumber} was returned by ${actor.name}: ${reason}`,
+      now,
+      { targetType: "schedule", targetId: schedule.id, link: "/worker" }
+    );
+
+    audit(
+      store,
+      actor.id,
+      "schedule-returned",
+      "schedule",
+      schedule.id,
+      `${schedule.scheduleNumber} was returned for correction: ${reason}`,
+      now
+    );
+
+    return { notice: `${schedule.scheduleNumber} was returned for correction.` };
+  }
+
+  if (action === "request_info") {
+    const note = text(payload.note || payload.reason);
+    if (!note) return { error: "Please enter the information requested." };
+
+    schedule.infoRequestNote = note;
+    schedule.updatedAt = now;
+
+    notify(
+      store,
+      schedule.assignedWorkerId,
+      "schedule_info_requested",
+      `Information Requested: ${schedule.scheduleNumber}`,
+      `${actor.name} requested information on ${schedule.scheduleNumber}: ${note}`,
+      now,
+      { targetType: "schedule", targetId: schedule.id, link: "/worker" }
+    );
+
+    audit(
+      store,
+      actor.id,
+      "schedule-info-requested",
+      "schedule",
+      schedule.id,
+      `Information requested on ${schedule.scheduleNumber}: ${note}`,
+      now
+    );
+
+    return { notice: `Information request sent to assigned worker.` };
+  }
+
+  return { error: "Invalid verification action." };
+}
+
+const VALID_ATTACHMENT_KINDS = new Set([
+  "material_photo",
+  "packaging_photo",
+  "before_loading_photo",
+  "during_loading_photo",
+  "loaded_vehicle_photo",
+  "weighbridge_ticket",
+  "delivery_document",
+  "cmr_document",
+  "annex_vii",
+  "other",
+  "photo",
+  "document",
+  "weight_ticket",
+  "cmr",
+  "cargo",
+  "seal",
+  "damage",
+]);
+
+function normalizeAttachmentKind(raw: string): OperationScheduleAttachment["kind"] {
+  const k = raw.trim().toLowerCase();
+  if (VALID_ATTACHMENT_KINDS.has(k)) return k as OperationScheduleAttachment["kind"];
+  if (k === "container_condition") return "cargo";
+  if (k === "material") return "material_photo";
+  if (k === "packaging") return "packaging_photo";
+  if (k === "scale_ticket" || k === "weight_slip") return "weighbridge_ticket";
+  if (k === "delivery") return "delivery_document";
+  return "other";
+}
+
+export function uploadScheduleAttachment(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  const scheduleId = text(body.id || body.scheduleId);
+  const schedule = (store.operationSchedules || []).find((s) => s.id === scheduleId);
+  if (!schedule) return { error: "Schedule not found." };
+
+  const name = text(body.name || body.fileName) || "attachment.jpg";
+  const url = text(body.url || body.fileUrl);
+  const bytesBase64 = text(body.bytesBase64);
+  const kind = normalizeAttachmentKind(text(body.kind || body.category) || "photo");
+
+  let finalUrl = url;
+  let byteSize = num(body.size ?? body.fileSize) || 0;
+  let mime = text(body.mime || body.fileType) || "image/jpeg";
+
+  if (bytesBase64) {
+    const buffer = Buffer.from(bytesBase64, "base64");
+    const detected = detectFileType(buffer);
+    if (detected.valid) {
+      mime = detected.mime;
+      byteSize = buffer.length;
+    }
+    const storageKey = `schedules/${schedule.scheduleNumber}/${Date.now()}_${name}`;
+    store.blobs.push({
+      key: storageKey,
+      name,
+      mime,
+      bytesBase64,
+    });
+    finalUrl = `/api/files/download?key=${encodeURIComponent(storageKey)}`;
+  } else if (finalUrl.startsWith("data:")) {
+    // Also persist data URLs into blobs so they survive across sessions and can be downloaded cleanly
+    const match = finalUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      mime = match[1] || mime;
+      const b64 = match[2];
+      const buffer = Buffer.from(b64, "base64");
+      if (!byteSize) byteSize = buffer.length;
+      const storageKey = `schedules/${schedule.scheduleNumber}/${Date.now()}_${name}`;
+      store.blobs.push({
+        key: storageKey,
+        name,
+        mime,
+        bytesBase64: b64,
+      });
+    }
+  }
+
+  if (!finalUrl) {
+    return { error: "File data or URL is required." };
+  }
+
+  if (!store.operationScheduleAttachments) store.operationScheduleAttachments = [];
+  const attachment: OperationScheduleAttachment = {
+    id: randomUUID(),
+    scheduleId: schedule.id,
+    documentId: text(body.documentId) || null,
+    name,
+    kind,
+    url: finalUrl,
+    size: byteSize,
+    mime,
+    uploadedBy: actor.id,
+    uploadedByName: actor.name,
+    uploadedAt: now,
+  };
+
+  store.operationScheduleAttachments.push(attachment);
+  schedule.updatedAt = now;
+
+  audit(
+    store,
+    actor.id,
+    "schedule-attachment-added",
+    "schedule",
+    schedule.id,
+    `${name} (${kind}) was uploaded for ${schedule.scheduleNumber}.`,
+    now
+  );
+
+  return { notice: `${name} uploaded successfully.` };
+}
+
+export function deleteScheduleAttachment(
+  store: StoreData,
+  actor: UserRecord,
+  body: Record<string, unknown>,
+  now: string
+): CommandResult {
+  const attachmentId = text(body.id || body.attachmentId);
+  const attachment = (store.operationScheduleAttachments || []).find((a) => a.id === attachmentId);
+  if (!attachment) return { error: "Attachment not found." };
+
+  store.operationScheduleAttachments = store.operationScheduleAttachments.filter((a) => a.id !== attachmentId);
+
+  audit(
+    store,
+    actor.id,
+    "schedule-attachment-deleted",
+    "schedule",
+    attachment.scheduleId,
+    `Attachment ${attachment.name} was removed.`,
+    now
+  );
+
+  return { notice: `Attachment was removed.` };
+}
+
 export function applyCommand(store: StoreData, actor: UserRecord, name: string, payload: unknown, now: string): CommandResult {
   const body = record(payload);
   switch (name) {
+    case "createOperationSchedule":
+    case "createSchedule":
+      return createOperationSchedule(store, actor, body, now);
+    case "updateOperationSchedule":
+    case "updateSchedule":
+      return updateOperationSchedule(store, actor, body, now);
+    case "assignScheduleWorker":
+      return assignScheduleWorker(store, actor, body, now);
+    case "startOperationSchedule":
+    case "startSchedule":
+      return startOperationSchedule(store, actor, body, now);
+    case "saveOperationDraft":
+    case "saveScheduleDraft":
+      return saveOperationDraft(store, actor, body, now);
+    case "submitOperationSchedule":
+    case "submitSchedule":
+      return submitOperationSchedule(store, actor, body, now);
+    case "verifyOperationSchedule":
+    case "verifySchedule":
+      return verifyOperationSchedule(store, actor, body, now);
+    case "uploadScheduleAttachment":
+      return uploadScheduleAttachment(store, actor, body, now);
+    case "deleteScheduleAttachment":
+      return deleteScheduleAttachment(store, actor, body, now);
     case "createPurchase":
     case "createOrder":
       return createPurchase(store, actor, body, now);
@@ -4200,7 +5332,7 @@ function transfer(store: StoreData, actor: UserRecord, body: Record<string, unkn
         now,
       );
       if (!moved.ok) return { error: moved.error };
-      const id = moved.value.outMovement.requestId;
+      const id = moved.value.outMovement.requestId || randomUUID();
       audit(
         store,
         actor.id,

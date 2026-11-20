@@ -9,6 +9,8 @@ import type {
   OfferApprovalStatus as DomainOfferApprovalStatus,
   OfferPriority as DomainOfferPriority,
   OfferAttachmentKind,
+  OperationScheduleType,
+  OperationScheduleStatus,
 } from "./schemas";
 export type {
   GeneralRequestCategory,
@@ -19,6 +21,8 @@ export type {
   DomainOfferApprovalStatus,
   DomainOfferPriority,
   OfferAttachmentKind,
+  OperationScheduleType,
+  OperationScheduleStatus,
 };
 
 export type OfferStatusView = "Draft" | "Received" | "Under Review" | "Negotiating" | "Won" | "Lost" | "Accepted" | "Sold";
@@ -705,7 +709,7 @@ export function parseOperationalRequestDescription(description: string): {
         };
         const displayDescription = description.slice(endIdx + OP_SPEC_SUFFIX.length).trim();
         return { operationalDetails: details, displayDescription };
-      } catch {}
+      } catch { }
     }
   }
   return { operationalDetails: null, displayDescription: description };
@@ -739,6 +743,196 @@ export type GeneralRequestView = {
   attachments: GeneralRequestAttachmentView[];
 };
 
+export const OPERATION_SCHEDULE_STATUS_LABELS: Record<string, string> = {
+  scheduled: "Scheduled",
+  in_progress: "In Progress",
+  draft: "Draft Saved",
+  submitted: "Pending Verification",
+  returned_for_correction: "Returned for Correction",
+  resubmitted: "Resubmitted",
+  completed: "Completed",
+};
+
+export type OperationScheduleItemView = {
+  id: string;
+  scheduleId: string;
+  materialId: string;
+  materialName: string;
+  packagingTypeId: string;
+  packagingTypeName: string;
+  packageCount: number;
+  tarePerPackageKg: number;
+  totalTareWeightKg: number;
+  grossWeightKg: number;
+  netWeightKg: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OperationScheduleAttachmentKind =
+  | "material_photo"
+  | "packaging_photo"
+  | "before_loading_photo"
+  | "during_loading_photo"
+  | "loaded_vehicle_photo"
+  | "weighbridge_ticket"
+  | "delivery_document"
+  | "cmr_document"
+  | "annex_vii"
+  | "other"
+  | "photo"
+  | "document"
+  | "weight_ticket"
+  | "cmr"
+  | "cargo"
+  | "seal"
+  | "damage";
+
+export const ATTACHMENT_KIND_LABELS: Record<OperationScheduleAttachmentKind, string> = {
+  material_photo: "Material Photograph",
+  packaging_photo: "Packaging Photograph",
+  before_loading_photo: "Photograph Before Loading",
+  during_loading_photo: "Photograph During Loading",
+  loaded_vehicle_photo: "Photograph of Loaded Vehicle",
+  weighbridge_ticket: "Weighbridge Ticket",
+  delivery_document: "Delivery Document",
+  cmr_document: "CMR Document",
+  annex_vii: "Annex VII Document",
+  other: "Other Supporting Document",
+  photo: "Material Photograph",
+  document: "Supporting Document",
+  weight_ticket: "Weighbridge Ticket",
+  cmr: "CMR Document",
+  cargo: "Cargo / Packaging Photo",
+  seal: "Seal Photo",
+  damage: "Damage Photo",
+};
+
+export type MaterialWeightSummary = {
+  materialName: string;
+  entryCount: number;
+  totalPackageCount: number;
+  totalGrossWeightKg: number;
+  totalTareWeightKg: number;
+  totalNetWeightKg: number;
+};
+
+export function summarizeScheduleMaterials(
+  items: {
+    materialName: string;
+    packageCount?: number;
+    grossWeightKg?: number;
+    tarePerPackageKg?: number;
+    totalTareWeightKg?: number;
+    netWeightKg?: number;
+  }[]
+): MaterialWeightSummary[] {
+  const byMaterial = new Map<string, MaterialWeightSummary>();
+  for (const item of items) {
+    const rawName = (item.materialName || "").trim();
+    const key = (rawName || "Unspecified Material").toLowerCase();
+    const count = Number(item.packageCount) || 0;
+    const gross = Number(item.grossWeightKg) || 0;
+    const tare =
+      item.totalTareWeightKg !== undefined
+        ? Number(item.totalTareWeightKg) || 0
+        : roundKg(count * (Number(item.tarePerPackageKg) || 0));
+    const net =
+      item.netWeightKg !== undefined
+        ? Number(item.netWeightKg) || 0
+        : Math.max(0, roundKg(gross - tare));
+
+    const existing = byMaterial.get(key);
+    if (existing) {
+      existing.entryCount += 1;
+      existing.totalPackageCount += count;
+      existing.totalGrossWeightKg = roundKg(existing.totalGrossWeightKg + gross);
+      existing.totalTareWeightKg = roundKg(existing.totalTareWeightKg + tare);
+      existing.totalNetWeightKg = roundKg(existing.totalNetWeightKg + net);
+    } else {
+      byMaterial.set(key, {
+        materialName: rawName || "Unspecified Material",
+        entryCount: 1,
+        totalPackageCount: count,
+        totalGrossWeightKg: roundKg(gross),
+        totalTareWeightKg: roundKg(tare),
+        totalNetWeightKg: roundKg(net),
+      });
+    }
+  }
+  return Array.from(byMaterial.values());
+}
+
+export type OperationScheduleAttachmentView = {
+  id: string;
+  scheduleId: string;
+  documentId: string | null;
+  name: string;
+  kind: OperationScheduleAttachmentKind;
+  url: string;
+  size: number;
+  mime: string;
+  uploadedBy: string;
+  uploadedByName: string;
+  uploadedAt: string;
+};
+
+export type OperationScheduleView = {
+  id: string;
+  scheduleNumber: string;
+  type: "unloading" | "loading";
+  typeLabel: "Unloading Schedule" | "Loading Schedule";
+  poSoNumber: string;
+  purchaseOrderId: string | null;
+  shipmentId: string | null;
+  partnerName: string;
+  companyId: string | null;
+  warehouseId: string;
+  warehouseName: string;
+  origin: string;
+  destination: string;
+  annex7Required: boolean;
+  transportPrice: number;
+  currency: string;
+  pickupDate: string | null;
+  purchaserName: string | null;
+  purchasingPrice: number;
+  sellerName: string | null;
+  sellingPrice: number;
+  scheduledDate: string;
+  assignedWorkerId: string;
+  assignedWorkerName: string;
+  vehicleRegistrationNumber: string;
+  transportCompany: string;
+  driverName: string;
+  driverContactNumber: string;
+  cmrNumber: string;
+  actualArrivalTime: string | null;
+  status: "scheduled" | "in_progress" | "draft" | "submitted" | "returned_for_correction" | "resubmitted" | "completed";
+  statusLabel: string;
+  instructions: string;
+  workerRemarks: string;
+  returnReason: string | null;
+  infoRequestNote: string | null;
+  actualStartTime: string | null;
+  actualEndTime: string | null;
+  submittedAt: string | null;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  verifiedByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  createdByName: string;
+  items: OperationScheduleItemView[];
+  attachments: OperationScheduleAttachmentView[];
+  materialSummary: MaterialWeightSummary[];
+  totalGrossWeightKg: number;
+  totalNetWeightKg: number;
+  totalTareWeightKg: number;
+  totalPackageCount: number;
+};
+
 export type WorkspaceState = {
   orders: DemoOrder[];
   containers: DemoContainer[];
@@ -755,6 +949,7 @@ export type WorkspaceState = {
   requests: RequestView[];
   generalRequests: GeneralRequestView[];
   offers: OfferView[];
+  schedules: OperationScheduleView[];
   containerInventory: ContainerInventoryView[];
   inventoryHistory: InventoryHistoryView[];
   notifications: DemoNotification[];
@@ -792,6 +987,7 @@ export function emptyWorkspace(): WorkspaceState {
     requests: [],
     generalRequests: [],
     offers: [],
+    schedules: [],
     containerInventory: [],
     inventoryHistory: [],
     notifications: [],
@@ -892,6 +1088,10 @@ export function formatEuro(value: number): string {
 
 export function formatKg(value: number): string {
   return `${new Intl.NumberFormat("en-US").format(value)} kg`;
+}
+
+export function roundKg(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 export const DEMURRAGE_FREE_MINUTES = 120;

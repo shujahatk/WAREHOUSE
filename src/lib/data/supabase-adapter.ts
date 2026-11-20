@@ -43,6 +43,9 @@ import {
   type OfferComment,
   type OfferActivity,
   type NotificationRecord,
+  type OperationSchedule,
+  type OperationScheduleItem,
+  type OperationScheduleAttachment,
 } from "../../domain/schemas.ts";
 import { emptyWorkspace, parseOperationalRequestDescription, serializeOperationalRequestDescription, type Actor, type GeneralRequestOperationalDetails, type WorkspaceState } from "../../domain/view.ts";
 import { isActiveRole } from "../permissions.ts";
@@ -55,6 +58,10 @@ import { can, type Action, type Resource } from "./permissions.ts";
 // ----------------------------------------------------------------------------
 // Row Mappers (PostgreSQL snake_case -> StockFlow camelCase Domain Records)
 // ----------------------------------------------------------------------------
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
 
 function mapWarehouse(row: Record<string, unknown>): Warehouse {
   return {
@@ -493,6 +500,88 @@ function mapNotification(row: Record<string, unknown>): NotificationRecord {
   };
 }
 
+function mapOperationSchedule(row: Record<string, unknown>): OperationSchedule {
+  return {
+    id: String(row.id),
+    scheduleNumber: String(row.schedule_number ?? row.scheduleNumber ?? ""),
+    type: (row.type as "unloading" | "loading") || "unloading",
+    poSoNumber: String(row.poso_number ?? row.po_so_number ?? row.poSoNumber ?? ""),
+    purchaseOrderId: typeof row.purchase_order_id === "string" ? row.purchase_order_id : null,
+    shipmentId: typeof row.shipment_id === "string" ? row.shipment_id : null,
+    partnerName: String(row.partner_name ?? row.partnerName ?? ""),
+    companyId: typeof row.company_id === "string" ? row.company_id : null,
+    warehouseId: String(row.warehouse_id ?? row.warehouseId),
+    origin: String(row.origin ?? ""),
+    destination: String(row.destination ?? ""),
+    annex7Required: Boolean(row.annex7_required ?? row.annex7Required ?? false),
+    transportPrice: Number(row.transport_price ?? row.transportPrice ?? 0),
+    currency: String(row.currency ?? "EUR"),
+    pickupDate: typeof row.pickup_date === "string" ? row.pickup_date : null,
+    purchaserName: typeof row.purchaser_name === "string" ? row.purchaser_name : null,
+    purchasingPrice: Number(row.purchasing_price ?? row.purchasingPrice ?? 0),
+    sellerName: typeof row.seller_name === "string" ? row.seller_name : null,
+    sellingPrice: Number(row.selling_price ?? row.sellingPrice ?? 0),
+    scheduledDate: String(row.scheduled_date ?? row.scheduledDate ?? new Date().toISOString()),
+    assignedWorkerId: String(row.assigned_worker_id ?? row.assignedWorkerId ?? ""),
+    assignedWorkerName: String(row.assigned_worker_name ?? row.assignedWorkerName ?? ""),
+    vehicleRegistrationNumber: String(row.vehicle_registration_number ?? row.vehicleRegistrationNumber ?? ""),
+    transportCompany: String(row.transport_company ?? row.transportCompany ?? ""),
+    driverName: String(row.driver_name ?? row.driverName ?? ""),
+    driverContactNumber: String(row.driver_contact_number ?? row.driverContactNumber ?? ""),
+    cmrNumber: String(row.cmr_number ?? row.cmrNumber ?? ""),
+    actualArrivalTime: typeof row.actual_arrival_time === "string" ? row.actual_arrival_time : null,
+    status: (row.status as OperationSchedule["status"]) || "scheduled",
+    instructions: String(row.instructions ?? ""),
+    workerRemarks: String(row.worker_remarks ?? row.workerRemarks ?? ""),
+    returnReason: typeof row.return_reason === "string" ? row.return_reason : null,
+    infoRequestNote: typeof row.info_request_note === "string" ? row.info_request_note : null,
+    actualStartTime: typeof row.actual_start_time === "string" ? row.actual_start_time : null,
+    actualEndTime: typeof row.actual_end_time === "string" ? row.actual_end_time : null,
+    submittedAt: typeof row.submitted_at === "string" ? row.submitted_at : null,
+    verifiedAt: typeof row.verified_at === "string" ? row.verified_at : null,
+    verifiedBy: typeof row.verified_by === "string" ? row.verified_by : null,
+    verifiedByName: typeof row.verified_by_name === "string" ? row.verified_by_name : null,
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+    updatedAt: String(row.updated_at ?? new Date().toISOString()),
+    createdBy: String(row.created_by ?? ""),
+    createdByName: String(row.created_by_name ?? ""),
+  };
+}
+
+function mapOperationScheduleItem(row: Record<string, unknown>): OperationScheduleItem {
+  return {
+    id: String(row.id),
+    scheduleId: String(row.schedule_id ?? row.scheduleId),
+    materialId: String(row.material_id ?? row.materialId),
+    materialName: String(row.material_name ?? row.materialName ?? "Material"),
+    packagingTypeId: String(row.packaging_type_id ?? row.packagingTypeId),
+    packagingTypeName: String(row.packaging_type_name ?? row.packagingTypeName ?? "Standard Packaging"),
+    packageCount: Number(row.package_count ?? row.packageCount ?? 1),
+    tarePerPackageKg: Number(row.tare_per_package_kg ?? row.tarePerPackageKg ?? 0),
+    totalTareWeightKg: Number(row.total_tare_weight_kg ?? row.totalTareWeightKg ?? 0),
+    grossWeightKg: Number(row.gross_weight_kg ?? row.grossWeightKg ?? 0),
+    netWeightKg: Number(row.net_weight_kg ?? row.netWeightKg ?? 0),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+    updatedAt: String(row.updated_at ?? new Date().toISOString()),
+  };
+}
+
+function mapOperationScheduleAttachment(row: Record<string, unknown>): OperationScheduleAttachment {
+  return {
+    id: String(row.id),
+    scheduleId: String(row.schedule_id ?? row.scheduleId),
+    documentId: typeof row.document_id === "string" ? row.document_id : null,
+    name: String(row.name ?? "attachment"),
+    kind: (row.kind as OperationScheduleAttachment["kind"]) || "photo",
+    url: String(row.url ?? ""),
+    size: Number(row.size ?? 0),
+    mime: String(row.mime ?? "application/octet-stream"),
+    uploadedBy: String(row.uploaded_by ?? ""),
+    uploadedByName: String(row.uploaded_by_name ?? ""),
+    uploadedAt: String(row.uploaded_at ?? new Date().toISOString()),
+  };
+}
+
 // ----------------------------------------------------------------------------
 // SupabaseAdapter Implementation
 // ----------------------------------------------------------------------------
@@ -663,6 +752,9 @@ export class SupabaseAdapter {
       offerCommentsRes,
       offerActivitiesRes,
       notificationsRes,
+      schedulesRes,
+      scheduleItemsRes,
+      scheduleAttachmentsRes,
     ] = await Promise.all([
       this.client.select<Record<string, unknown>>("warehouses", "select=*&order=name.asc", token),
       this.client.select<Record<string, unknown>>("companies", "select=*&order=name.asc", token),
@@ -690,6 +782,9 @@ export class SupabaseAdapter {
       this.client.select<Record<string, unknown>>("offer_comments", "select=*&order=created_at.asc", token),
       this.client.select<Record<string, unknown>>("offer_activities", "select=*&order=created_at.desc", token),
       this.client.select<Record<string, unknown>>("notifications", "select=*&order=created_at.desc", token),
+      this.client.select<Record<string, unknown>>("operation_schedules", "select=*&order=created_at.desc", token),
+      this.client.select<Record<string, unknown>>("operation_schedule_items", "select=*", token),
+      this.client.select<Record<string, unknown>>("operation_schedule_attachments", "select=*", token),
     ]);
 
     if (warehousesRes.ok) store.warehouses = warehousesRes.value.map(mapWarehouse);
@@ -717,6 +812,9 @@ export class SupabaseAdapter {
     if (offerAttachmentsRes.ok) store.offerAttachments = offerAttachmentsRes.value.map(mapOfferAttachment);
     if (offerCommentsRes.ok) store.offerComments = offerCommentsRes.value.map(mapOfferComment);
     if (offerActivitiesRes.ok) store.offerActivities = offerActivitiesRes.value.map(mapOfferActivity);
+    if (schedulesRes.ok) store.operationSchedules = schedulesRes.value.map(mapOperationSchedule);
+    if (scheduleItemsRes.ok) store.operationScheduleItems = scheduleItemsRes.value.map(mapOperationScheduleItem);
+    if (scheduleAttachmentsRes.ok) store.operationScheduleAttachments = scheduleAttachmentsRes.value.map(mapOperationScheduleAttachment);
     const persistentNotifs: NotificationRecord[] = notificationsRes.ok ? notificationsRes.value.map(mapNotification) : [];
     const existingTargetKeys = new Set(
       persistentNotifs.map((n) => `${n.eventType}:${n.targetType || ""}:${n.targetId || ""}`)
@@ -2196,6 +2294,330 @@ export class SupabaseAdapter {
           );
           if (!patchRes.ok) error = patchRes.error;
           else notice = `Operation started on ${poNumber}.`;
+          break;
+        }
+        case "createOperationSchedule":
+        case "createSchedule": {
+          if (profile.role !== "owner" && profile.role !== "manager") {
+            error = "Only Staff or Admin can create schedules.";
+            break;
+          }
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_create_operation_schedule",
+            {
+              p_type: text(body.type) === "loading" ? "loading" : "unloading",
+              p_poso_number: text(body.poSoNumber).toUpperCase(),
+              p_partner_name: text(body.partnerName || body.supplier || body.customer || body.buyer),
+              p_warehouse_id: text(body.warehouseId || body.warehouse),
+              p_scheduled_date: text(body.scheduledDate),
+              p_assigned_worker_id: text(body.assignedWorkerId || body.workerId),
+              p_origin: text(body.origin),
+              p_destination: text(body.destination),
+              p_annex7_required: Boolean(body.annex7Required),
+              p_transport_price: num(body.transportPrice) || 0,
+              p_currency: text(body.currency) || "EUR",
+              p_pickup_date: text(body.pickupDate) || null,
+              p_purchaser_name: text(body.purchaserName) || null,
+              p_purchasing_price: num(body.purchasingPrice) || 0,
+              p_seller_name: text(body.sellerName) || null,
+              p_selling_price: num(body.sellingPrice) || 0,
+              p_instructions: text(body.instructions),
+              p_items: Array.isArray(body.items) ? body.items : [],
+              p_vehicle_registration_number: text(body.vehicleRegistrationNumber),
+              p_transport_company: text(body.transportCompany),
+              p_driver_name: text(body.driverName),
+              p_driver_contact_number: text(body.driverContactNumber),
+              p_cmr_number: text(body.cmrNumber),
+              p_actual_arrival_time: text(body.actualArrivalTime) || null,
+              p_actual_start_time: text(body.actualStartTime || body.actualLoadingStartTime) || null,
+              p_actual_end_time: text(body.actualEndTime || body.actualLoadingCompletionTime) || null,
+              p_worker_remarks: text(body.workerRemarks || body.operationalRemarks),
+            },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else notice = String(rpcRes.value?.message || "Schedule created successfully.");
+          break;
+        }
+        case "updateOperationSchedule":
+        case "updateSchedule": {
+          if (profile.role !== "owner" && profile.role !== "manager") {
+            error = "Only Staff or Admin can modify schedules.";
+            break;
+          }
+          const schedId = text(body.id || body.scheduleId);
+          const patch: Record<string, unknown> = { updated_at: this.now() };
+          if (body.poSoNumber) patch.poso_number = text(body.poSoNumber).toUpperCase();
+          if (body.partnerName || body.supplier || body.customer) {
+            patch.partner_name = text(body.partnerName || body.supplier || body.customer);
+          }
+          if (body.warehouseId) patch.warehouse_id = text(body.warehouseId);
+          if (body.assignedWorkerId) patch.assigned_worker_id = text(body.assignedWorkerId);
+          if (body.scheduledDate) patch.scheduled_date = text(body.scheduledDate);
+          if (body.origin !== undefined) patch.origin = text(body.origin);
+          if (body.destination !== undefined) patch.destination = text(body.destination);
+          if (body.annex7Required !== undefined) patch.annex7_required = Boolean(body.annex7Required);
+          if (body.transportPrice !== undefined) patch.transport_price = num(body.transportPrice) || 0;
+          if (body.currency !== undefined) patch.currency = text(body.currency) || "EUR";
+          if (body.pickupDate !== undefined) patch.pickup_date = text(body.pickupDate) || null;
+          if (body.purchaserName !== undefined) patch.purchaser_name = text(body.purchaserName) || null;
+          if (body.purchasingPrice !== undefined) patch.purchasing_price = num(body.purchasingPrice) || 0;
+          if (body.sellerName !== undefined) patch.seller_name = text(body.sellerName) || null;
+          if (body.sellingPrice !== undefined) patch.selling_price = num(body.sellingPrice) || 0;
+          if (body.instructions !== undefined) patch.instructions = text(body.instructions);
+          if (body.vehicleRegistrationNumber !== undefined) patch.vehicle_registration_number = text(body.vehicleRegistrationNumber);
+          if (body.transportCompany !== undefined) patch.transport_company = text(body.transportCompany);
+          if (body.driverName !== undefined) patch.driver_name = text(body.driverName);
+          if (body.driverContactNumber !== undefined) patch.driver_contact_number = text(body.driverContactNumber);
+          if (body.cmrNumber !== undefined) patch.cmr_number = text(body.cmrNumber);
+          const updateRes = await this.client.update("operation_schedules", `id=eq.${encodeURIComponent(schedId)}`, patch, token);
+          if (!updateRes.ok) error = updateRes.error;
+          else notice = "Schedule updated.";
+          break;
+        }
+        case "assignScheduleWorker": {
+          if (profile.role !== "owner" && profile.role !== "manager") {
+            error = "Only Staff or Admin can reassign schedule workers.";
+            break;
+          }
+          const schedId = text(body.id || body.scheduleId);
+          const workerId = text(body.workerId || body.assignedWorkerId);
+          const workerRes = await this.client.select<Record<string, unknown>>("users", `select=name&id=eq.${encodeURIComponent(workerId)}`, token);
+          const workerName = workerRes.ok && workerRes.value.length > 0 ? String(workerRes.value[0].name) : "";
+          const updateRes = await this.client.update(
+            "operation_schedules",
+            `id=eq.${encodeURIComponent(schedId)}`,
+            { assigned_worker_id: workerId, assigned_worker_name: workerName, updated_at: this.now() },
+            token
+          );
+          if (!updateRes.ok) error = updateRes.error;
+          else notice = `Worker reassigned to schedule.`;
+          break;
+        }
+        case "startOperationSchedule":
+        case "startSchedule": {
+          const scheduleId = text(body.id || body.scheduleId);
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_start_operation_schedule",
+            { p_schedule_id: scheduleId },
+            token
+          );
+          if (!rpcRes.ok) {
+            await this.client.update(
+              "operation_schedules",
+              `id=eq.${encodeURIComponent(scheduleId)}`,
+              { status: "in_progress", actual_start_time: this.now(), updated_at: this.now() },
+              token
+            );
+          }
+          notice = "Operation started.";
+          break;
+        }
+        case "saveOperationDraft":
+        case "saveScheduleDraft": {
+          const payload = body.draft ? { ...body, ...record(body.draft) } : body;
+          const scheduleId = text(payload.id || payload.scheduleId);
+          const patch: Record<string, unknown> = { status: "draft", updated_at: this.now() };
+          if (payload.workerRemarks !== undefined || payload.operationalRemarks !== undefined) {
+            patch.worker_remarks = text(payload.workerRemarks ?? payload.operationalRemarks);
+          }
+          if (payload.vehicleRegistrationNumber !== undefined) patch.vehicle_registration_number = text(payload.vehicleRegistrationNumber);
+          if (payload.transportCompany !== undefined) patch.transport_company = text(payload.transportCompany);
+          if (payload.driverName !== undefined) patch.driver_name = text(payload.driverName);
+          if (payload.driverContactNumber !== undefined) patch.driver_contact_number = text(payload.driverContactNumber);
+          if (payload.cmrNumber !== undefined) patch.cmr_number = text(payload.cmrNumber);
+          if (payload.actualArrivalTime !== undefined) patch.actual_arrival_time = text(payload.actualArrivalTime) || null;
+          if (payload.actualStartTime !== undefined || payload.actualLoadingStartTime !== undefined) {
+            patch.actual_start_time = text(payload.actualStartTime ?? payload.actualLoadingStartTime) || null;
+          }
+          if (payload.actualEndTime !== undefined || payload.actualLoadingCompletionTime !== undefined) {
+            patch.actual_end_time = text(payload.actualEndTime ?? payload.actualLoadingCompletionTime) || null;
+          }
+          await this.client.update("operation_schedules", `id=eq.${encodeURIComponent(scheduleId)}`, patch, token);
+
+          if (Array.isArray(payload.items)) {
+            await this.client.delete("operation_schedule_items", `schedule_id=eq.${encodeURIComponent(scheduleId)}`, token);
+            const matsRes = await this.client.select<Record<string, unknown>>("materials", "select=id,description", token);
+            const materials = matsRes.ok ? matsRes.value : [];
+            for (const rawItem of payload.items) {
+              const itemRec = record(rawItem);
+              const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
+              if (!matName) continue;
+              let matId = text(itemRec.materialId);
+              if (!matId) {
+                const found = materials.find((m) => String(m.description || "").toLowerCase() === matName.toLowerCase());
+                matId = found ? String(found.id) : randomUUID();
+              }
+              const count = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || 1)));
+              const tare = Math.max(0, num(itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.tareWeightKg ?? 0));
+              const gross = Math.max(0, num(itemRec.grossWeightKg ?? 0));
+              const totalTare = count * tare;
+              const net = Math.max(0, gross - totalTare);
+              await this.client.insert(
+                "operation_schedule_items",
+                {
+                  id: randomUUID(),
+                  schedule_id: scheduleId,
+                  material_id: matId,
+                  material_name: matName,
+                  packaging_type_id: text(itemRec.packagingTypeId) || null,
+                  packaging_type_name: text(itemRec.packagingTypeName || itemRec.packagingType) || "Standard Packaging",
+                  package_count: count,
+                  tare_per_package_kg: tare,
+                  total_tare_weight_kg: totalTare,
+                  gross_weight_kg: gross,
+                  net_weight_kg: net,
+                  created_at: this.now(),
+                  updated_at: this.now(),
+                },
+                token
+              );
+            }
+          }
+          notice = "Draft saved.";
+          break;
+        }
+        case "submitOperationSchedule":
+        case "submitSchedule": {
+          const payload = body.draft ? { ...body, ...record(body.draft) } : body;
+          const scheduleId = text(payload.id || payload.scheduleId);
+          const patch: Record<string, unknown> = {
+            status: "submitted",
+            submitted_at: this.now(),
+            actual_end_time: text(payload.actualEndTime ?? payload.actualLoadingCompletionTime) || this.now(),
+            updated_at: this.now(),
+          };
+          if (payload.workerRemarks !== undefined || payload.operationalRemarks !== undefined) {
+            patch.worker_remarks = text(payload.workerRemarks ?? payload.operationalRemarks);
+          }
+          if (payload.vehicleRegistrationNumber !== undefined) patch.vehicle_registration_number = text(payload.vehicleRegistrationNumber);
+          if (payload.transportCompany !== undefined) patch.transport_company = text(payload.transportCompany);
+          if (payload.driverName !== undefined) patch.driver_name = text(payload.driverName);
+          if (payload.driverContactNumber !== undefined) patch.driver_contact_number = text(payload.driverContactNumber);
+          if (payload.cmrNumber !== undefined) patch.cmr_number = text(payload.cmrNumber);
+          if (payload.actualArrivalTime !== undefined) patch.actual_arrival_time = text(payload.actualArrivalTime) || null;
+          if (payload.actualStartTime !== undefined || payload.actualLoadingStartTime !== undefined) {
+            const startVal = text(payload.actualStartTime ?? payload.actualLoadingStartTime);
+            if (startVal) patch.actual_start_time = startVal;
+          }
+
+          if (Array.isArray(payload.items)) {
+            await this.client.delete("operation_schedule_items", `schedule_id=eq.${encodeURIComponent(scheduleId)}`, token);
+            const matsRes = await this.client.select<Record<string, unknown>>("materials", "select=id,description", token);
+            const materials = matsRes.ok ? matsRes.value : [];
+            for (const rawItem of payload.items) {
+              const itemRec = record(rawItem);
+              const matName = text(itemRec.materialName || itemRec.materialType || itemRec.material);
+              if (!matName) continue;
+              let matId = text(itemRec.materialId);
+              if (!matId) {
+                const found = materials.find((m) => String(m.description || "").toLowerCase() === matName.toLowerCase());
+                matId = found ? String(found.id) : randomUUID();
+              }
+              const count = Math.max(1, Math.round(num(itemRec.packageCount || itemRec.numberOfPackages || 1)));
+              const tare = Math.max(0, num(itemRec.tarePerPackageKg ?? itemRec.tarePerUnitKg ?? itemRec.tareWeightKg ?? 0));
+              const gross = Math.max(0, num(itemRec.grossWeightKg ?? 0));
+              const totalTare = count * tare;
+              const net = Math.max(0, gross - totalTare);
+              await this.client.insert(
+                "operation_schedule_items",
+                {
+                  id: randomUUID(),
+                  schedule_id: scheduleId,
+                  material_id: matId,
+                  material_name: matName,
+                  packaging_type_id: text(itemRec.packagingTypeId) || null,
+                  packaging_type_name: text(itemRec.packagingTypeName || itemRec.packagingType) || "Standard Packaging",
+                  package_count: count,
+                  tare_per_package_kg: tare,
+                  total_tare_weight_kg: totalTare,
+                  gross_weight_kg: gross,
+                  net_weight_kg: net,
+                  created_at: this.now(),
+                  updated_at: this.now(),
+                },
+                token
+              );
+            }
+          }
+
+          const submitRes = await this.client.update("operation_schedules", `id=eq.${encodeURIComponent(scheduleId)}`, patch, token);
+          if (!submitRes.ok) error = submitRes.error;
+          else notice = "Operation submitted for verification.";
+          break;
+        }
+        case "verifyOperationSchedule":
+        case "verifySchedule": {
+          if (profile.role !== "owner" && profile.role !== "manager") {
+            error = "Only Staff or Admin can verify operations.";
+            break;
+          }
+          const payload = body.details ? { ...body, ...record(body.details) } : body;
+          const scheduleId = text(payload.id || payload.scheduleId);
+          const action = text(payload.action);
+          const reason = text(payload.reason || payload.returnReason || payload.note);
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_verify_operation_schedule",
+            { p_schedule_id: scheduleId, p_action: action, p_reason: reason || null },
+            token
+          );
+          if (!rpcRes.ok) error = rpcRes.error;
+          else {
+            notice =
+              action === "approve"
+                ? "Schedule approved and completed. Stock balance updated."
+                : action === "return"
+                  ? "Schedule returned for correction."
+                  : "Information request sent to worker.";
+          }
+          break;
+        }
+        case "uploadScheduleAttachment": {
+          const scheduleId = text(body.id || body.scheduleId);
+          const name = text(body.name || body.fileName) || "attachment.jpg";
+          let url = text(body.url || body.fileUrl) || "";
+          const bytesBase64 = text(body.bytesBase64);
+          const mime = text(body.mime || body.fileType) || "image/jpeg";
+          if (!url && bytesBase64) {
+            url = `data:${mime};base64,${bytesBase64}`;
+          }
+          const kind = text(body.kind || body.category) || "photo";
+          const insertRes = await this.client.insert(
+            "operation_schedule_attachments",
+            {
+              id: randomUUID(),
+              schedule_id: scheduleId,
+              name,
+              kind,
+              url,
+              size: num(body.size ?? body.fileSize) || 0,
+              mime,
+              uploaded_by: profile.id,
+              uploaded_by_name: profile.name,
+              uploaded_at: this.now(),
+            },
+            token
+          );
+          if (!insertRes.ok) error = insertRes.error;
+          else notice = `${name} uploaded.`;
+          break;
+        }
+        case "deleteScheduleAttachment": {
+          const attachmentId = text(body.id || body.attachmentId);
+          const delRes = await this.client.delete("operation_schedule_attachments", `id=eq.${encodeURIComponent(attachmentId)}`, token);
+          if (!delRes.ok) error = delRes.error;
+          else notice = "Attachment removed.";
+          break;
+        }
+        case "deleteOperationSchedule": {
+          if (profile.role !== "owner" && profile.role !== "manager") {
+            error = "Only Staff or Admin can delete schedules.";
+            break;
+          }
+          const scheduleId = text(body.id || body.scheduleId);
+          const delRes = await this.client.delete("operation_schedules", `id=eq.${encodeURIComponent(scheduleId)}`, token);
+          if (!delRes.ok) error = delRes.error;
+          else notice = "Schedule deleted.";
           break;
         }
         case "uploadTaskEvidence": {

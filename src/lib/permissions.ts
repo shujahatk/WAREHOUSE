@@ -26,6 +26,8 @@ const ROUTE_RULES: { prefix: string; roles: Role[] }[] = [
   { prefix: "/suppliers", roles: ADMIN_AND_STAFF },
   { prefix: "/warehouses", roles: ADMIN_AND_STAFF },
   { prefix: "/materials", roles: ADMIN_AND_STAFF },
+  { prefix: "/schedules", roles: ["owner", "manager", "worker"] },
+  { prefix: "/verification", roles: ["owner", "manager"] },
   { prefix: "/tasks", roles: WAREHOUSE_ROLES },
   { prefix: "/dashboard", roles: ["owner", "manager", "worker", "moderator"] },
   { prefix: "/containers", roles: WAREHOUSE_ROLES },
@@ -126,12 +128,22 @@ export type AppAction =
   | "status-offer"
   | "comment-offer"
   | "attach-offer"
+  | "create-schedule"
+  | "edit-schedule"
+  | "verify-schedule"
+  | "start-schedule"
+  | "submit-schedule"
   | "import-data"
   | "export-data";
 
 export type DemoAction = AppAction;
 
 const ACTION_ROLES: Record<AppAction, Role[]> = {
+  "create-schedule": ["owner", "manager"],
+  "edit-schedule": ["owner", "manager"],
+  "verify-schedule": ["owner", "manager"],
+  "start-schedule": ["owner", "manager", "worker"],
+  "submit-schedule": ["owner", "manager", "worker"],
   "approve-order": ["owner"],
   "reject-order": ["owner"],
   "delete-order": [],

@@ -13,7 +13,7 @@ export function notifyAuthChanged(): void {
   for (const listener of authListeners) {
     try {
       listener();
-    } catch {}
+    } catch { }
   }
 }
 
@@ -108,6 +108,16 @@ export type WorkspaceApi = {
   editOffer: (draft: Record<string, unknown>) => Text;
   deleteOffer: (id: string) => Text;
   submitOffer: (id: string) => Text;
+  createOperationSchedule: (draft: Record<string, unknown>) => Text;
+  updateOperationSchedule: (draft: Record<string, unknown>) => Text;
+  assignScheduleWorker: (scheduleId: string, workerId: string) => Text;
+  startOperationSchedule: (scheduleId: string) => Text;
+  saveOperationDraft: (scheduleId: string, draft: { items?: unknown[]; workerRemarks?: string }) => Text;
+  submitOperationSchedule: (scheduleId: string, draft?: { items?: unknown[]; workerRemarks?: string }) => Text;
+  verifyOperationSchedule: (scheduleId: string, action: "approve" | "return" | "request_info", details?: { reason?: string; note?: string }) => Text;
+  uploadScheduleAttachment: (draft: Record<string, unknown>) => Text;
+  deleteScheduleAttachment: (attachmentId: string) => Text;
+  deleteOperationSchedule: (scheduleId: string) => Text;
   decideOffer: (draft: { id: string; decision: "approved" | "rejected"; note: string }) => Text;
   updateOfferStatus: (draft: { id: string; status: string }) => Text;
   toggleOfferFavourite: (id: string) => Text;
@@ -218,7 +228,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           });
         }
       };
-    } catch {}
+    } catch { }
 
     const checkSync = async () => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
@@ -239,7 +249,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           }
           lastRevisionRef.current = data.revision;
         }
-      } catch {}
+      } catch { }
     };
 
     const interval = setInterval(checkSync, 10000);
@@ -259,7 +269,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
       try {
         bc?.close();
-      } catch {}
+      } catch { }
     };
   }, [fetchWorkspaceState]);
 
@@ -275,7 +285,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setLastSyncedAt(new Date());
         try {
           channelRef.current?.postMessage({ type: "store_updated", command: name });
-        } catch {}
+        } catch { }
         if (result.error) {
           setNotice(result.error);
           return result.error;
@@ -305,7 +315,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setSyncedEpoch(authEpochCounter);
         try {
           channelRef.current?.postMessage({ type: "auth_changed" });
-        } catch {}
+        } catch { }
       },
       approve: (number) => run("approve", { number }),
       reject: (number) => run("reject", { number }),
@@ -369,6 +379,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       deleteOfferAttachment: (draft) => run("deleteOfferAttachment", draft),
       assignWorkerPo: (draft) => run("assignWorkerPo", draft),
       completeWorkerPo: (draft) => run("completeWorkerPo", draft),
+      createOperationSchedule: (draft) => run("createOperationSchedule", draft),
+      updateOperationSchedule: (draft) => run("updateOperationSchedule", draft),
+      assignScheduleWorker: (scheduleId, workerId) => run("assignScheduleWorker", { id: scheduleId, workerId }),
+      startOperationSchedule: (scheduleId) => run("startOperationSchedule", { id: scheduleId }),
+      saveOperationDraft: (scheduleId, draft) => run("saveOperationDraft", { id: scheduleId, ...draft }),
+      submitOperationSchedule: (scheduleId, draft) => run("submitOperationSchedule", { id: scheduleId, ...draft }),
+      verifyOperationSchedule: (scheduleId, action, details) => run("verifyOperationSchedule", { id: scheduleId, action, ...details }),
+      uploadScheduleAttachment: (draft) => run("uploadScheduleAttachment", draft),
+      deleteScheduleAttachment: (attachmentId) => run("deleteScheduleAttachment", { id: attachmentId }),
+      deleteOperationSchedule: (scheduleId) => run("deleteOperationSchedule", { id: scheduleId }),
       submitSellingOffer: (draft) => run("submitSellingOffer", draft),
       decideSellingOffer: (draft) => run("decideSellingOffer", draft),
       acceptSellingOffer: (offerNumber) => run("acceptSellingOffer", { offerNumber }),

@@ -26,16 +26,16 @@ export const navSections: NavSection[] = [
     title: "Main",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "dashboard", roles: ALL },
-      { href: "/analytics", label: "Analytics", icon: "reports", roles: OFFICE },
-      { href: "/tasks", label: "Requests", icon: "documents", roles: WAREHOUSE_OPS },
+      { href: "/tasks", label: "Requests", icon: "documents", roles: ["owner", "worker"] },
     ],
   },
   {
     title: "Operations",
     items: [
       { href: "/purchases", label: "PO & SO Orders", icon: "purchases", roles: OFFICE },
-      { href: "/containers", label: "Incoming / Unloading", icon: "containers", roles: WAREHOUSE_OPS },
-      { href: "/outbound", label: "Outgoing / Loading", icon: "outbound", roles: WAREHOUSE_OPS },
+      { href: "/schedules/unloading", label: "Unloading Schedule", icon: "containers", roles: WAREHOUSE_OPS },
+      { href: "/schedules/loading", label: "Loading Schedule", icon: "outbound", roles: WAREHOUSE_OPS },
+      { href: "/verification", label: "Pending Verification", icon: "check", roles: OFFICE },
     ],
   },
   {
@@ -85,10 +85,10 @@ export const recordNav: NavItem[] = navSections
 
 export const mobileTabs: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard", roles: ALL },
+  { href: "/schedules/unloading", label: "Unloading", icon: "containers", roles: WAREHOUSE_OPS },
+  { href: "/schedules/loading", label: "Loading", icon: "outbound", roles: WAREHOUSE_OPS },
+  { href: "/verification", label: "Verify", icon: "check", roles: OFFICE },
   { href: "/offers", label: "Offers", icon: "dashboard", roles: OFFERS_ROLES },
-  { href: "/tasks", label: "Requests", icon: "documents", roles: WAREHOUSE_OPS },
-  { href: "/containers", label: "Incoming", icon: "containers", roles: WAREHOUSE_OPS },
-  { href: "/outbound", label: "Outgoing", icon: "outbound", roles: WAREHOUSE_OPS },
 ];
 
 export const moreNav: NavItem[] = navSections

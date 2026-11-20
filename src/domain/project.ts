@@ -30,6 +30,11 @@ import {
   type ContainerMaterialDetail,
   type ContainerPackagingDetail,
   type InventoryHistoryView,
+  OPERATION_SCHEDULE_STATUS_LABELS,
+  summarizeScheduleMaterials,
+  type OperationScheduleView,
+  type OperationScheduleItemView,
+  type OperationScheduleAttachmentView,
 } from "./view.ts";
 import type { Role } from "@/lib/permissions";
 
@@ -740,6 +745,112 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     }
   }
 
+  const schedules: OperationScheduleView[] = (store.operationSchedules || []).map((s) => {
+    const rawItems = (store.operationScheduleItems || []).filter((item) => item.scheduleId === s.id);
+    const items: OperationScheduleItemView[] = rawItems.map((item) => {
+      const mat = materialById.get(item.materialId);
+      const pkg = packagingById.get(item.packagingTypeId);
+      return {
+        id: item.id,
+        scheduleId: item.scheduleId,
+        materialId: item.materialId,
+        materialName: item.materialName || mat?.description || "Material",
+        packagingTypeId: item.packagingTypeId,
+        packagingTypeName: item.packagingTypeName || pkg?.name || "Standard Packaging",
+        packageCount: item.packageCount,
+        tarePerPackageKg: item.tarePerPackageKg,
+        totalTareWeightKg: item.totalTareWeightKg,
+        grossWeightKg: item.grossWeightKg,
+        netWeightKg: item.netWeightKg,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      };
+    });
+
+    const rawAttachments = (store.operationScheduleAttachments || []).filter((att) => att.scheduleId === s.id);
+    const attachments: OperationScheduleAttachmentView[] = rawAttachments.map((att) => ({
+      id: att.id,
+      scheduleId: att.scheduleId,
+      documentId: att.documentId,
+      name: att.name,
+      kind: att.kind,
+      url: att.url,
+      size: att.size,
+      mime: att.mime,
+      uploadedBy: att.uploadedBy,
+      uploadedByName: att.uploadedByName || userById.get(att.uploadedBy)?.name || "Worker",
+      uploadedAt: att.uploadedAt,
+    }));
+
+    const totalGrossWeightKg = items.reduce((sum, i) => sum + (i.grossWeightKg || 0), 0);
+    const totalNetWeightKg = items.reduce((sum, i) => sum + (i.netWeightKg || 0), 0);
+    const totalTareWeightKg = items.reduce((sum, i) => sum + (i.totalTareWeightKg || 0), 0);
+    const totalPackageCount = items.reduce((sum, i) => sum + (i.packageCount || 0), 0);
+
+    const workerUser = userById.get(s.assignedWorkerId);
+    const creatorUser = userById.get(s.createdBy);
+    const verifierUser = s.verifiedBy ? userById.get(s.verifiedBy) : null;
+    const warehouse = warehouseName.get(s.warehouseId) || "Warehouse";
+
+    const materialSummary = summarizeScheduleMaterials(items);
+
+    return {
+      id: s.id,
+      scheduleNumber: s.scheduleNumber,
+      type: s.type,
+      typeLabel: s.type === "unloading" ? "Unloading Schedule" : "Loading Schedule",
+      poSoNumber: s.poSoNumber,
+      purchaseOrderId: s.purchaseOrderId ?? null,
+      shipmentId: s.shipmentId ?? null,
+      partnerName: s.partnerName,
+      companyId: s.companyId ?? null,
+      warehouseId: s.warehouseId,
+      warehouseName: warehouse,
+      origin: s.origin || "—",
+      destination: s.destination || "—",
+      annex7Required: Boolean(s.annex7Required),
+      transportPrice: s.transportPrice || 0,
+      currency: s.currency || "EUR",
+      pickupDate: s.pickupDate ?? null,
+      purchaserName: s.purchaserName ?? null,
+      purchasingPrice: s.purchasingPrice || 0,
+      sellerName: s.sellerName ?? null,
+      sellingPrice: s.sellingPrice || 0,
+      scheduledDate: s.scheduledDate,
+      assignedWorkerId: s.assignedWorkerId,
+      assignedWorkerName: s.assignedWorkerName || workerUser?.name || "Assigned Worker",
+      vehicleRegistrationNumber: s.vehicleRegistrationNumber || "",
+      transportCompany: s.transportCompany || "",
+      driverName: s.driverName || "",
+      driverContactNumber: s.driverContactNumber || "",
+      cmrNumber: s.cmrNumber || "",
+      actualArrivalTime: s.actualArrivalTime ?? null,
+      status: s.status,
+      statusLabel: OPERATION_SCHEDULE_STATUS_LABELS[s.status] || s.status,
+      instructions: s.instructions || "",
+      workerRemarks: s.workerRemarks || "",
+      returnReason: s.returnReason ?? null,
+      infoRequestNote: s.infoRequestNote ?? null,
+      actualStartTime: s.actualStartTime ?? null,
+      actualEndTime: s.actualEndTime ?? null,
+      submittedAt: s.submittedAt ?? null,
+      verifiedAt: s.verifiedAt ?? null,
+      verifiedBy: s.verifiedBy ?? null,
+      verifiedByName: s.verifiedByName || verifierUser?.name || null,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      createdBy: s.createdBy,
+      createdByName: s.createdByName || creatorUser?.name || "Staff",
+      items,
+      attachments,
+      materialSummary,
+      totalGrossWeightKg,
+      totalNetWeightKg,
+      totalTareWeightKg,
+      totalPackageCount,
+    };
+  });
+
   return {
     orders,
     containers,
@@ -784,6 +895,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     requests,
     generalRequests,
     offers,
+    schedules,
     containerInventory,
     inventoryHistory,
     notifications,

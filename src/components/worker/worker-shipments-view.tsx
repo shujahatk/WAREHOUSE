@@ -14,16 +14,20 @@ import {
   visibleOutbound,
   type DemoContainer,
   type DemoOutbound,
+  type OperationScheduleView,
 } from "@/domain/view";
 import { Icon } from "@/components/icons";
 import { WORKER_THEME } from "./worker-theme";
+import { WorkerScheduleModal } from "./worker-schedule-modal";
 
 export function WorkerShipmentsView({ direction }: { direction: "inbound" | "outbound" }) {
   const { state } = useDemo();
   const { identity } = useSession();
+  const [viewMode, setViewMode] = useState<"schedules" | "containers">("schedules");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedSchedule, setSelectedSchedule] = useState<OperationScheduleView | null>(null);
 
   const isInbound = direction === "inbound";
   const actor = {
@@ -37,12 +41,35 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
   const containers = visibleContainers(state, actor);
   const outboundList = visibleOutbound(state, actor);
 
+  // Operation schedules for this direction
+  const targetScheduleType = isInbound ? "unloading" : "loading";
+  const schedules = (state.schedules || []).filter((s) => s.type === targetScheduleType);
+
   // Demurrage live timer
   const now = useLiveNow(
     isInbound && containers.some((c) => c.status === "Unloading" && Boolean(c.demurrage?.startedAt))
   );
 
-  // Filter list
+  // Filtered schedules
+  const filteredSchedules = schedules.filter((s) => {
+    if (statusFilter !== "all") {
+      if (statusFilter === "active" && (s.status === "completed")) return false;
+      if (statusFilter === "in-progress" && s.status !== "in_progress" && s.status !== "draft") return false;
+      if (statusFilter === "done" && s.status !== "completed") return false;
+      if (statusFilter === "returned" && s.status !== "returned_for_correction") return false;
+    }
+
+    if (!search.trim()) return true;
+    const query = search.toLowerCase();
+    return (
+      s.scheduleNumber.toLowerCase().includes(query) ||
+      s.poSoNumber.toLowerCase().includes(query) ||
+      s.partnerName.toLowerCase().includes(query) ||
+      s.warehouseName.toLowerCase().includes(query)
+    );
+  });
+
+  // Filter list for legacy containers
   const filteredItems = (isInbound ? containers : outboundList).filter((item) => {
     // Status filter
     if (statusFilter !== "all") {
@@ -72,22 +99,42 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
 
   return (
     <div className="space-y-4 pb-12">
-      {/* Title & Warehouse Pill */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      {/* Title & Mode Switcher */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 sm:text-2xl">
-            {isInbound ? "Inbound Containers" : "Outbound Shipments"}
+            {isInbound ? "Unloading Operations" : "Loading Operations"}
           </h1>
           <p className="text-xs text-neutral-500">
             {identity.warehouse ? `${identity.warehouse} Depot` : "All Warehouses"} ·{" "}
-            {filteredItems.length} {isInbound ? "container(s)" : "shipment(s)"} listed
+            {viewMode === "schedules" ? `${filteredSchedules.length} schedule(s)` : `${filteredItems.length} shipment(s)`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-            {isInbound ? "Unloading Operations" : "Loading Operations"}
-          </span>
+
+        {/* View Mode Switcher */}
+        <div className="flex rounded-lg border border-neutral-200 bg-neutral-100 p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => setViewMode("schedules")}
+            className={`rounded-md px-3 py-1 font-semibold transition ${
+              viewMode === "schedules"
+                ? "bg-white text-neutral-900 shadow-2xs"
+                : "text-neutral-600 hover:text-neutral-900"
+            }`}
+          >
+            Schedules ({schedules.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("containers")}
+            className={`rounded-md px-3 py-1 font-semibold transition ${
+              viewMode === "containers"
+                ? "bg-white text-neutral-900 shadow-2xs"
+                : "text-neutral-600 hover:text-neutral-900"
+            }`}
+          >
+            Containers ({isInbound ? containers.length : outboundList.length})
+          </button>
         </div>
       </div>
 
@@ -98,7 +145,7 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search ${isInbound ? "PO, container number, supplier..." : "SO, customer, equipment ID..."}`}
+            placeholder={`Search ${isInbound ? "PO, schedule, supplier..." : "SO, schedule, customer..."}`}
             className={WORKER_THEME.input}
           />
           {search ? (
@@ -117,239 +164,269 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
-            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${statusFilter === "all"
-              ? "bg-emerald-800 text-white shadow-xs"
-              : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-              }`}
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
+              statusFilter === "all"
+                ? "bg-emerald-800 text-white shadow-xs"
+                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+            }`}
           >
-            All Shipments ({isInbound ? containers.length : outboundList.length})
+            All ({viewMode === "schedules" ? schedules.length : (isInbound ? containers.length : outboundList.length)})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("active")}
-            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${statusFilter === "active"
-              ? "bg-emerald-800 text-white shadow-xs"
-              : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-              }`}
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
+              statusFilter === "active"
+                ? "bg-emerald-800 text-white shadow-xs"
+                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+            }`}
           >
             Open / Pending
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("in-progress")}
-            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${statusFilter === "in-progress"
-              ? "bg-emerald-800 text-white shadow-xs"
-              : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-              }`}
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
+              statusFilter === "in-progress"
+                ? "bg-emerald-800 text-white shadow-xs"
+                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+            }`}
           >
-            {isInbound ? "Unloading Now" : "Loading Now"}
+            In Progress
           </button>
+          {viewMode === "schedules" ? (
+            <button
+              type="button"
+              onClick={() => setStatusFilter("returned")}
+              className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
+                statusFilter === "returned"
+                  ? "bg-amber-800 text-white shadow-xs"
+                  : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+              }`}
+            >
+              Returned for Correction
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setStatusFilter("done")}
-            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${statusFilter === "done"
-              ? "bg-emerald-800 text-white shadow-xs"
-              : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
-              }`}
+            className={`min-h-[40px] whitespace-nowrap rounded-xl px-3.5 py-2 font-semibold transition ${
+              statusFilter === "done"
+                ? "bg-emerald-800 text-white shadow-xs"
+                : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+            }`}
           >
             Completed
           </button>
         </div>
       </div>
 
-      {/* Shipment Cards List */}
-      {filteredItems.length === 0 ? (
-        <div className="rounded-xl border border-neutral-200/90 bg-white p-8 text-center shadow-2xs">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500">
-            <Icon name={isInbound ? "containers" : "outbound"} />
+      {/* SCHEDULES VIEW */}
+      {viewMode === "schedules" ? (
+        filteredSchedules.length === 0 ? (
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-8 text-center shadow-2xs">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500">
+              <Icon name={isInbound ? "containers" : "outbound"} />
+            </div>
+            <h3 className="mt-3 text-sm font-bold text-neutral-900">No operation schedules found</h3>
+            <p className="mt-1 text-xs text-neutral-500">
+              {search ? "Try adjusting your search query." : "No operations matching the selected filter."}
+            </p>
           </div>
-          <h3 className="mt-3 text-sm font-bold text-neutral-900">No shipments found</h3>
-          <p className="mt-1 text-xs text-neutral-500">
-            {search ? "Try adjusting your search query." : "No operations matching the selected filter."}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredItems.map((item) => {
-            const isExpanded = expandedId === item.number;
-            const party = "supplier" in item ? item.supplier : item.customer;
-            const equip = "containerNumber" in item ? item.containerNumber : item.container;
-            const isCompleted = item.status === "Completed" || item.status === "Dispatched";
-            const isWorking = item.status === "Unloading" || item.status === "Loading";
+        ) : (
+          <div className="space-y-3">
+            {filteredSchedules.map((schedule) => {
+              const isSched = schedule.status === "scheduled";
+              const isWorking = schedule.status === "in_progress" || schedule.status === "draft";
+              const isRet = schedule.status === "returned_for_correction";
+              const isSub = schedule.status === "submitted" || schedule.status === "resubmitted";
+              const isDone = schedule.status === "completed";
 
-            // Inbound demurrage check
-            const containerItem = isInbound ? (item as DemoContainer) : null;
-            const demurrageSnap = containerItem && now ? demurrageSnapshot(containerItem, now) : null;
-            const isDemurrageWarning = Boolean(demurrageSnap?.overtime);
-
-            const hasAnnex = isInbound && state.attachments.some((a) => a.shipment === item.number && a.role === "annex7");
-
-            return (
-              <div
-                key={item.number}
-                className={`overflow-hidden rounded-xl border bg-white transition-all shadow-2xs ${isDemurrageWarning
-                  ? "border-rose-300 bg-rose-50/40"
-                  : isWorking
-                    ? "border-blue-300 bg-blue-50/30"
-                    : "border-neutral-200/90"
+              return (
+                <div
+                  key={schedule.id}
+                  onClick={() => setSelectedSchedule(schedule)}
+                  className={`cursor-pointer overflow-hidden rounded-xl border bg-white p-4 transition-all shadow-2xs hover:border-emerald-400 active:scale-[0.99] ${
+                    isRet
+                      ? "border-amber-300 bg-amber-50/30"
+                      : isWorking
+                      ? "border-blue-300 bg-blue-50/20"
+                      : "border-neutral-200/90"
                   }`}
-              >
-                {/* Main Card Header */}
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-3">
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      {/* PO / SO Reference Badge */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm font-bold text-neutral-900 tracking-tight">
-                          {item.number}
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-bold text-neutral-900">
+                          {schedule.scheduleNumber}
                         </span>
-                        {item.po ? (
-                          <span className="rounded bg-neutral-100 border border-neutral-300 px-2 py-0.5 text-xs font-semibold text-neutral-800">
-                            {item.po}
-                          </span>
-                        ) : null}
-                        {hasAnnex ? (
-                          <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
-                            Annex VII
-                          </span>
-                        ) : null}
+                        <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-700">
+                          {schedule.poSoNumber}
+                        </span>
                       </div>
 
-                      {/* Party (Supplier / Customer) */}
-                      <p className="mt-1.5 text-sm font-bold text-neutral-900">
-                        {party || (isInbound ? "Supplier Not Recorded" : "Customer Not Recorded")}
+                      <p className="mt-1.5 text-xs text-neutral-800 font-semibold">
+                        <span className="text-neutral-500 font-normal">
+                          {isInbound ? "Supplier:" : "Customer:"}
+                        </span>{" "}
+                        {schedule.partnerName}
                       </p>
-                    </div>
 
-                    {/* Status Pill */}
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tracking-tight ${isCompleted
-                        ? "border border-emerald-300 bg-emerald-100 text-emerald-800"
-                        : isWorking
-                          ? "border border-blue-300 bg-blue-100 text-blue-800"
-                          : "border border-neutral-300 bg-neutral-100 text-neutral-700"
-                        }`}
-                    >
-                      {isCompleted ? "✔" : isWorking ? "●" : "○"} {item.status}
-                    </span>
-                  </div>
-
-                  {/* Route & Equipment Info Block */}
-                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-neutral-50/90 border border-neutral-200/70 p-3 text-xs">
-                    <div>
-                      <span className="text-neutral-500 block text-[10px] uppercase font-bold">
-                        {isInbound ? "Origin & Pickup" : "Destination"}
-                      </span>
-                      <p className="font-semibold text-neutral-800 truncate mt-0.5">
-                        {isInbound ? (item as DemoContainer).origin || "Origin not set" : item.warehouse}
+                      <p className="mt-0.5 text-[11px] text-neutral-500">
+                        Date: <strong className="text-neutral-800">{schedule.scheduledDate}</strong> · Depot: {schedule.warehouseName}
+                        {schedule.annex7Required ? " · Annex VII Required" : ""}
                       </p>
-                      <p className="text-[11px] text-neutral-500 mt-0.5">
-                        {isInbound ? `ETA: ${(item as DemoContainer).eta || "Pending"}` : (item as DemoOutbound).date}
-                      </p>
-                    </div>
 
-                    <div>
-                      <span className="text-neutral-500 block text-[10px] uppercase font-bold">
-                        Equipment / Container
-                      </span>
-                      <p className="font-mono font-bold text-neutral-800 truncate mt-0.5">
-                        {equip || "No equipment ID"}
-                      </p>
-                      <p className="text-[11px] text-neutral-500 mt-0.5">Depot: {item.warehouse}</p>
-                    </div>
-                  </div>
-
-                  {/* Demurrage Notice Banner if applicable */}
-                  {isInbound && containerItem?.status === "Unloading" ? (
-                    <div
-                      className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold ${isDemurrageWarning
-                        ? "bg-rose-100 text-rose-900 border border-rose-300"
-                        : "bg-amber-100 text-amber-900 border border-amber-300"
-                        }`}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Icon name="bell" />
-                        {demurrageLabel(containerItem, now)}
-                      </span>
-                      {demurrageSnap?.chargeEUR && demurrageSnap.chargeEUR > 0 ? (
-                        <span className="font-bold text-rose-700">
-                          {formatEuro(demurrageSnap.chargeEUR)}
-                        </span>
+                      {schedule.items && schedule.items.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {schedule.items.map((it, i) => (
+                            <span
+                              key={it.id || i}
+                              className="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-700"
+                            >
+                              <span>{it.materialName}</span>
+                              <span className="text-neutral-400">·</span>
+                              <span className="font-bold">{formatKg(it.netWeightKg)}</span>
+                            </span>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
-                  ) : null}
 
-                  {/* Materials Preview & Toggle */}
-                  <div className="mt-3 flex items-center justify-between text-xs text-neutral-600 border-t border-neutral-200/80 pt-2.5">
-                    <span className="font-medium">
-                      {item.sections?.length || 0} Material Section(s) recorded
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(isExpanded ? null : item.number)}
-                      className="text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1"
-                    >
-                      {isExpanded ? "Hide Details ▲" : "View Details ▼"}
-                    </button>
-                  </div>
-                </div>
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                          isDone
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                            : isRet
+                            ? "bg-amber-100 text-amber-900 border border-amber-400 animate-pulse"
+                            : isSub
+                            ? "bg-blue-100 text-blue-800 border border-blue-300"
+                            : isWorking
+                            ? "bg-purple-100 text-purple-800 border border-purple-300"
+                            : "bg-neutral-200 text-neutral-800"
+                        }`}
+                      >
+                        {isRet
+                          ? "Returned for Correction"
+                          : isSub
+                          ? "Under Review"
+                          : schedule.status.replace(/_/g, " ")}
+                      </span>
 
-                {/* Expandable Details Drawer */}
-                {isExpanded ? (
-                  <div className="border-t border-neutral-200 bg-neutral-50/70 p-4 text-xs space-y-3">
-                    <p className="font-bold text-neutral-700 uppercase tracking-wider text-[10px]">
-                      Recorded Cargo Sections
-                    </p>
-                    {item.sections && item.sections.length > 0 ? (
-                      <div className="space-y-1.5">
-                        {item.sections.map((sec, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between rounded-lg bg-white border border-neutral-200 p-2.5 text-neutral-800 shadow-2xs"
-                          >
-                            <div>
-                              <p className="font-bold text-neutral-900">{sec.material}</p>
-                              <p className="text-[11px] text-neutral-500">
-                                {sec.packagingId} · Qty: {sec.packagingQty || "N/A"}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              {sec.netKg != null ? (
-                                <p className="font-bold text-emerald-800">{formatKg(sec.netKg)} Net</p>
-                              ) : (
-                                <p className="font-bold text-blue-800">{sec.count} Units</p>
-                              )}
-                              {sec.grossKg ? (
-                                <p className="text-[10px] text-neutral-500">{formatKg(sec.grossKg)} Gross</p>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-neutral-500 italic">No materials recorded yet.</p>
-                    )}
-
-                    <div className="rounded-lg border border-neutral-200 bg-white p-2.5 text-[11px] text-neutral-600">
-                      ℹ Ready to work? Tap the action button below to record scale weights and inspection photos.
+                      <span className="text-xs font-bold text-emerald-800 hover:text-emerald-950">
+                        {isSched
+                          ? "Start Operation →"
+                          : isWorking || isRet
+                          ? "Open Worksheet →"
+                          : "View Details →"}
+                      </span>
                     </div>
                   </div>
-                ) : null}
-
-                {/* Primary Action Button (min 48px touch target) */}
-                <div className="border-t border-neutral-200 p-3 bg-neutral-50/60">
-                  <Link
-                    href={isInbound ? `/containers/${item.number}` : `/outbound/${item.number}`}
-                    className={WORKER_THEME.btnPrimary}
-                  >
-                    {isInbound ? "Start Unloading / View Operation →" : "Start Loading / View Operation →"}
-                  </Link>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        /* CONTAINERS VIEW */
+        filteredItems.length === 0 ? (
+          <div className="rounded-xl border border-neutral-200/90 bg-white p-8 text-center shadow-2xs">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500">
+              <Icon name={isInbound ? "containers" : "outbound"} />
+            </div>
+            <h3 className="mt-3 text-sm font-bold text-neutral-900">No shipments found</h3>
+            <p className="mt-1 text-xs text-neutral-500">
+              {search ? "Try adjusting your search query." : "No operations matching the selected filter."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredItems.map((item) => {
+              const isExpanded = expandedId === item.number;
+              const party = "supplier" in item ? item.supplier : item.customer;
+              const equip = "containerNumber" in item ? item.containerNumber : item.container;
+              const isCompleted = item.status === "Completed" || item.status === "Dispatched";
+              const isWorking = item.status === "Unloading" || item.status === "Loading";
+
+              const containerItem = isInbound ? (item as DemoContainer) : null;
+              const demurrageSnap = containerItem && now ? demurrageSnapshot(containerItem, now) : null;
+              const isDemurrageWarning = Boolean(demurrageSnap?.overtime);
+
+              const hasAnnex = isInbound && state.attachments.some((a) => a.shipment === item.number && a.role === "annex7");
+
+              return (
+                <div
+                  key={item.number}
+                  className={`overflow-hidden rounded-xl border bg-white transition-all shadow-2xs ${
+                    isDemurrageWarning
+                      ? "border-rose-300 bg-rose-50/40"
+                      : isWorking
+                      ? "border-blue-300 bg-blue-50/30"
+                      : "border-neutral-200/90"
+                  }`}
+                >
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-bold text-neutral-900">
+                            {item.number}
+                          </span>
+                          {item.po ? (
+                            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600">
+                              PO: {item.po}
+                            </span>
+                          ) : null}
+                          {hasAnnex ? (
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                              Annex VII
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-neutral-700">
+                          <span className="text-neutral-500">{isInbound ? "Supplier:" : "Customer:"}</span>{" "}
+                          <strong className="text-neutral-900">{party}</strong>
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-neutral-500">
+                          Equipment: {equip || "Not assigned"} · {item.warehouse}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1.5">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                            isCompleted
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                              : isWorking
+                              ? "bg-blue-100 text-blue-800 border border-blue-300"
+                              : "bg-neutral-100 text-neutral-700 border border-neutral-300"
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                        <Link
+                          href={isInbound ? `/containers/${item.number}` : `/outbound/${item.number}`}
+                          className="text-xs font-bold text-emerald-800 hover:text-emerald-950"
+                        >
+                          Open Workflow →
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
       )}
+
+      {/* Schedule Execution Modal */}
+      <WorkerScheduleModal
+        schedule={selectedSchedule}
+        isOpen={Boolean(selectedSchedule)}
+        onClose={() => setSelectedSchedule(null)}
+      />
     </div>
   );
 }
