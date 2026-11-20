@@ -9,6 +9,7 @@ import { ScheduleListView } from "@/components/schedules/schedule-list-view";
 import { ScheduleCalendarView } from "@/components/schedules/schedule-calendar-view";
 import { UnloadingScheduleModal } from "@/components/schedules/unloading-schedule-modal";
 import { ScheduleDetailsDrawer } from "@/components/schedules/schedule-details-drawer";
+import { WorkerScheduleModal } from "@/components/worker/worker-schedule-modal";
 
 export default function UnloadingSchedulePage() {
   const { state } = useDemo();
@@ -143,13 +144,24 @@ export default function UnloadingSchedulePage() {
         }}
       />
 
-      {/* Details Drawer */}
-      <ScheduleDetailsDrawer
-        schedule={selectedSchedule}
-        isOpen={Boolean(selectedSchedule)}
-        onClose={() => setSelectedSchedule(null)}
-        onEdit={(sched) => setEditingSchedule(sched)}
-      />
+      {/* Worker Console Modal */}
+      {isWorker && (
+        <WorkerScheduleModal
+          schedule={selectedSchedule}
+          isOpen={Boolean(selectedSchedule)}
+          onClose={() => setSelectedSchedule(null)}
+        />
+      )}
+
+      {/* Details Drawer (Staff & Admin) */}
+      {!isWorker && (
+        <ScheduleDetailsDrawer
+          schedule={selectedSchedule}
+          isOpen={Boolean(selectedSchedule)}
+          onClose={() => setSelectedSchedule(null)}
+          onEdit={(sched) => setEditingSchedule(sched)}
+        />
+      )}
     </div>
   );
 }
