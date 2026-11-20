@@ -6,6 +6,7 @@ import type { OfferView, DemoOrder } from "@/domain/view";
 import type { Role } from "@/lib/permissions";
 import { cn } from "@/lib/cn";
 import { exportOffersToCsv } from "./offers-csv";
+import { formatMoney } from "@/lib/currency";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-neutral-100 text-neutral-700 border-neutral-300" },
@@ -36,7 +37,7 @@ export function OffersTable({
   offers: OfferView[];
   role: Role;
   orders?: DemoOrder[];
-  mode?: "all" | "purchasing" | "selling";
+  mode?: "all" | "purchasing" | "selling" | "sold";
   onToggleFavourite?: (id: string) => void;
   onEdit?: (offer: OfferView) => void;
   onDelete?: (id: string) => void;
@@ -790,10 +791,10 @@ export function OffersTable({
                       {/* Valuation */}
                       <td className="py-3 px-3 whitespace-nowrap font-semibold text-neutral-900">
                         <span className="font-mono">
-                          €{offer.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {formatMoney(offer.totalValue, offer.currency)}
                         </span>
                         <span className="block text-[10px] font-normal text-neutral-500 font-mono">
-                          €{offer.pricePerUnit}/{offer.unit}
+                          {formatMoney(offer.pricePerUnit, offer.currency, { showCode: false })}/{offer.unit}
                         </span>
                       </td>
 

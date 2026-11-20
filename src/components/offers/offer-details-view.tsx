@@ -10,6 +10,7 @@ import { OfferFormModal } from "./offer-form-modal";
 import { OfferStatusModal } from "./offer-status-modal";
 import { SellingOfferModal } from "./selling-offer-modal";
 import { cn } from "@/lib/cn";
+import { formatMoney } from "@/lib/currency";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-neutral-100 text-neutral-700 border-neutral-300" },
@@ -890,13 +891,13 @@ export function OfferDetailsView({
               <div>
                 <span className="text-xs text-neutral-500">Unit Price</span>
                 <p className="text-xl font-bold text-neutral-950 font-mono">
-                  €{offer.pricePerUnit} / {offer.unit}
+                  {formatMoney(offer.pricePerUnit, offer.currency, { showCode: false })} / {offer.unit}
                 </p>
               </div>
               <div className="border-t border-neutral-100 pt-3">
                 <span className="text-xs text-neutral-500">Total Sourced Value</span>
                 <p className="text-2xl font-black text-emerald-800 font-mono">
-                  €{offer.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {formatMoney(offer.totalValue, offer.currency)}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 border-t border-neutral-100 pt-3 text-xs">

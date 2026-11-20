@@ -12,6 +12,7 @@ import { OfferDecisionModal } from "@/components/offers/offer-decision-modal";
 import { SellingOfferModal } from "@/components/offers/selling-offer-modal";
 import { exportOffersToCsv } from "@/components/offers/offers-csv";
 import type { OfferView } from "@/domain/view";
+import { formatCurrencySummary, groupTotalsByCurrency } from "@/lib/currency";
 
 export default function PurchasingOffersPage() {
   const {
@@ -63,6 +64,9 @@ export default function PurchasingOffersPage() {
     }
 
     const avgPrice = totalQty > 0 ? totalVal / totalQty : 0;
+    const currencyTotals = groupTotalsByCurrency(
+      purchasingOffers.map((o) => ({ amount: o.totalValue || 0, currency: o.currency }))
+    );
 
     return {
       totalVal,
@@ -70,6 +74,7 @@ export default function PurchasingOffersPage() {
       truckLoads,
       avgPrice,
       countriesCount: countrySet.size,
+      currencyTotals,
     };
   }, [purchasingOffers]);
 
@@ -121,8 +126,8 @@ export default function PurchasingOffersPage() {
           <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
             Total Sourced Value
           </span>
-          <p className="mt-1 text-2xl font-black text-neutral-950 font-mono">
-            €{metrics.totalVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          <p className="mt-1 text-xl font-black text-neutral-950 font-mono">
+            {formatCurrencySummary(metrics.currencyTotals)}
           </p>
           <p className="mt-1 text-[11px] text-neutral-400">
             Across {purchasingOffers.length} supplier proposals

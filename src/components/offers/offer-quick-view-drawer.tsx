@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import type { OfferView } from "@/domain/view";
 import type { Role } from "@/lib/permissions";
 import { cn } from "@/lib/cn";
+import { formatMoney } from "@/lib/currency";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-neutral-100 text-neutral-700 border-neutral-300" },
@@ -118,15 +119,12 @@ export function OfferQuickViewDrawer({
             <div className="mt-2 flex items-baseline justify-between">
               <div>
                 <span className="text-2xl font-black text-emerald-800 font-mono">
-                  €{offer.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="ml-1.5 text-xs font-semibold text-neutral-500">
-                  {offer.currency}
+                  {formatMoney(offer.totalValue, offer.currency)}
                 </span>
               </div>
               <div className="text-right">
-                <span className="font-semibold text-neutral-900">
-                  €{offer.pricePerUnit} / {offer.unit}
+                <span className="font-semibold text-neutral-900 font-mono">
+                  {formatMoney(offer.pricePerUnit, offer.currency, { showCode: false })} / {offer.unit}
                 </span>
                 <span className="block text-[10px] text-neutral-500">
                   {offer.truckLoads} truckload{offer.truckLoads > 1 ? "s" : ""}

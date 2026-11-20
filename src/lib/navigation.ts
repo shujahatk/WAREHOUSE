@@ -53,6 +53,7 @@ export const navSections: NavSection[] = [
       { href: "/offers", label: "Offers Dashboard", icon: "dashboard", roles: OFFERS_ROLES },
       { href: "/offers/purchasing", label: "Purchasing Offers", icon: "purchases", roles: OFFERS_ROLES },
       { href: "/offers/selling", label: "Selling Offers", icon: "sales", roles: OFFERS_INTERNAL_ONLY },
+      { href: "/offers/sold", label: "Sold", icon: "check", roles: OFFERS_INTERNAL_ONLY },
     ],
   },
   {

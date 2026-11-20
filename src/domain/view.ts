@@ -167,6 +167,7 @@ export type DemoOrder = {
   removedBy?: string | null;
   quantityKg: number;
   valueEur: number;
+  currency?: string;
   unitPrice: string;
   incoterms: string;
   status: OrderStatus;

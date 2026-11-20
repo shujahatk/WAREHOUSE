@@ -48,6 +48,12 @@ export function OffersNav({
             count: sellingCount,
             description: "Customer sales & margin desk",
           },
+          {
+            href: "/offers/sold",
+            label: "Sold",
+            count: soldCount,
+            description: "Approved & finalized transactions",
+          },
         ]
       : []),
   ];

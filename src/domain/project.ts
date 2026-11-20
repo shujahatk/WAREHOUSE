@@ -103,6 +103,7 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
       material: lines.map((line) => line.description).filter(Boolean).join(", ") || "—",
       quantityKg: lines.reduce((sum, line) => sum + line.quantityKg, 0),
       valueEur: order.valueEur,
+      currency: (order as unknown as { currency?: string }).currency || "EUR",
       unitPrice: "",
       incoterms: "",
       status: orderStatus[order.status] ?? "Planned",

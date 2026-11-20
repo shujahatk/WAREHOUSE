@@ -89,6 +89,7 @@ export interface PurchaseOrderRepository {
     material: string;
     quantityKg: number;
     valueEur: number;
+    currency?: string;
     actorId: string;
   }): Promise<Result<PurchaseOrder>>;
   submit(input: {
@@ -104,6 +105,7 @@ export interface PurchaseOrderRepository {
     material: string;
     quantityKg: number;
     valueEur: number;
+    currency?: string;
     actorId: string;
   }): Promise<Result<PurchaseOrder>>;
   delete(input: { number: string; actorId: string }): Promise<Result<PurchaseOrder>>;

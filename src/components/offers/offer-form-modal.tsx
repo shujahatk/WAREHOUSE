@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { OfferView } from "@/domain/view";
 import { compressImageIfNeeded, fileToBase64 } from "@/lib/client-image";
+import { CurrencySelect } from "@/components/ui/currency-select";
+import { formatMoney } from "@/lib/currency";
 
 type AttachmentDraft = {
   name: string;
@@ -346,20 +348,14 @@ function OfferFormContent({
             </div>
             <div>
               <label className="block text-xs font-medium text-neutral-700">Currency</label>
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-neutral-300 bg-white p-2.5 text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
-              >
-                <option value="EUR">EUR (€)</option>
-                <option value="USD">USD ($)</option>
-                <option value="GBP">GBP (£)</option>
-              </select>
+              <div className="mt-1">
+                <CurrencySelect value={currency} onChange={setCurrency} />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-neutral-500">Calculated Value</label>
-              <div className="mt-1 flex h-[38px] items-center rounded-lg bg-neutral-100 px-3 text-xs font-bold text-neutral-900">
-                {currency} {computedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="mt-1 flex h-[38px] items-center rounded-lg bg-neutral-100 px-3 text-xs font-bold text-neutral-900 font-mono">
+                {formatMoney(computedTotal, currency)}
               </div>
             </div>
           </div>

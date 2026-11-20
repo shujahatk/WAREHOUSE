@@ -115,8 +115,9 @@ function notify(
     targetId?: string | null;
     link?: string | null;
     warehouseId?: string | null;
-  }
+  } | string
 ) {
+  const opts = typeof options === "string" ? { link: options } : options;
   if (!store.notifications) store.notifications = [];
   store.notifications.push({
     id: randomUUID(),
@@ -124,10 +125,10 @@ function notify(
     eventType,
     title,
     message,
-    targetType: options?.targetType ?? null,
-    targetId: options?.targetId ?? null,
-    link: options?.link ?? null,
-    warehouseId: options?.warehouseId ?? null,
+    targetType: opts?.targetType ?? null,
+    targetId: opts?.targetId ?? null,
+    link: typeof opts?.link === "string" ? opts.link : null,
+    warehouseId: opts?.warehouseId ?? null,
     read: false,
     readAt: null,
     createdAt: now,
@@ -186,6 +187,7 @@ function ensureOrder(store: StoreData, number: string, companyId: string, actorI
     companyId,
     status: "draft",
     valueEur: 0,
+    currency: "EUR",
     notes: "",
     type: (number.startsWith("SO-") ? "SO" : "PO") as "PO" | "SO",
     warehouseId: null,
@@ -808,6 +810,7 @@ export function createStaffOperationalRequest(
       companyId: partner.id,
       status: "draft",
       valueEur: (price || 1) * quantity,
+      currency: "EUR",
       notes: instructions || "",
       type: (operationType === "loading" || poSoNumber.startsWith("SO-") ? "SO" : "PO") as "PO" | "SO",
       warehouseId: wh.id,
@@ -1121,7 +1124,7 @@ export function assignPoSoToGeneralRequest(
   payload: Record<string, unknown>,
   now: string
 ): Result<WorkerGeneralRequest> {
-  if (actor.role !== "manager") {
+  if (actor.role !== "manager" && actor.role !== "owner") {
     return fail("Only Staff can assign PO/SO numbers to approved requests.");
   }
   const reqId = text(payload.requestId || payload.id);
@@ -1587,14 +1590,25 @@ export function decideOffer(
   if (!offer) return fail("Offer not found.");
 
   if (decision === "approved") {
+    if (offer.approvalStatus === "approved") {
+      return fail("This offer has already been approved.");
+    }
+    if (offer.approvalStatus === "rejected") {
+      return fail("Rejected offers cannot be approved without reopening.");
+    }
     offer.approvalStatus = "approved";
+    offer.soldAt = now;
     offer.adminDecisionNote = note;
     offer.decidedBy = actor.id;
     offer.decidedAt = now;
     offer.updatedAt = now;
   } else if (decision === "rejected") {
+    if (offer.approvalStatus === "approved") {
+      return fail("Approved offers cannot be rejected.");
+    }
     offer.approvalStatus = "rejected";
     offer.status = "lost";
+    offer.soldAt = null;
     offer.adminDecisionNote = note;
     offer.decidedBy = actor.id;
     offer.decidedAt = now;
@@ -1614,6 +1628,18 @@ export function decideOffer(
   });
 
   audit(store, actor.id, `offer-${decision}`, "offer", offer.id, `Admin ${decision} offer ${offer.number}: ${note}`, now);
+
+  if (offer.createdBy) {
+    notify(
+      store,
+      offer.createdBy,
+      `offer_${decision}`,
+      `Offer ${decision === "approved" ? "Approved & Moved to Sold" : "Rejected"}: ${offer.number}`,
+      `Admin has ${decision} Selling Offer ${offer.number}.${note ? ` Note: ${note}` : ""}`,
+      now,
+      { targetType: "offer", targetId: offer.id, link: decision === "approved" ? "/offers/sold" : "/offers" }
+    );
+  }
 
   return ok(offer);
 }
@@ -3528,6 +3554,7 @@ function createPurchase(store: StoreData, actor: UserRecord, body: Record<string
     companyId: company.id,
     status: "submitted",
     valueEur,
+    currency: (text(body.currency) || "EUR").toUpperCase(),
     notes: text(body.notes),
     type: orderType,
     warehouseId,
@@ -3574,6 +3601,7 @@ function submitOrder(store: StoreData, actor: UserRecord, body: Record<string, u
     companyId: actor.companyId,
     status: "submitted",
     valueEur: 0,
+    currency: "EUR",
     notes,
     type: "PO",
     warehouseId: null,
@@ -3631,6 +3659,9 @@ function editPurchase(store: StoreData, actor: UserRecord, body: Record<string, 
   const company = upsertCompany(store, partner, isSalesOrder ? "customer" : "supplier", randomUUID);
   order.companyId = company.id;
   order.valueEur = valueEur;
+  if (body.currency !== undefined) {
+    (order as unknown as { currency?: string }).currency = (text(body.currency) || "EUR").toUpperCase();
+  }
   if (body.title !== undefined) {
     order.title = text(body.title) || order.title;
   }

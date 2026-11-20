@@ -132,6 +132,7 @@ function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
     companyId: String(row.company_id),
     status: (row.status as PurchaseOrder["status"]) ?? "submitted",
     valueEur: Number(row.value_eur ?? 0),
+    currency: String(row.currency ?? "EUR"),
     notes: notesStr,
     createdBy: String(row.created_by),
     createdAt: String(row.created_at ?? new Date().toISOString()),
@@ -1199,6 +1200,7 @@ export class SupabaseAdapter {
             material,
             quantityKg,
             valueEur,
+            currency: text(body.currency) || undefined,
             actorId: profile.id,
           });
           if (!res.ok) {
@@ -1924,11 +1926,24 @@ export class SupabaseAdapter {
           break;
         }
         case "assignPoSoToGeneralRequest": {
-          if (profile.role !== "manager") {
-            error = "Only Staff can assign PO/SO numbers to approved requests.";
+          if (profile.role !== "manager" && profile.role !== "owner") {
+            error = "Only Staff or Admin can assign PO/SO numbers to approved requests.";
             break;
           }
           const reqId = text(body.requestId || body.id);
+          const rawPoSo = text(body.poSoNumber || body.number || body.reference).toUpperCase();
+
+          // Try dedicated atomic RPC first
+          const rpcRes = await this.client.rpc<Record<string, unknown>>(
+            "rpc_assign_poso_to_general_request",
+            { p_request_id: reqId, p_poso_number: rawPoSo },
+            token,
+          );
+          if (rpcRes.ok) {
+            notice = `Assigned ${rawPoSo} to request.`;
+            break;
+          }
+
           const reqRes = await this.client.select<Record<string, unknown>>(
             "worker_general_requests",
             `select=*&id=eq.${encodeURIComponent(reqId)}`,
@@ -1944,7 +1959,6 @@ export class SupabaseAdapter {
             break;
           }
 
-          const rawPoSo = text(body.poSoNumber || body.number || body.reference).toUpperCase();
           if (!rawPoSo) {
             error = "A PO or SO reference number is required.";
             break;
@@ -2224,6 +2238,7 @@ export class SupabaseAdapter {
         }
         case "submitSellingOffer": {
           const purchasingOfferId = text(body.purchasingOfferId || body.linkedOfferId) || null;
+          const currency = (text(body.currency) || "EUR").toUpperCase();
           let rpcRes = await this.client.rpc<Record<string, unknown>>(
             "rpc_submit_selling_offer",
             {
@@ -2237,10 +2252,11 @@ export class SupabaseAdapter {
               p_origin: text(body.origin),
               p_destination: text(body.destination),
               p_purchasing_offer_id: purchasingOfferId,
+              p_currency: currency,
             },
             token
           );
-          if (!rpcRes.ok && (rpcRes.error?.includes("p_purchasing_offer_id") || rpcRes.error?.includes("schema cache") || rpcRes.error?.includes("PGRST202"))) {
+          if (!rpcRes.ok && (rpcRes.error?.includes("p_currency") || rpcRes.error?.includes("p_purchasing_offer_id") || rpcRes.error?.includes("schema cache") || rpcRes.error?.includes("PGRST202"))) {
             rpcRes = await this.client.rpc<Record<string, unknown>>(
               "rpc_submit_selling_offer",
               {
@@ -2845,6 +2861,7 @@ export class SupabaseAdapter {
               company_id: String(compRes.value.id),
               status: "submitted",
               value_eur: input.valueEur,
+              currency: input.currency || "EUR",
               notes: "",
               created_by: actor.id,
             },

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDemo } from "@/components/providers/workspace-provider";
+import { CurrencySelect } from "@/components/ui/currency-select";
 
 export function SellingOfferModal({
   isOpen,
@@ -24,6 +25,7 @@ export function SellingOfferModal({
     contactNumber: string;
     emailAddress: string;
     price: number;
+    currency?: string;
     origin: string;
     destination: string;
     description?: string;
@@ -45,6 +47,7 @@ export function SellingOfferModal({
   const [contactNumber, setContactNumber] = useState("");
   const [emailAddress, setEmailAddress] = useState("");
   const [price, setPrice] = useState("");
+  const [currency, setCurrency] = useState("EUR");
   const [origin, setOrigin] = useState(() => initialOrigin || "Antwerp, Belgium");
   const [destination, setDestination] = useState("");
   const [description, setDescription] = useState("");
@@ -116,6 +119,7 @@ export function SellingOfferModal({
         contactNumber: trimmedContact,
         emailAddress: trimmedEmail,
         price: parsedPrice,
+        currency,
         origin: trimmedOrigin,
         destination: trimmedDest,
         description: description.trim() || undefined,
@@ -353,11 +357,11 @@ export function SellingOfferModal({
           </div>
 
           {/* Section 3: Commercial Valuation & Terms */}
-          <div className="grid gap-3.5 sm:grid-cols-2">
+          <div className="grid gap-3.5 sm:grid-cols-3">
             {/* Field 7: Price */}
             <div className="sm:col-span-2">
               <label className="block font-medium text-neutral-700">
-                7. Selling Price (EUR) <span className="text-rose-500">*</span>
+                7. Selling Price <span className="text-rose-500">*</span>
               </label>
               <input
                 type="number"
@@ -369,6 +373,15 @@ export function SellingOfferModal({
                 placeholder="e.g. 1450.00"
                 className="mt-1 h-9.5 w-full rounded-lg border border-neutral-300 bg-white px-3 text-xs text-neutral-950 focus:border-emerald-700 focus:outline-hidden font-mono font-bold"
               />
+            </div>
+            {/* Currency Selector */}
+            <div>
+              <label className="block font-medium text-neutral-700">
+                Currency <span className="text-rose-500">*</span>
+              </label>
+              <div className="mt-1">
+                <CurrencySelect value={currency} onChange={setCurrency} />
+              </div>
             </div>
           </div>
 

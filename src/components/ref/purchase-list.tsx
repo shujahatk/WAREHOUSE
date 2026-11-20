@@ -6,8 +6,10 @@ import { useDemo } from "@/components/providers/workspace-provider";
 import { PageTitle, StatusPill, Surface } from "@/components/ref/chrome";
 import { useSession } from "@/components/shell/auth-gate";
 import { useWorkspaceSearch } from "@/components/shell/search-context";
-import { formatEuro, formatKg, visibleOrders, type DemoOrder, type OrderStatus } from "@/domain/view";
+import { formatKg, visibleOrders, type DemoOrder, type OrderStatus } from "@/domain/view";
 import { canPerform } from "@/lib/permissions";
+import { CurrencySelect } from "@/components/ui/currency-select";
+import { formatMoney } from "@/lib/currency";
 
 const STATUS_FILTERS: Array<OrderStatus | "All"> = ["All", "Approved", "Pending", "Planned", "Rejected"];
 const TYPE_FILTERS = ["All", "PO", "SO"] as const;
@@ -34,6 +36,7 @@ export function PurchaseList() {
   const [addMaterial, setAddMaterial] = useState("");
   const [addQuantity, setAddQuantity] = useState("1000");
   const [addValue, setAddValue] = useState("10000");
+  const [addCurrency, setAddCurrency] = useState("EUR");
   const [addWarehouse, setAddWarehouse] = useState("Bornem");
   const [addNotes, setAddNotes] = useState("");
   const [addPending, setAddPending] = useState(false);
@@ -45,6 +48,7 @@ export function PurchaseList() {
   const [editMaterial, setEditMaterial] = useState("");
   const [editQuantity, setEditQuantity] = useState("");
   const [editValue, setEditValue] = useState("");
+  const [editCurrency, setEditCurrency] = useState("EUR");
   const [editWarehouse, setEditWarehouse] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editPending, setEditPending] = useState(false);
@@ -185,6 +189,7 @@ export function PurchaseList() {
         material: trimmedMaterial,
         quantityKg: parsedQty,
         valueEur: parsedVal,
+        currency: addCurrency,
         notes: addNotes.trim() || undefined,
       });
 
@@ -208,6 +213,7 @@ export function PurchaseList() {
     setEditMaterial(order.material === "—" ? "" : order.material);
     setEditQuantity(String(order.quantityKg));
     setEditValue(String(order.valueEur));
+    setEditCurrency(order.currency || "EUR");
     setEditWarehouse(order.warehouse === "—" ? "Bornem" : order.warehouse);
     setEditNotes(order.notes || "");
     setEditError(null);
@@ -250,6 +256,7 @@ export function PurchaseList() {
         material: trimmedMaterial,
         quantityKg: parsedQty,
         valueEur: parsedVal,
+        currency: editCurrency,
         notes: editNotes.trim() || undefined,
       });
 
@@ -471,6 +478,12 @@ export function PurchaseList() {
                         {order.quantityKg > 0 ? formatKg(order.quantityKg) : "—"}
                       </div>
                       <div>
+                        <span className="text-neutral-400">Value:</span>{" "}
+                        <span className="font-semibold text-neutral-900 font-mono">
+                          {order.valueEur > 0 ? formatMoney(order.valueEur, order.currency) : "—"}
+                        </span>
+                      </div>
+                      <div>
                         <span className="text-neutral-400">Assigned:</span>{" "}
                         {order.assignedWorkerName || "Unassigned"}
                       </div>
@@ -510,6 +523,7 @@ export function PurchaseList() {
                   <th scope="col" className="px-4 py-3 font-semibold">Supplier / Customer</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Material</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Quantity</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Value</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Warehouse</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Assignment</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Status</th>
@@ -550,6 +564,9 @@ export function PurchaseList() {
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-neutral-900 tabular-nums">
                         {order.quantityKg > 0 ? formatKg(order.quantityKg) : "—"}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-neutral-900 tabular-nums whitespace-nowrap">
+                        {order.valueEur > 0 ? formatMoney(order.valueEur, order.currency) : "—"}
                       </td>
                       <td className="px-4 py-3 text-neutral-700">
                         {order.warehouse || "Bornem"}
@@ -716,8 +733,8 @@ export function PurchaseList() {
                 />
               </div>
 
-              {/* Quantity & Value */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Quantity, Value & Currency */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-neutral-700">
                     Quantity (kg) <span className="text-red-500">*</span>
@@ -734,7 +751,7 @@ export function PurchaseList() {
                 </div>
                 <div>
                   <label className="block font-semibold text-neutral-700">
-                    Value (EUR) <span className="text-red-500">*</span>
+                    Total Value <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -743,8 +760,16 @@ export function PurchaseList() {
                     value={addValue}
                     onChange={(e) => setAddValue(e.target.value)}
                     required
-                    className="mt-1 h-9 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    className="mt-1 h-9 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden font-mono"
                   />
+                </div>
+                <div>
+                  <label className="block font-semibold text-neutral-700">
+                    Currency <span className="text-red-500">*</span>
+                  </label>
+                  <div className="mt-1">
+                    <CurrencySelect value={addCurrency} onChange={setAddCurrency} />
+                  </div>
                 </div>
               </div>
 
@@ -865,7 +890,7 @@ export function PurchaseList() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-neutral-700">Quantity (kg)</label>
                   <input
@@ -879,7 +904,7 @@ export function PurchaseList() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-neutral-700">Value (EUR)</label>
+                  <label className="block font-semibold text-neutral-700">Total Value</label>
                   <input
                     type="number"
                     min="0"
@@ -887,8 +912,14 @@ export function PurchaseList() {
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     required
-                    className="mt-1 h-9 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden"
+                    className="mt-1 h-9 w-full rounded-lg border border-neutral-300 px-3 text-xs text-neutral-900 focus:border-neutral-950 focus:outline-hidden font-mono"
                   />
+                </div>
+                <div>
+                  <label className="block font-semibold text-neutral-700">Currency</label>
+                  <div className="mt-1">
+                    <CurrencySelect value={editCurrency} onChange={setEditCurrency} />
+                  </div>
                 </div>
               </div>
 

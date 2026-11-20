@@ -106,6 +106,7 @@ export const purchaseOrderSchema = z.object({
   companyId: id,
   status: purchaseStatusSchema,
   valueEur: z.number().refine((value) => Number.isFinite(value) && value >= 0, "Value must be zero or greater."),
+  currency: z.string().default("EUR"),
   notes: z.string(),
   type: z.enum(["PO", "SO"]).default("PO"),
   warehouseId: id.nullable().default(null),

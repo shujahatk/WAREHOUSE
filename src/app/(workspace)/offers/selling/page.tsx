@@ -14,6 +14,7 @@ import { OfferDecisionModal } from "@/components/offers/offer-decision-modal";
 import { exportOffersToCsv } from "@/components/offers/offers-csv";
 import type { OfferView } from "@/domain/view";
 import { cn } from "@/lib/cn";
+import { formatCurrencySummary, groupTotalsByCurrency } from "@/lib/currency";
 
 export default function SellingOffersPage() {
   const {
@@ -97,8 +98,21 @@ export default function SellingOffersPage() {
       }
     }
 
+    const activePipelineTotals = groupTotalsByCurrency(
+      sellingOffers
+        .filter((o) => o.statusKey !== "accepted" && o.statusKey !== "sold" && !o.soldAt)
+        .map((o) => ({ amount: o.totalValue || 0, currency: o.currency }))
+    );
+    const soldTotals = groupTotalsByCurrency(
+      sellingOffers
+        .filter((o) => o.statusKey === "accepted" || o.statusKey === "sold" || Boolean(o.soldAt))
+        .map((o) => ({ amount: o.totalValue || 0, currency: o.currency }))
+    );
+
     return {
       totalContractVal,
+      activePipelineTotals,
+      soldTotals,
       pendingReviews,
       approvedActive,
       closedSoldVal,
@@ -187,8 +201,8 @@ export default function SellingOffersPage() {
           <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
             Active Sales Pipeline Value
           </span>
-          <p className="mt-1 text-2xl font-black text-neutral-950 font-mono">
-            €{metrics.totalContractVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          <p className="mt-1 text-xl font-black text-neutral-950 font-mono">
+            {formatCurrencySummary(metrics.activePipelineTotals)}
           </p>
           <p className="mt-1 text-[11px] text-neutral-400">
             {metrics.approvedActive} approved &bull; open client proposals
@@ -223,8 +237,8 @@ export default function SellingOffersPage() {
           <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
             Closed Sold Volume
           </span>
-          <p className="mt-1 text-2xl font-black text-neutral-950 font-mono">
-            €{metrics.closedSoldVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          <p className="mt-1 text-xl font-black text-neutral-950 font-mono">
+            {formatCurrencySummary(metrics.soldTotals)}
           </p>
           <p className="mt-1 text-[11px] text-neutral-400">
             Commercial agreements finalized
