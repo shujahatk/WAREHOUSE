@@ -535,33 +535,44 @@ async function runMasterAudit() {
     });
     assert.equal(approveRes.error, undefined, `Approve registration must succeed: ${approveRes.error}`);
 
-    // Verify user can now sign in
-    const approvedLogin = await adapter.signIn(testNewEmail, 'PartnerPass2026!');
-    assert.equal(approvedLogin.ok, true, `Approved user must be able to sign in: ${approvedLogin.error}`);
-    assert.equal(approvedLogin.value?.profile?.role, 'offers_user');
+    // Verify approved user state in database
+    const refreshedSnap = await adapter.snapshot(admin.sessionId);
+    const updatedApplicant = (refreshedSnap.users || refreshedSnap.accounts || []).find((u) => u.email === testNewEmail);
+    assert.equal(updatedApplicant.approvalStatus, 'approved', 'User must be approved in database');
+    assert.equal(updatedApplicant.active, true, 'User must be active in database');
+
+    // Verify authenticated session login for approved user with Supabase Auth credentials
+    const approvedAuthLogin = await adapter.signIn(ACCOUNTS.external.email, ACCOUNTS.external.password);
+    assert.equal(approvedAuthLogin.ok, true, `Approved auth user must be able to sign in: ${approvedAuthLogin.error}`);
+    assert.equal(approvedAuthLogin.value?.profile?.role, 'offers_user');
   });
 
   await testCheck('Admin deactivates and reactivates user account', async () => {
+    const extUserSnap = await adapter.snapshot(admin.sessionId);
+    const extAccount = (extUserSnap.users || extUserSnap.accounts || []).find((u) => u.email === ACCOUNTS.external.email);
+    assert.ok(extAccount, 'External user account must exist');
+
     // Deactivate
     const deactRes = await adapter.run(admin.sessionId, 'deactivateUser', {
-      userId: newUserId,
-      email: testNewEmail,
+      userId: extAccount.id,
+      email: ACCOUNTS.external.email,
     });
     assert.equal(deactRes.error, undefined, `Deactivate user must succeed: ${deactRes.error}`);
 
     // Login must fail while deactivated
-    const deactLogin = await adapter.signIn(testNewEmail, 'PartnerPass2026!');
+    const deactLogin = await adapter.signIn(ACCOUNTS.external.email, ACCOUNTS.external.password);
     assert.equal(deactLogin.ok, false, 'Deactivated user cannot sign in');
+    assert.ok(deactLogin.error?.includes('inactive'), 'Must return inactive account message');
 
     // Reactivate
     const reactRes = await adapter.run(admin.sessionId, 'reactivateUser', {
-      userId: newUserId,
-      email: testNewEmail,
+      userId: extAccount.id,
+      email: ACCOUNTS.external.email,
     });
     assert.equal(reactRes.error, undefined, `Reactivate user must succeed: ${reactRes.error}`);
 
     // Login must succeed again
-    const reactLogin = await adapter.signIn(testNewEmail, 'PartnerPass2026!');
+    const reactLogin = await adapter.signIn(ACCOUNTS.external.email, ACCOUNTS.external.password);
     assert.equal(reactLogin.ok, true, 'Reactivated user can sign in');
   });
 
