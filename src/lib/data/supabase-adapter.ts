@@ -1117,7 +1117,7 @@ export class SupabaseAdapter {
       const passwordVal = text(body.password);
       const confirmVal = text(body.confirmPassword || body.passwordConfirmation);
       const notesVal = text(body.notes);
-      const assignedRole: UserRole = "worker"; // Self-registration is strictly restricted to worker role (no privilege escalation)
+      const assignedRole = "worker"; // Self-registration is strictly restricted to worker role (no privilege escalation)
 
       if (!nameVal || !emailVal || !passwordVal) {
         return { state: emptyWorkspace(), actor: null, error: "Name, email, and password are required." };
