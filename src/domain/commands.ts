@@ -2088,6 +2088,24 @@ export function submitSellingOffer(
   const offerId = randomUUID();
   const number = nextOfferNumber(store, "selling", now);
 
+  const parsedQty = typeof payload.quantity === "number" ? payload.quantity : parseFloat(String(payload.quantity || 1)) || 1;
+  const parsedUnit = text(payload.unit) || "MT";
+  const totalVal = Math.round(price * parsedQty * 100) / 100;
+
+  const deliveryDate = text(payload.deliveryDate);
+  const packagingType = text(payload.packagingType);
+  const transportDetails = text(payload.transportDetails);
+  const contactPerson = text(payload.contactPerson);
+  const userComments = text(payload.description);
+
+  const descParts: string[] = [];
+  if (contactPerson) descParts.push(`Contact: ${contactPerson}`);
+  if (deliveryDate) descParts.push(`Proposed Delivery: ${deliveryDate}`);
+  if (packagingType) descParts.push(`Packaging: ${packagingType}`);
+  if (transportDetails) descParts.push(`Transport: ${transportDetails}`);
+  if (userComments) descParts.push(`Notes: ${userComments}`);
+  const finalDescription = descParts.length > 0 ? descParts.join(" | ") : `Selling offer for ${materialName} linked to ${poNumber}`;
+
   const offer: Offer = {
     id: offerId,
     number,
@@ -2095,15 +2113,15 @@ export function submitSellingOffer(
     material: materialName,
     materialType,
     materialGrade: text(payload.materialGrade) || "Standard",
-    quantity: typeof payload.quantity === "number" ? payload.quantity : 1,
-    unit: text(payload.unit) || "lot",
+    quantity: parsedQty,
+    unit: parsedUnit,
     pricePerUnit: price,
     currency: (text(payload.currency) || "EUR").toUpperCase(),
-    totalValue: price,
+    totalValue: totalVal,
     country: origin,
     location: origin,
     truckLoads: 1,
-    description: text(payload.description) || `Selling offer for ${materialName} linked to ${poNumber}`,
+    description: finalDescription,
     priority: "medium",
     offerType: "Spot",
     team: "Trading",
@@ -2210,6 +2228,9 @@ export function decideSellingOffer(
   }
   const decision = decisionRaw as "approved" | "rejected";
   const note = text(payload.note || payload.decisionNote);
+  if (decision === "rejected" && (!note || note.trim().length === 0)) {
+    return fail("A rejection reason is required when rejecting an offer.");
+  }
 
   const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
   if (!offer) return fail("Offer not found.");

@@ -176,15 +176,24 @@ export type WorkspaceApi = {
   completeWorkerPo: (draft: { poNumber: string; completionNotes?: string }) => Text;
   submitSellingOffer: (draft: {
     poNumber: string;
+    purchasingOfferId?: string;
     materialType: string;
     materialName: string;
     clientName: string;
+    contactPerson?: string;
     contactNumber: string;
     emailAddress: string;
     price: number;
+    currency?: string;
+    quantity?: number;
+    unit?: string;
+    deliveryDate?: string;
+    packagingType?: string;
+    transportDetails?: string;
     origin: string;
     destination: string;
     description?: string;
+    attachments?: Array<{ name: string; mime?: string; bytesBase64?: string; byteSize?: number; kind?: "image" | "document" }>;
   }) => Text;
   decideSellingOffer: (draft: { offerNumber: string; decision: "approved" | "rejected"; note?: string }) => Text;
   acceptSellingOffer: (offerNumber: string) => Text;

@@ -10,6 +10,7 @@ export function OffersNav({
   purchasingCount,
   sellingCount,
   soldCount,
+  myOffersCount,
   onOpenCreatePurchasing,
   onOpenCreateSelling,
   onExportCsv,
@@ -18,6 +19,7 @@ export function OffersNav({
   purchasingCount?: number;
   sellingCount?: number;
   soldCount?: number;
+  myOffersCount?: number;
   onOpenCreatePurchasing?: () => void;
   onOpenCreateSelling?: () => void;
   onExportCsv?: () => void;
@@ -49,7 +51,14 @@ export function OffersNav({
           description: "Approved & finalized transactions",
         },
       ]
-      : []),
+      : [
+        {
+          href: "/offers/my-offers",
+          label: "My Offers",
+          count: myOffersCount ?? sellingCount,
+          description: "Your submitted selling offers & review status",
+        },
+      ]),
   ];
 
   return (
@@ -58,12 +67,12 @@ export function OffersNav({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-neutral-200/90 pb-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-neutral-500 font-medium">
-            <Link href="/dashboard" className="hover:text-neutral-900 transition">
-              Workspace
+            <Link href={isOffersUser ? "/offers/purchasing" : "/dashboard"} className="hover:text-neutral-900 transition">
+              {isOffersUser ? "Offers Portal" : "Workspace"}
             </Link>
             <span>/</span>
-            <span className="text-emerald-800 font-semibold">Offers &amp; Trading Desk</span>
-            {soldCount !== undefined && soldCount > 0 ? (
+            <span className="text-emerald-800 font-semibold">{isOffersUser ? "Commercial Desk" : "Offers & Trading Desk"}</span>
+            {soldCount !== undefined && soldCount > 0 && !isOffersUser ? (
               <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {soldCount} Closed Deals
@@ -78,7 +87,7 @@ export function OffersNav({
           </h1>
           <p className="mt-1 text-xs text-neutral-600 max-w-2xl">
             {isOffersUser
-              ? "Access verified material purchasing opportunities and submit direct selling proposals linked to purchase orders."
+              ? "Access verified material purchasing opportunities and track your submitted selling proposals."
               : "Global secondary material procurement, pricing margin negotiation, compliance review and closed transaction ledger."}
           </p>
         </div>

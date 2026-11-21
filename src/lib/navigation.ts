@@ -49,6 +49,7 @@ export const navSections: NavSection[] = [
     title: "Offers",
     items: [
       { href: "/offers/purchasing", label: "Purchasing Offers", icon: "purchases", roles: OFFERS_ROLES },
+      { href: "/offers/my-offers", label: "My Offers", icon: "sales", roles: ["offers_user"] },
       { href: "/offers/selling", label: "Selling Offers", icon: "sales", roles: OFFERS_INTERNAL_ONLY },
       { href: "/offers/sold", label: "Sold", icon: "check", roles: OFFERS_INTERNAL_ONLY },
     ],
@@ -85,7 +86,8 @@ export const mobileTabs: NavItem[] = [
   { href: "/schedules/unloading", label: "Unloading", icon: "containers", roles: WAREHOUSE_OPS },
   { href: "/schedules/loading", label: "Loading", icon: "outbound", roles: WAREHOUSE_OPS },
   { href: "/verification", label: "Verify", icon: "check", roles: OFFICE },
-  { href: "/offers/purchasing", label: "Offers", icon: "purchases", roles: OFFERS_ROLES },
+  { href: "/offers/purchasing", label: "Purchasing", icon: "purchases", roles: OFFERS_ROLES },
+  { href: "/offers/my-offers", label: "My Offers", icon: "sales", roles: ["offers_user"] },
 ];
 
 export const moreNav: NavItem[] = navSections
@@ -95,5 +97,6 @@ export const moreNav: NavItem[] = navSections
 export function navActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
   if (href === "/offers/purchasing") return pathname === "/offers/purchasing" || pathname === "/offers";
+  if (href === "/offers/my-offers") return pathname === "/offers/my-offers" || pathname.startsWith("/offers/my-offers/");
   return pathname === href || pathname.startsWith(`${href}/`);
 }

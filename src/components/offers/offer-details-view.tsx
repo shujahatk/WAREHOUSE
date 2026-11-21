@@ -1015,6 +1015,8 @@ export function OfferDetailsView({
           initialMaterialType={offer.materialType}
           initialMaterialName={offer.material}
           initialOrigin={offer.country || offer.location}
+          initialQuantity={offer.quantity}
+          initialUnit={offer.unit}
           onSubmit={async (draft) => {
             if (onSubmitSellingOffer) {
               const err = await onSubmitSellingOffer(draft);

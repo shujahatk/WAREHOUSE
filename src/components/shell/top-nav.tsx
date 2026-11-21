@@ -40,7 +40,10 @@ export function TopNav({
   return (
     <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white px-4 py-3 sm:px-6">
       <div className="flex items-center gap-3">
-        <Link href="/dashboard" className="text-base font-semibold tracking-tight text-neutral-950 lg:hidden">
+        <Link
+          href={identity.role === "offers_user" ? "/offers/purchasing" : "/dashboard"}
+          className="text-base font-semibold tracking-tight text-neutral-950 lg:hidden"
+        >
           RM
         </Link>
         <form
@@ -52,13 +55,13 @@ export function TopNav({
             <Icon name="inventory" className="h-3.5 w-3.5" />
           </span>
           <label className="sr-only" htmlFor="workspace-search">
-            Search by PO, container, supplier
+            {identity.role === "offers_user" ? "Search offers by reference, material, PO" : "Search by PO, container, supplier"}
           </label>
           <input
             id="workspace-search"
             value={query}
             onChange={(event) => onQuery(event.target.value)}
-            placeholder="Search by PO, container, supplier..."
+            placeholder={identity.role === "offers_user" ? "Search offers by reference, material, PO..." : "Search by PO, container, supplier..."}
             className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 pr-3 pl-9 text-sm text-neutral-950 placeholder:text-neutral-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950"
           />
         </form>
@@ -191,13 +194,13 @@ export function TopNav({
       </div>
       <form role="search" className="relative mt-3 w-full sm:hidden" onSubmit={(event) => event.preventDefault()}>
         <label className="sr-only" htmlFor="workspace-search-mobile">
-          Search by PO, container, supplier
+          {identity.role === "offers_user" ? "Search offers by reference, material, PO" : "Search by PO, container, supplier"}
         </label>
         <input
           id="workspace-search-mobile"
           value={query}
           onChange={(event) => onQuery(event.target.value)}
-          placeholder="Search by PO, container, supplier..."
+          placeholder={identity.role === "offers_user" ? "Search offers by reference, material, PO..." : "Search by PO, container, supplier..."}
           className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-base sm:text-sm"
         />
       </form>

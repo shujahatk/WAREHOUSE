@@ -97,7 +97,12 @@ export function Sidebar({
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#091b14] border-r border-[#143125] text-white">
       <div className="flex h-16 items-center px-5 border-b border-[#143125]/60">
-        <Link href="/dashboard" onClick={onNavigate} aria-label="RM" className="hover:opacity-90 transition">
+        <Link
+          href={role === "offers_user" ? "/offers/purchasing" : "/dashboard"}
+          onClick={onNavigate}
+          aria-label="RM"
+          className="hover:opacity-90 transition"
+        >
           <Mark light />
         </Link>
       </div>

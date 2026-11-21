@@ -63,12 +63,35 @@ export function roleLabel(role: Role): string {
 
 export function canAccess(role: Role, pathname: string): boolean {
   if (role === "offers_user") {
-    // Offers Users can ONLY access purchasing offers and notifications.
-    // Selling offers desk is strictly hidden and forbidden.
-    if (pathname === "/offers/selling" || pathname.startsWith("/offers/selling/")) {
+    // External user must have ONLY TWO MODULES:
+    // 1. Purchasing Offers (/offers/purchasing and subroutes, or /offers redirecting to it)
+    // 2. My Offers (/offers/my-offers and subroutes)
+    // Plus notifications (/notifications) and viewing their own offer detail (/offers/[id]).
+    // Strictly forbidden: /offers/selling, /offers/sold, /dashboard, and all internal operational modules.
+    if (
+      pathname === "/offers/selling" ||
+      pathname.startsWith("/offers/selling/") ||
+      pathname === "/offers/sold" ||
+      pathname.startsWith("/offers/sold/") ||
+      pathname === "/dashboard" ||
+      pathname.startsWith("/dashboard/")
+    ) {
       return false;
     }
-    return pathname === "/offers" || pathname.startsWith("/offers/") || pathname === "/notifications" || pathname.startsWith("/notifications/");
+    if (
+      pathname === "/offers" ||
+      pathname === "/offers/purchasing" ||
+      pathname.startsWith("/offers/purchasing/") ||
+      pathname === "/offers/my-offers" ||
+      pathname.startsWith("/offers/my-offers/") ||
+      (pathname.startsWith("/offers/") && pathname !== "/offers/selling" && pathname !== "/offers/sold")
+    ) {
+      return true;
+    }
+    if (pathname === "/notifications" || pathname.startsWith("/notifications/")) {
+      return true;
+    }
+    return false;
   }
   if (!isActiveRole(role)) return false;
   const rule = ROUTE_RULES.find((entry) => pathname === entry.prefix || pathname.startsWith(`${entry.prefix}/`));

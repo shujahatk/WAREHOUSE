@@ -385,6 +385,7 @@ export function can(
       case "offer:create":
       case "offer:sell":
       case "offer:submit":
+      case "offer:attach":
       case "file:upload":
       case "file:view":
         return true;

@@ -24,15 +24,18 @@ export function OfferQuickViewDrawer({
   onClose,
   onDecide,
   onEdit,
+  onSubmitSellingOffer,
 }: {
   offer: OfferView | null;
   role: Role;
   onClose: () => void;
   onDecide?: (offer: OfferView) => void;
   onEdit?: (offer: OfferView) => void;
+  onSubmitSellingOffer?: (offer: OfferView) => void;
 }) {
   const isAdmin = role === "owner";
   const isModerator = role === "moderator";
+  const isOffersUser = role === "offers_user";
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -338,6 +341,28 @@ export function OfferQuickViewDrawer({
           </Link>
 
           <div className="flex items-center gap-2">
+            {isOffersUser && offer.kind === "purchasing" && onSubmitSellingOffer ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onSubmitSellingOffer(offer);
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-800 px-4 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                Submit Selling Offer
+              </button>
+            ) : null}
+
+            {isOffersUser && offer.kind === "selling" ? (
+              <span className="inline-flex items-center gap-1 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-600">
+                🔒 Locked Proposal
+              </span>
+            ) : null}
+
             {isAdmin && offer.statusKey === "under_review" && onDecide ? (
               <button
                 type="button"

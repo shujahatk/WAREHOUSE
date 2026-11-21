@@ -49,6 +49,19 @@ export default function PurchasingOffersPage() {
     return allOffers.filter((o) => o.statusKey === "accepted" || o.statusKey === "sold" || Boolean(o.soldAt)).length;
   }, [allOffers]);
 
+  // Count of user's submitted selling offers for external user portal
+  const myOffersCount = useMemo(() => {
+    return allOffers.filter((o) => {
+      if (o.kind !== "selling") return false;
+      if (identity.role === "owner" || identity.role === "moderator") return true;
+      return (
+        (identity.id && o.createdBy === identity.id) ||
+        Boolean(identity.email && o.emailAddress && o.emailAddress.toLowerCase() === identity.email.toLowerCase()) ||
+        Boolean(identity.name && o.createdByName === identity.name)
+      );
+    }).length;
+  }, [allOffers, identity]);
+
   // Key purchasing highlights
   const metrics = useMemo(() => {
     let totalVal = 0;
@@ -110,7 +123,9 @@ export default function PurchasingOffersPage() {
         purchasingCount={purchasingOffers.length}
         sellingCount={sellingCount}
         soldCount={soldCount}
+        myOffersCount={myOffersCount}
         onOpenCreatePurchasing={isModerator ? () => setCreateModalOpen(true) : undefined}
+        onOpenCreateSelling={identity.role === "offers_user" ? () => setSellingModalOffer(purchasingOffers[0] || null) : undefined}
         onExportCsv={() => exportOffersToCsv(purchasingOffers, "rm-purchasing-offers.csv")}
       />
 
@@ -240,6 +255,7 @@ export default function PurchasingOffersPage() {
         onClose={() => setQuickViewOffer(null)}
         onDecide={(o) => setDecideModalOffer(o)}
         onEdit={(o) => setEditingOffer(o)}
+        onSubmitSellingOffer={(o) => setSellingModalOffer(o)}
       />
 
       {/* Modals */}
@@ -285,6 +301,8 @@ export default function PurchasingOffersPage() {
           initialMaterialType={sellingModalOffer.materialType}
           initialMaterialName={sellingModalOffer.material}
           initialOrigin={sellingModalOffer.country || sellingModalOffer.location}
+          initialQuantity={sellingModalOffer.quantity}
+          initialUnit={sellingModalOffer.unit}
           onSubmit={async (draft) => {
             return submitSellingOffer(draft);
           }}

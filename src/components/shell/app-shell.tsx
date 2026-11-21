@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <ul
             className="grid"
-            style={{ gridTemplateColumns: `repeat(${tabs.length + 1}, minmax(0, 1fr))` }}
+            style={{ gridTemplateColumns: `repeat(${tabs.length + (moreItems.length > 0 ? 1 : 0)}, minmax(0, 1fr))` }}
           >
             {tabs.map((item) => {
               const active = navActive(pathname, item.href);
@@ -80,17 +80,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </li>
               );
             })}
-            <li>
-              <button
-                type="button"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((value) => !value)}
-                className="flex h-16 w-full flex-col items-center justify-center gap-1 text-[10px] text-neutral-500"
-              >
-                <Icon name="menu" />
-                More
-              </button>
-            </li>
+            {moreItems.length > 0 ? (
+              <li>
+                <button
+                  type="button"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen((value) => !value)}
+                  className="flex h-16 w-full flex-col items-center justify-center gap-1 text-[10px] text-neutral-500"
+                >
+                  <Icon name="menu" />
+                  More
+                </button>
+              </li>
+            ) : null}
           </ul>
         </nav>
         {moreOpen ? (
