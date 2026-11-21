@@ -115,22 +115,74 @@ export function can(
   if (!isActiveRole(user.role) && user.role !== "offers_user") return false;
 
   // 1. Admin (owner):
-  // - STRICT READ-ONLY ACCESS throughout the portal.
-  // - Views all operational data, documents, images, reports, stock information, operations, and audit logs across all warehouses.
-  // - CANNOT create records, add or edit information, delete records, assign workers, update operational statuses, approve or reject requests/transactions, or modify stock, packaging, materials, offers, or warehouse operations.
+  // - Handles, approves, and rejects user requests (Worker general requests and operational requests)
+  // - Can manage directories, users, reports, audits, inventory, transfers, materials, packaging, and offers
+  // - CANNOT add PO or SO (order:create, order:edit)
+  // - CANNOT manage scheduling or assign workers to schedules
   if (user.role === "owner") {
     switch (action) {
-      case "order:view":
       case "request:view":
-      case "shipment:view":
-      case "file:view":
+      case "request:approve":
+      case "request:decline":
+      case "request:sendBack":
+      case "user:manage":
+      case "user:approve":
+      case "warehouse:manage":
+      case "material:manage":
+      case "packaging:manage":
+      case "supplier:manage":
+      case "customer:manage":
+      case "threshold:set":
+      case "transfer:create":
+      case "stock:adjust":
+      case "stock:transfer":
+      case "stock:move":
       case "stock:view":
+      case "order:view":
+      case "order:approve":
+      case "order:reject":
+      case "shipment:view":
+      case "cmr:save":
+      case "carrier:save":
+      case "seller:confirm":
+      case "customs:confirm":
+      case "annex7:upload":
+      case "annex7:review":
+      case "annex7:approve":
+      case "file:upload":
+      case "file:delete":
+      case "file:view":
+      case "chat:send":
+      case "chat:view":
       case "audit:view":
       case "report:view":
-      case "chat:view":
+      case "offer:create":
+      case "offer:edit":
+      case "offer:delete":
       case "offer:view":
-      case "user:manage":
+      case "offer:submit":
+      case "offer:approve":
+      case "offer:reject":
+      case "offer:negotiate":
+      case "offer:status":
+      case "offer:comment":
+      case "offer:attach":
+      case "offer:accept":
         return true;
+      // Explicitly excluded for Admin: Adding PO/SO, and scheduling / worker assignment
+      case "order:create":
+      case "order:edit":
+      case "order:delete":
+      case "order:assign":
+      case "worker:assign":
+      case "order:submit":
+      case "order:complete":
+      case "request:create":
+      case "request:complete":
+      case "request:delete":
+      case "shipment:create":
+      case "shipment:edit":
+      case "shipment:advance":
       default:
         return false;
     }

@@ -71,7 +71,7 @@ test("inactive users and non-active legacy roles are denied all actions", () => 
   assert.equal(can(legacyCustomer, "file:view", { companyId: "co-meridian" }), false);
 });
 
-test("Admin (owner) views all operational data/documents/images and approves/rejects requests, but cannot edit, delete, or directly modify operational records", () => {
+test("Admin (owner) handles and approves/rejects user requests and manages platform, but cannot add PO/SO or schedule", () => {
   // Allowed: viewing all operational data, documents, images, reports, and audit logs
   assert.equal(can(owner, "order:view"), true);
   assert.equal(can(owner, "request:view"), true);
@@ -81,57 +81,52 @@ test("Admin (owner) views all operational data/documents/images and approves/rej
   assert.equal(can(owner, "audit:view"), true);
   assert.equal(can(owner, "report:view"), true);
 
-  // Strictly Denied for Admin (owner): mutations, approvals, rejections, user/material management (Admin is read-only)
-  assert.equal(can(owner, "order:approve"), false);
-  assert.equal(can(owner, "order:reject"), false);
-  assert.equal(can(owner, "request:approve"), false);
-  assert.equal(can(owner, "request:decline"), false);
-  assert.equal(can(owner, "request:sendBack"), false);
-  assert.equal(can(owner, "annex7:review"), false);
-  assert.equal(can(owner, "annex7:approve"), false);
+  // Allowed for Admin (owner): handling, approving, declining, and sending back user requests
+  assert.equal(can(owner, "request:approve"), true);
+  assert.equal(can(owner, "request:decline"), true);
+  assert.equal(can(owner, "request:sendBack"), true);
+  assert.equal(can(owner, "order:approve"), true);
+  assert.equal(can(owner, "order:reject"), true);
+  assert.equal(can(owner, "annex7:review"), true);
+  assert.equal(can(owner, "annex7:approve"), true);
   assert.equal(can(owner, "user:manage"), true);
-  assert.equal(can(owner, "warehouse:manage"), false);
-  assert.equal(can(owner, "material:manage"), false);
-  assert.equal(can(owner, "packaging:manage"), false);
-  assert.equal(can(owner, "threshold:set"), false);
+  assert.equal(can(owner, "warehouse:manage"), true);
+  assert.equal(can(owner, "material:manage"), true);
+  assert.equal(can(owner, "packaging:manage"), true);
+  assert.equal(can(owner, "threshold:set"), true);
+  assert.equal(can(owner, "supplier:manage"), true);
+  assert.equal(can(owner, "customer:manage"), true);
+  assert.equal(can(owner, "stock:adjust"), true);
+  assert.equal(can(owner, "stock:transfer"), true);
+  assert.equal(can(owner, "transfer:create"), true);
+  assert.equal(can(owner, "file:upload"), true);
+  assert.equal(can(owner, "file:delete"), true);
 
-  // Denied: creating, editing, deleting, or directly modifying operational records, completing operations, stock adjustments, or transfers
+  // Denied for Admin (owner): adding PO/SO (Staff creates/edits PO/SO) and scheduling
   assert.equal(can(owner, "order:create"), false);
   assert.equal(can(owner, "order:edit", { status: "submitted" }), false);
   assert.equal(can(owner, "order:edit", { status: "approved" }), false);
   assert.equal(can(owner, "order:delete"), false);
+  assert.equal(can(owner, "order:assign"), false);
+  assert.equal(can(owner, "worker:assign"), false);
   assert.equal(can(owner, "request:create"), false);
   assert.equal(can(owner, "request:complete", { status: "approved" }), false);
   assert.equal(can(owner, "request:delete", { status: "submitted" }), false);
-  assert.equal(can(owner, "request:delete", { status: "completed" }), false);
-  assert.equal(can(owner, "worker:assign"), false);
   assert.equal(can(owner, "shipment:create"), false);
-  assert.equal(can(owner, "shipment:edit"), false);
   assert.equal(can(owner, "shipment:advance"), false);
-  assert.equal(can(owner, "file:upload"), false);
-  assert.equal(can(owner, "file:delete"), false);
-  assert.equal(can(owner, "annex7:upload"), false);
-  assert.equal(can(owner, "cmr:save"), false);
-  assert.equal(can(owner, "carrier:save"), false);
-  assert.equal(can(owner, "supplier:manage"), false);
-  assert.equal(can(owner, "customer:manage"), false);
-  assert.equal(can(owner, "stock:move"), false);
-  assert.equal(can(owner, "stock:adjust"), false);
-  assert.equal(can(owner, "stock:transfer"), false);
-  assert.equal(can(owner, "transfer:create"), false);
 
-  // Offers: Admin is read-only (view only); CANNOT approve, reject, comment, create, edit, delete, submit, negotiate, status, or attach
+  // Offers: Admin can view, approve, reject, create, edit, delete, comment, and decide offers
   assert.equal(can(owner, "offer:view"), true);
-  assert.equal(can(owner, "offer:approve"), false);
-  assert.equal(can(owner, "offer:reject"), false);
-  assert.equal(can(owner, "offer:comment"), false);
-  assert.equal(can(owner, "offer:create"), false);
-  assert.equal(can(owner, "offer:edit"), false);
-  assert.equal(can(owner, "offer:delete"), false);
-  assert.equal(can(owner, "offer:submit"), false);
-  assert.equal(can(owner, "offer:negotiate"), false);
-  assert.equal(can(owner, "offer:status"), false);
-  assert.equal(can(owner, "offer:attach"), false);
+  assert.equal(can(owner, "offer:approve"), true);
+  assert.equal(can(owner, "offer:reject"), true);
+  assert.equal(can(owner, "offer:comment"), true);
+  assert.equal(can(owner, "offer:create"), true);
+  assert.equal(can(owner, "offer:edit"), true);
+  assert.equal(can(owner, "offer:delete"), true);
+  assert.equal(can(owner, "offer:submit"), true);
+  assert.equal(can(owner, "offer:negotiate"), true);
+  assert.equal(can(owner, "offer:status"), true);
+  assert.equal(can(owner, "offer:attach"), true);
 });
 
 test("Staff (manager) can create/edit PO/SO even after start, manage suppliers/customers, and view all operations, but cannot delete, approve, assign workers, or adjust/transfer stock", () => {

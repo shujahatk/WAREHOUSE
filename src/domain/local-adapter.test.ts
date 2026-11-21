@@ -163,14 +163,8 @@ test("sign-in, request numbers, and stock entry stay behind the interfaces", asy
     assert.equal(request?.status, "submitted");
     assert.equal(persisted.stockMovements.length, 0);
 
-    // Owner cannot approve the request (strictly read-only)
-    await assert.rejects(
-      () => store.services().requests.approve({ requestId: request!.id, actorId: owner.id }),
-      /Admin access is read-only/,
-    );
-
-    // Staff approves the request, but cannot complete the operation
-    const approved = await store.services().requests.approve({ requestId: request!.id, actorId: staffSigned.value.profile.id });
+    // Owner can approve the request (Admin handles and approves user requests)
+    const approved = await store.services().requests.approve({ requestId: request!.id, actorId: owner.id });
     assert.equal(approved.ok, true);
     await assert.rejects(
       () => store.services().requests.complete({ requestId: request!.id, actorId: staffSigned.value.profile.id }),

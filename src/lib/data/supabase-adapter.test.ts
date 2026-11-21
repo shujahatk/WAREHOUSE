@@ -591,10 +591,10 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
     /Admin access is read-only|You do not have permission to perform this action/,
   );
 
-  // 2. Admin CANNOT approve POs (strictly read-only), Workers CANNOT approve POs; Staff CAN approve & edit POs
+  // 2. Admin CANNOT create POs (managed by Staff), Workers CANNOT approve POs; Staff CAN approve & edit POs
   await assert.rejects(
-    () => services.purchaseOrders.approve({ number: "PO-100", actorId: ADMIN_ID }),
-    /Admin access is read-only|You do not have permission to perform this action/,
+    () => services.purchaseOrders.create({ number: "PO-ADMIN", actorId: ADMIN_ID, supplier: "Nordic Metals", material: "Copper", quantityKg: 100, valueEur: 100 }),
+    /You do not have permission to perform this action/,
   );
   await assert.rejects(
     () => services.purchaseOrders.approve({ number: "PO-100", actorId: WORKER_BORNEM_ID }),
@@ -624,14 +624,14 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
     /You do not have permission to perform this action/,
   );
 
-  // 3. Admin CANNOT approve POs or requests (Admin is strictly read-only); Staff CAN approve
+  // 3. Workers CANNOT approve POs or requests; Admin and Staff CAN approve
   await assert.rejects(
-    () => services.purchaseOrders.approve({ number: "PO-100", actorId: ADMIN_ID }),
-    /Admin access is read-only|You do not have permission to perform this action/,
+    () => services.purchaseOrders.approve({ number: "PO-100", actorId: WORKER_BORNEM_ID }),
+    /You do not have permission to perform this action/,
   );
   await assert.rejects(
-    () => services.requests.approve({ requestId: "50000000-0000-4000-a000-000000000001", actorId: ADMIN_ID }),
-    /Admin access is read-only|You do not have permission to perform this action/,
+    () => services.requests.approve({ requestId: "50000000-0000-4000-a000-000000000001", actorId: WORKER_BORNEM_ID }),
+    /You do not have permission to perform this action/,
   );
 
   const poApproved = await services.purchaseOrders.approve({

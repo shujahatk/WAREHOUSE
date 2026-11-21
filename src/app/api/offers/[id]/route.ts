@@ -39,16 +39,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     return NextResponse.json({ error: "Unauthorized: Authentication required." }, { status: 401 });
   }
 
-  if (user.role === "owner") {
+  if (user.role !== "owner" && user.role !== "moderator") {
     return NextResponse.json(
-      { error: "Forbidden: Admin cannot directly edit offer operational records." },
-      { status: 403 }
-    );
-  }
-
-  if (user.role !== "moderator") {
-    return NextResponse.json(
-      { error: "Forbidden: Only a Sales & Purchasing Offer Moderator can edit offers." },
+      { error: "Forbidden: Only Admin or Sales & Purchasing Offer Moderator can edit offers." },
       { status: 403 }
     );
   }
@@ -82,16 +75,9 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     return NextResponse.json({ error: "Unauthorized: Authentication required." }, { status: 401 });
   }
 
-  if (user.role === "owner") {
+  if (user.role !== "owner" && user.role !== "moderator") {
     return NextResponse.json(
-      { error: "Forbidden: Admin cannot directly delete offer records." },
-      { status: 403 }
-    );
-  }
-
-  if (user.role !== "moderator") {
-    return NextResponse.json(
-      { error: "Forbidden: Only a Sales & Purchasing Offer Moderator can delete offers." },
+      { error: "Forbidden: Only Admin or Sales & Purchasing Offer Moderator can delete offers." },
       { status: 403 }
     );
   }

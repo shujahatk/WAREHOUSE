@@ -240,17 +240,11 @@ test("demurrage uses unloading timestamps and annex 7 stays on the linked shipme
   });
   assert.equal(reviewResult.error, undefined);
 
-  // Admin cannot approve Annex 7 (Admin is strictly read-only)
-  const adminApproveBlocked = await store.run(ownerAuth.value.sessionId, "approveAnnex", {
+  // Admin Approves Annex 7
+  const adminApprove = await store.run(ownerAuth.value.sessionId, "approveAnnex", {
     id: annexRecord.id,
   });
-  assert.equal(adminApproveBlocked.error, "Admin access is read-only. Mutations are not permitted.");
-
-  // Staff Approves Annex 7
-  const approveResult = await store.run(staffAuth.value.sessionId, "approveAnnex", {
-    id: annexRecord.id,
-  });
-  assert.equal(approveResult.error, undefined);
+  assert.equal(adminApprove.error, undefined);
 
   snap = await store.snapshot();
   const finalAnnex = snap.annex7Records.find((a) => a.id === annexRecord.id);

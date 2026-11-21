@@ -317,8 +317,8 @@ export function OfferDetailsView({
             </button>
           ) : null}
 
-          {/* Moderator Approve / Reject trigger */}
-          {isModerator ? (
+          {/* Admin / Moderator Approve / Reject trigger */}
+          {isModerator || isAdmin ? (
             <button
               type="button"
               onClick={() => {
@@ -331,8 +331,8 @@ export function OfferDetailsView({
             </button>
           ) : null}
 
-          {/* Commercial Acceptance -> Move to Sold (Moderator when approved) */}
-          {isModerator && offer.approvalStatus === "approved" && !isSold ? (
+          {/* Commercial Acceptance -> Move to Sold (Admin / Moderator when approved) */}
+          {(isModerator || isAdmin) && offer.approvalStatus === "approved" && !isSold ? (
             <button
               type="button"
               disabled={acceptingSubmitting}
@@ -343,8 +343,8 @@ export function OfferDetailsView({
             </button>
           ) : null}
 
-          {/* Moderator status updates */}
-          {isModerator ? (
+          {/* Moderator / Admin status updates */}
+          {isModerator || isAdmin ? (
             <>
               {offer.statusKey === "draft" || offer.statusKey === "received" ? (
                 <button
@@ -471,8 +471,8 @@ export function OfferDetailsView({
         </div>
       </div>
 
-      {/* Moderator Decision Inline Panel */}
-      {showDecisionInput && isModerator ? (
+      {/* Decision Inline Panel */}
+      {showDecisionInput && (isModerator || isAdmin) ? (
         <form
           onSubmit={handleAdminDecision}
           className="rounded-xl border border-amber-300 bg-amber-50/70 p-5 shadow-sm"
@@ -861,7 +861,7 @@ export function OfferDetailsView({
                         >
                           Preview
                         </button>
-                        {isModerator ? (
+                        {isModerator || isAdmin ? (
                           <button
                             type="button"
                             onClick={() => void onDeleteAttachment?.(att.id)}

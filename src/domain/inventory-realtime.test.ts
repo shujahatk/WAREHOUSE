@@ -123,17 +123,11 @@ test("1. Real-time stock balance updates immediately after operations", async ()
     const beforeBal = snap2.stockBalances.find((b) => b.warehouseId === req.warehouseId);
     assert.equal(beforeBal?.weightKg ?? 0, 0);
 
-    // Admin attempt to approve request is BLOCKED (Admin is strictly read-only)
+    // Admin approves request (Admin handles and approves user requests)
     const adminApprove = await store.run(adminSign.value.sessionId, "approveRequest", {
       requestId: req.id,
     });
-    assert.equal(adminApprove.error, "Admin access is read-only. Mutations are not permitted.");
-
-    // Staff approves request
-    const approveRes = await store.run(staffSign.value.sessionId, "approveRequest", {
-      requestId: req.id,
-    });
-    assert.equal(approveRes.error, undefined);
+    assert.equal(adminApprove.error, undefined);
 
     // Worker enters & completes operation into stock
     const completeRes = await store.run(workerSign.value.sessionId, "completeRequest", {
@@ -529,7 +523,7 @@ test("6. Sidebar role boundaries: Staff restricted to Main & Operations; Admin r
   assert.equal(staffHrefs.includes("/inventory"), false, "Inventory must not appear for Staff");
 });
 
-test("7. Strict Admin read-only operational enforcement & Staff approval boundary", async () => {
+test("7. Admin cannot create PO/SO or schedule, but can approve POs and handle user requests", async () => {
   const { dir, store } = createTestAdapter();
   try {
     const adminSign = await store.signIn("admin@example.com", "admin-password-123");
@@ -553,9 +547,17 @@ test("7. Strict Admin read-only operational enforcement & Staff approval boundar
       quantityKg: 1000,
       valueEur: 1000,
     });
-    assert.ok(adminCreatePo.error?.includes("Admin access is read-only") || adminCreatePo.error?.includes("Only Staff can create a PO/SO order"));
+    assert.ok(adminCreatePo.error?.includes("Admin cannot create PO/SO orders") || adminCreatePo.error?.includes("Only Staff can create a PO/SO order"));
 
-    // 2. Staff creates PO successfully
+    // 2. Admin CANNOT create schedules (only Staff can)
+    const adminCreateSchedule = await store.run(adminSign.value.sessionId, "createOperationSchedule", {
+      type: "unloading",
+      poSoNumber: "PO-2026-9999",
+      warehouseId: "wh-1",
+    });
+    assert.ok(adminCreateSchedule.error?.includes("Admin cannot create PO/SO orders or manage operational schedules") || adminCreateSchedule.error?.includes("Schedules must be created by Staff"));
+
+    // 3. Staff creates PO successfully
     const staffCreatePo = await store.run(staffSign.value.sessionId, "createPurchase", {
       title: "Staff Order",
       supplier: "Acme Polymers",
@@ -569,26 +571,38 @@ test("7. Strict Admin read-only operational enforcement & Staff approval boundar
     const order = snap.purchaseOrders.find((o) => o.title === "Staff Order")!;
     assert.ok(order);
 
-    // 3. Admin CANNOT approve POs (Admin is strictly read-only)
+    // 4. Admin CAN approve POs
     const adminApprove = await store.run(adminSign.value.sessionId, "approve", {
       number: order.number,
     });
-    assert.equal(adminApprove.error, "Admin access is read-only. Mutations are not permitted.");
+    assert.equal(adminApprove.error, undefined);
 
-    // 4. Staff CAN approve POs
+    // 5. Staff creates a second PO and approves it
+    const staffCreatePo2 = await store.run(staffSign.value.sessionId, "createPurchase", {
+      title: "Staff Order 2",
+      supplier: "Acme Polymers",
+      material: "LDPE film",
+      quantityKg: 2000,
+      valueEur: 2000,
+    });
+    assert.equal(staffCreatePo2.error, undefined);
+    const snap2 = await store.snapshot();
+    const order2 = snap2.purchaseOrders.find((o) => o.title === "Staff Order 2")!;
+    assert.ok(order2);
+
     const staffApprove = await store.run(staffSign.value.sessionId, "approve", {
-      number: order.number,
+      number: order2.number,
     });
     assert.equal(staffApprove.error, undefined);
 
-    // 5. Admin CANNOT execute direct stock transfers
-    const adminTransfer = await store.run(adminSign.value.sessionId, "transferStock", {
+    // 6. Staff CANNOT execute direct stock transfers (Admin only)
+    const staffTransfer = await store.run(staffSign.value.sessionId, "transferStock", {
       fromWarehouseId: "wh-1",
       toWarehouseId: "wh-2",
       materialId: "mat-1",
       weightKg: 500,
     });
-    assert.ok(adminTransfer.error?.includes("cannot transfer stock") || adminTransfer.error?.includes("Admin access is read-only"));
+    assert.ok(staffTransfer.error?.includes("cannot transfer stock") || staffTransfer.error?.includes("permission"));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

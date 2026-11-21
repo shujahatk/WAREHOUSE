@@ -174,17 +174,18 @@ test("core rule: worker creates request, Admin approves, worker completes approv
     });
     assert.match(adminDeleteReqBlocked.error ?? "", /Admin cannot delete operational records|Admin access is read-only/);
 
-    // Admin cannot approve or reject Worker requests (strictly read-only)
-    const adminApproveBlocked = await store.run(ownerAuth.value.sessionId, "approveRequest", {
+    // Admin sends back Worker request with note
+    const adminSendBack = await store.run(ownerAuth.value.sessionId, "sendBackRequest", {
       requestId: req1.id,
+      note: "Please double check weight and material description",
     });
-    assert.match(adminApproveBlocked.error ?? "", /Admin access is read-only/);
+    assert.equal(adminSendBack.error, undefined);
 
     // Worker cannot approve own request
     const workerApproveBlocked = await store.run(workerAuth.value.sessionId, "approveRequest", {
       requestId: req1.id,
     });
-    assert.match(workerApproveBlocked.error ?? "", /Only Staff can approve requests/);
+    assert.match(workerApproveBlocked.error ?? "", /Only (Admin or )?Staff can approve requests/);
 
     // Worker cannot complete request before Staff approval
     const prematureComplete = await store.run(workerAuth.value.sessionId, "completeRequest", {
@@ -239,13 +240,8 @@ test("core rule: worker creates request, Admin approves, worker completes approv
     assert.equal(req2.status, "submitted");
     assert.equal(snap4.stockBalances.length, 0);
 
-    // 8. Admin cannot approve request (strictly read-only); Staff approves the request
-    const adminApproveBlocked2 = await store.run(ownerAuth.value.sessionId, "approveRequest", {
-      requestId: req2.id,
-    });
-    assert.match(adminApproveBlocked2.error ?? "", /Admin access is read-only/);
-
-    const approveResult = await store.run(managerAuth.value.sessionId, "approveRequest", {
+    // 8. Admin handles and approves user request
+    const approveResult = await store.run(ownerAuth.value.sessionId, "approveRequest", {
       requestId: req2.id,
     });
     assert.equal(approveResult.error, undefined);
@@ -253,7 +249,7 @@ test("core rule: worker creates request, Admin approves, worker completes approv
     const snap5 = await store.snapshot();
     const req2Approved = snap5.requests.find((r) => r.id === req2.id);
     assert.equal(req2Approved?.status, "approved");
-    assert.equal(req2Approved?.approvedBy, managerAuth.value.profile.id);
+    assert.equal(req2Approved?.approvedBy, ownerAuth.value.profile.id);
     assert.equal(snap5.stockMovements.length, 0);
     assert.equal(snap5.stockBalances.length, 0);
 
@@ -314,7 +310,7 @@ test("core rule: worker creates request, Admin approves, worker completes approv
     });
     assert.match(deleteCompletedBlocked.error ?? "", /completed request cannot be deleted/);
 
-    // 12b. Staff creates and edits PO/SO records (including after approval/start); Admin is read-only and cannot create, edit, approve, or delete PO/SO
+    // 12b. Staff creates and edits PO/SO records; Admin cannot create or edit PO/SO
     const adminCreatePoBlocked = await store.run(ownerAuth.value.sessionId, "createPurchase", {
       number: "PO-ADMIN-BLOCKED",
       supplier: "North Mill",
@@ -322,7 +318,7 @@ test("core rule: worker creates request, Admin approves, worker completes approv
       quantityKg: 1000,
       valueEur: 500,
     });
-    assert.match(adminCreatePoBlocked.error ?? "", /Only Staff can create a PO\/SO order|Admin access is read-only/);
+    assert.match(adminCreatePoBlocked.error ?? "", /Only Staff can create a PO\/SO order|Admin access is read-only|Admin cannot create PO\/SO orders/);
 
     const staffCreatePo = await store.run(managerAuth.value.sessionId, "createPurchase", {
       number: "PO-STAFF-100",
@@ -333,11 +329,11 @@ test("core rule: worker creates request, Admin approves, worker completes approv
     });
     assert.equal(staffCreatePo.error, undefined);
 
-    // Admin cannot approve PO-STAFF-100 (Admin is strictly read-only)
-    const adminApprovePo = await store.run(ownerAuth.value.sessionId, "approve", {
+    // Worker cannot approve PO-STAFF-100
+    const workerApprovePo = await store.run(workerAuth.value.sessionId, "approve", {
       number: "PO-STAFF-100",
     });
-    assert.match(adminApprovePo.error ?? "", /Admin access is read-only/);
+    assert.match(workerApprovePo.error ?? "", /Only Staff can approve|permission/);
 
     // Staff approves PO-STAFF-100
     const staffApprovePo = await store.run(managerAuth.value.sessionId, "approve", {
@@ -410,17 +406,12 @@ test("core rule: worker creates request, Admin approves, worker completes approv
     assert.equal(createReq3.error, undefined);
     const snap7b = await store.snapshot();
     const req3 = snap7b.requests.find((r) => r.number === "REQ-2026-0003")!;
-    const adminDeclineBlocked = await store.run(ownerAuth.value.sessionId, "declineRequest", {
+    // Admin handles and declines user request
+    const adminDecline = await store.run(ownerAuth.value.sessionId, "declineRequest", {
       requestId: req3.id,
       reason: "Incorrect packaging tare selected",
     });
-    assert.match(adminDeclineBlocked.error ?? "", /Admin access is read-only/);
-
-    const declineResult = await store.run(managerAuth.value.sessionId, "declineRequest", {
-      requestId: req3.id,
-      reason: "Incorrect packaging tare selected",
-    });
-    assert.equal(declineResult.error, undefined);
+    assert.equal(adminDecline.error, undefined);
     const deleteDeclined = await store.run(workerAuth.value.sessionId, "deleteRequest", {
       requestId: req3.id,
     });
@@ -428,20 +419,20 @@ test("core rule: worker creates request, Admin approves, worker completes approv
     const snap7c = await store.snapshot();
     assert.equal(snap7c.requests.find((r) => r.id === req3.id)?.status, "deleted");
 
-    // 13. Direct stock transfers and stock adjustments are denied for Admin, Staff, and Worker
+    // 13. Direct stock transfers and stock adjustments are denied for Staff and Worker, but permitted for Admin
     const mat = snap7.materials[0];
     const bremen = snap7.warehouses.find((w) => w.name === "Bornem")!;
     const turnhout = snap7.warehouses.find((w) => w.name === "Turnhout")!;
     assert.ok(mat && bremen && turnhout);
 
-    for (const session of [ownerAuth.value.sessionId, managerAuth.value.sessionId, workerAuth.value.sessionId]) {
+    for (const session of [managerAuth.value.sessionId, workerAuth.value.sessionId]) {
       const transferBlocked = await store.run(session, "transferStock", {
         fromWarehouseId: bremen.id,
         toWarehouseId: turnhout.id,
         materialId: mat.id,
         weightKg: 25,
       });
-      assert.match(transferBlocked.error ?? "", /This role cannot transfer stock|Admin access is read-only/);
+      assert.match(transferBlocked.error ?? "", /This role cannot transfer stock/);
 
       const correctionBlocked = await store.run(session, "postCorrection", {
         requestId: req2.id,
@@ -449,8 +440,17 @@ test("core rule: worker creates request, Admin approves, worker completes approv
         deltaKg: 10,
         reason: "Direct stock adjustment attempt",
       });
-      assert.match(correctionBlocked.error ?? "", /This role cannot post a stock adjustment|Admin access is read-only/);
+      assert.match(correctionBlocked.error ?? "", /This role cannot post a stock adjustment/);
     }
+
+    // Admin can perform stock transfer
+    const adminTransfer = await store.run(ownerAuth.value.sessionId, "transferStock", {
+      fromWarehouseId: bremen.id,
+      toWarehouseId: turnhout.id,
+      materialId: mat.id,
+      weightKg: 25,
+    });
+    assert.equal(adminTransfer.error, undefined);
 
     // 14. Consistency check: balance must strictly equal the sum of movements
     const consistency = await store.services().inventory.checkConsistency(ownerAuth.value.profile.id);
@@ -677,12 +677,12 @@ test("Stage 1 & 2 security: unauthenticated view isolation, session logout/deact
     });
     assert.match(workerPackagingBlocked.error ?? "", /Only the owner can add a packaging type|This role cannot/);
 
-    // Admin cannot add custom packaging type (strictly read-only)
-    const adminPackagingBlocked = await store.run(ownerAuth.value.sessionId, "addPackagingType", {
+    // Admin can add custom packaging type
+    const adminPackaging = await store.run(ownerAuth.value.sessionId, "addPackagingType", {
       label: "Heavy Steel Crate",
       tareKg: 85,
     });
-    assert.match(adminPackagingBlocked.error ?? "", /Admin access is read-only/);
+    assert.equal(adminPackaging.error, undefined);
 
     // 6. Session termination on signOut and user deactivation
     await store.signOut(staffAuth.value.sessionId);
@@ -848,15 +848,15 @@ test("Stage 3 & 4 data integrity: multi-line outbound partial failure rollback a
     const bremenWh = snapAfterOut.warehouses.find((w) => w.name === "Bornem")!;
     assert.equal(snapAfterOut.stockBalances.find((b) => b.warehouseId === bremenWh.id)?.weightKg, 60);
 
-    // 5. Verify UI `transfer` command is blocked for Admin and Worker
-    const adminTransferBlocked = await store.run(ownerAuth.value.sessionId, "transfer", {
+    // 5. Verify UI `transfer` command is blocked for Worker
+    const workerTransferBlocked = await store.run(workerAuth.value.sessionId, "transfer", {
       clientKey: "tx-unique-key-1",
       from: "Bornem",
       to: "Spain",
       material: "LDPE film",
       quantity: 25,
     });
-    assert.match(adminTransferBlocked.error ?? "", /This role cannot transfer stock|Admin access is read-only/);
+    assert.match(workerTransferBlocked.error ?? "", /This role cannot transfer stock/);
 
     const consistency2 = await store.services().inventory.checkConsistency(ownerAuth.value.profile.id);
     assert.equal(consistency2.ok, true);

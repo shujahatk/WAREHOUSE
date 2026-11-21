@@ -252,20 +252,13 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     assert.ok(req);
     assert.equal(req.status, "submitted");
 
-    // 2. Admin cannot approve or reject operational requests (Admin is strictly read-only)
-    const adminApproveBlocked = await store.run(adminAuth.value.sessionId, "decideGeneralRequest", {
-      requestId: req.id,
-      decision: "approved",
-    });
-    assert.match(adminApproveBlocked.error ?? "", /Admin access is read-only/i);
-
-    // 3. Staff can place under_review or send_back
-    const staffReview = await store.run(staffAuth.value.sessionId, "decideGeneralRequest", {
+    // 2. Admin handles and reviews user requests
+    const adminReview = await store.run(adminAuth.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "under_review",
-      responseNote: "Staff reviewing dock scheduling",
+      responseNote: "Admin reviewing dock scheduling",
     });
-    assert.equal(staffReview.error, undefined);
+    assert.equal(adminReview.error, undefined);
 
     const snap2 = await store.snapshot();
     assert.equal(snap2.workerGeneralRequests[0].status, "under_review");

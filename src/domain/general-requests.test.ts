@@ -228,22 +228,14 @@ test("Staff lifecycle: can review (under_review), request info (sent_back), appr
     assert.equal(sentBackReq?.status, "sent_back");
     assert.equal(sentBackReq?.responseNote, "Please specify pallet size: Euro or Standard?");
 
-    // Admin attempts to approve -> MUST BE BLOCKED (Admin is strictly read-only)
+    // Admin approves the request -> SUCCEEDS (Admin handles and approves user requests)
     const adminApprove = await store.run(ownerSign.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "approved",
       responseNote: "Approved for standard Euro pallets.",
     });
-    assert.ok(adminApprove.error?.includes("Admin access is read-only"));
-
-    // Charlie (Staff) approves the request -> SUCCEEDS
-    const staffApprove = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
-      requestId: req.id,
-      decision: "approved",
-      responseNote: "Approved for standard Euro pallets.",
-    });
-    assert.equal(staffApprove.error, undefined);
-    assert.equal(staffApprove.state.generalRequests.find((r) => r.id === req.id)?.status, "approved");
+    assert.equal(adminApprove.error, undefined);
+    assert.equal(adminApprove.state.generalRequests.find((r) => r.id === req.id)?.status, "approved");
 
     // Charlie (Staff) processes approved work into completed
     const completeRes = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
@@ -257,7 +249,7 @@ test("Staff lifecycle: can review (under_review), request info (sent_back), appr
   }
 });
 
-test("Staff lifecycle & Admin operational read-only enforcement: Staff can decline with reason, but Admin is read-only", async () => {
+test("Staff & Admin lifecycle: Admin and Staff can decline with reason, and Admin cannot create worker request", async () => {
   const { dir, store } = createTestAdapter();
   try {
     const ownerSign = await store.signIn("owner@example.com", "owner-pass-1");
@@ -297,19 +289,28 @@ test("Staff lifecycle & Admin operational read-only enforcement: Staff can decli
       category: "other",
       description: "Admin attempting to create worker request",
     });
-    assert.ok(adminSubmit.error?.includes("Admin access is read-only") || adminSubmit.error?.includes("Worker"));
+    assert.ok(adminSubmit.error?.includes("Worker"));
 
-    // Admin attempts to decline -> BLOCKED (Admin is strictly read-only)
+    // Admin declines with reason -> SUCCEEDS (Admin handles and declines user requests)
     const adminDecline = await store.run(ownerSign.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "declined",
       reason: "Maintenance vendor already scheduled.",
     });
-    assert.ok(adminDecline.error?.includes("Admin access is read-only"));
+    assert.equal(adminDecline.error, undefined);
+    assert.equal(adminDecline.state.generalRequests.find((r) => r.id === req.id)?.status, "declined");
+
+    // Worker creates a second request for Staff rejection test
+    const createRes2 = await store.run(bobSign.value.sessionId, "createGeneralRequest", {
+      category: "equipment_maintenance",
+      description: "Forklift tires worn out",
+    });
+    const req2 = createRes2.state.generalRequests.find((r) => r.description === "Forklift tires worn out")!;
+    assert.ok(req2);
 
     // Staff rejects without reason -> must fail
     const rejectNoReason = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
-      requestId: req.id,
+      requestId: req2.id,
       decision: "declined",
       reason: "",
     });
@@ -317,24 +318,24 @@ test("Staff lifecycle & Admin operational read-only enforcement: Staff can decli
 
     // Staff rejects with reason -> succeeds
     const rejectRes = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
-      requestId: req.id,
+      requestId: req2.id,
       decision: "declined",
       reason: "Maintenance vendor already scheduled for tomorrow at 08:00.",
     });
     assert.equal(rejectRes.error, undefined);
-    const rejectedReq = rejectRes.state.generalRequests.find((r) => r.id === req.id);
+    const rejectedReq = rejectRes.state.generalRequests.find((r) => r.id === req2.id);
     assert.equal(rejectedReq?.status, "declined");
     assert.equal(rejectedReq?.responseNote, "Maintenance vendor already scheduled for tomorrow at 08:00.");
 
     // Worker can see rejection reason and can delete own declined request
     const bobView = await store.view(bobSign.value.sessionId);
-    assert.equal(bobView.state.generalRequests[0]?.responseNote, "Maintenance vendor already scheduled for tomorrow at 08:00.");
+    assert.equal(bobView.state.generalRequests.find((r) => r.id === req2.id)?.responseNote, "Maintenance vendor already scheduled for tomorrow at 08:00.");
     const deleteRes = await store.run(bobSign.value.sessionId, "deleteGeneralRequest", {
-      requestId: req.id,
+      requestId: req2.id,
     });
     assert.equal(deleteRes.error, undefined);
     const bobViewAfter = await store.view(bobSign.value.sessionId);
-    assert.equal(bobViewAfter.state.generalRequests.length, 0);
+    assert.equal(bobViewAfter.state.generalRequests.some((r) => r.id === req2.id), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -398,8 +398,7 @@ export function ensureRequest(store: StoreData, shipment: Shipment, actorId: str
 }
 
 export function approveRequest(store: StoreData, requestId: string, actor: UserRecord, now: string): Result<RequestRecord> {
-  if (actor.role === "owner") return fail("Admin access is read-only. Requests cannot be approved by Admin.");
-  if (actor.role !== "manager") return fail("Only Staff can approve requests.");
+  if (actor.role !== "owner" && actor.role !== "manager") return fail("Only Admin or Staff can approve requests.");
   const request = store.requests.find((item) => item.id === requestId);
   if (!request) return fail("That request does not exist.");
   if (request.status !== "submitted") return fail("Only submitted requests can be approved.");
@@ -411,8 +410,7 @@ export function approveRequest(store: StoreData, requestId: string, actor: UserR
 }
 
 export function declineRequest(store: StoreData, requestId: string, actor: UserRecord, reason: string, now: string): Result<RequestRecord> {
-  if (actor.role === "owner") return fail("Admin access is read-only. Requests cannot be declined by Admin.");
-  if (actor.role !== "manager") return fail("Only Staff can decline requests.");
+  if (actor.role !== "owner" && actor.role !== "manager") return fail("Only Admin or Staff can decline requests.");
   if (!reason.trim()) return fail("A reason is required when declining a request.");
   const request = store.requests.find((item) => item.id === requestId);
   if (!request) return fail("That request does not exist.");
@@ -424,8 +422,7 @@ export function declineRequest(store: StoreData, requestId: string, actor: UserR
 }
 
 export function sendBackRequest(store: StoreData, requestId: string, actor: UserRecord, note: string, now: string): Result<RequestRecord> {
-  if (actor.role === "owner") return fail("Admin access is read-only. Requests cannot be sent back by Admin.");
-  if (actor.role !== "manager") return fail("Only a manager can send a request back.");
+  if (actor.role !== "owner" && actor.role !== "manager") return fail("Only Admin or Staff can send a request back.");
   if (!note.trim()) return fail("A note is required when a request is sent back.");
   const request = store.requests.find((item) => item.id === requestId);
   if (!request) return fail("That request does not exist.");
@@ -936,11 +933,8 @@ export function decideGeneralRequest(
   const cleanNote = text(payload.reason || payload.note || payload.responseNote);
 
   if (decision === "approved" || decision === "declined") {
-    if (actor.role === "owner") {
-      return fail("Admin access is read-only. Requests cannot be decided by Admin.");
-    }
-    if (actor.role !== "manager") {
-      return fail("Only Staff can approve or decline a worker request.");
+    if (actor.role !== "owner" && actor.role !== "manager") {
+      return fail("Only Admin or Staff can approve or decline a worker request.");
     }
     if (oldStatus !== "submitted" && oldStatus !== "under_review" && oldStatus !== "sent_back") {
       return fail(`Transition from ${oldStatus} to ${decision} is not permitted.`);
@@ -949,8 +943,8 @@ export function decideGeneralRequest(
       return fail("A decline reason is required.");
     }
   } else if (decision === "under_review" || decision === "sent_back") {
-    if (actor.role !== "manager") {
-      return fail("Only Staff can review or request additional information for requests.");
+    if (actor.role !== "owner" && actor.role !== "manager") {
+      return fail("Only Admin or Staff can review or request additional information for requests.");
     }
     if (oldStatus !== "submitted" && oldStatus !== "under_review" && oldStatus !== "sent_back") {
       return fail(`Transition from ${oldStatus} to ${decision} is not permitted.`);
@@ -1437,9 +1431,6 @@ export function editOffer(
   payload: Record<string, unknown>,
   now: string
 ): Result<Offer> {
-  if (actor.role === "owner") {
-    return fail("Admin cannot directly edit offer operational records.");
-  }
   if (actor.role !== "moderator") {
     return fail("Only a Sales & Purchasing Offer Moderator can edit offers.");
   }
@@ -1515,9 +1506,6 @@ export function softDeleteOffer(
   offerId: string,
   now: string
 ): Result<Offer> {
-  if (actor.role === "owner") {
-    return fail("Admin cannot directly delete offer records.");
-  }
   if (actor.role !== "moderator") {
     return fail("Only a Sales & Purchasing Offer Moderator can delete offers.");
   }
@@ -1589,11 +1577,8 @@ export function decideOffer(
   decisionNote: string,
   now: string
 ): Result<Offer> {
-  if (actor.role === "owner") {
-    return fail("Admin access is read-only. Offers must be reviewed and decided by the Offer Moderator.");
-  }
-  if (actor.role !== "moderator") {
-    return fail("Only Offer Moderator can approve or reject offers.");
+  if (actor.role !== "owner" && actor.role !== "moderator") {
+    return fail("Only Admin or Offer Moderator can approve or reject offers.");
   }
 
   const note = decisionNote ? decisionNote.trim() : "";
@@ -1870,7 +1855,7 @@ export function assignWorkerPo(
   now: string
 ): Result<PurchaseOrder> {
   if (actor.role === "owner") {
-    return fail("Admin access is read-only. Worker assignments must be performed by Staff.");
+    return fail("Admin cannot assign workers to orders. Worker assignments must be performed by Staff.");
   }
   if (actor.role !== "manager") {
     return fail("Only Staff can assign workers to orders.");
@@ -2228,11 +2213,8 @@ export function decideSellingOffer(
   payload: Record<string, unknown>,
   now: string
 ): Result<Offer> {
-  if (actor.role === "owner") {
-    return fail("Admin access is read-only. Selling offers must be approved or rejected by the Offer Moderator.");
-  }
-  if (actor.role !== "moderator") {
-    return fail("Only Offer Moderator can approve or reject selling offers.");
+  if (actor.role !== "owner" && actor.role !== "moderator") {
+    return fail("Only Admin or Offer Moderator can approve or reject selling offers.");
   }
   const offerId = text(payload.offerId || payload.id || payload.number);
   let decisionRaw = text(payload.decision).toLowerCase();
@@ -2290,11 +2272,8 @@ export function acceptSellingOffer(
   payload: Record<string, unknown>,
   now: string
 ): Result<Offer> {
-  if (actor.role === "owner") {
-    return fail("Admin access is read-only. Acceptance must be performed by the Offer Moderator.");
-  }
-  if (actor.role !== "moderator") {
-    return fail("Only Offer Moderator can accept an offer.");
+  if (actor.role !== "owner" && actor.role !== "moderator") {
+    return fail("Only Admin or Offer Moderator can accept an offer.");
   }
   const offerId = text(payload.offerId || payload.id || payload.number);
   const offer = (store.offers || []).find((o) => (o.id === offerId || o.number === offerId) && !o.deletedAt);
@@ -3397,7 +3376,7 @@ export function createOperationSchedule(
   now: string
 ): CommandResult {
   if (actor.role === "owner") {
-    return { error: "Admin access is read-only. Schedules must be created by Staff." };
+    return { error: "Admin cannot create schedules. Schedules must be created by Staff." };
   }
   if (actor.role !== "manager") {
     return { error: "Only Staff can create loading and unloading schedules." };
@@ -3711,7 +3690,7 @@ export function updateOperationSchedule(
   now: string
 ): CommandResult {
   if (actor.role === "owner") {
-    return { error: "Admin access is read-only. Schedules must be modified by Staff." };
+    return { error: "Admin cannot modify schedules. Schedules must be modified by Staff." };
   }
   if (actor.role !== "manager") {
     return { error: "Only Staff can modify schedules." };
@@ -3856,7 +3835,7 @@ export function assignScheduleWorker(
   now: string
 ): CommandResult {
   if (actor.role === "owner") {
-    return { error: "Admin access is read-only. Workers must be assigned by Staff." };
+    return { error: "Admin cannot assign schedule workers. Workers must be assigned by Staff." };
   }
   if (actor.role !== "manager") {
     return { error: "Only Staff can reassign schedule workers." };
@@ -4213,11 +4192,8 @@ export function verifyOperationSchedule(
   body: Record<string, unknown>,
   now: string
 ): CommandResult {
-  if (actor.role === "owner") {
-    return { error: "Admin access is read-only. Operations must be verified by Staff." };
-  }
-  if (actor.role !== "manager") {
-    return { error: "Only Staff can verify operations." };
+  if (actor.role !== "owner" && actor.role !== "manager") {
+    return { error: "Only Admin or Staff can verify operations." };
   }
 
   const payload = body.details ? { ...body, ...record(body.details) } : body;
@@ -4572,19 +4548,18 @@ export function deleteScheduleAttachment(
 
 export function applyCommand(store: StoreData, actor: UserRecord, name: string, payload: unknown, now: string): CommandResult {
   if (actor.role === "owner") {
-    const allowedAdminActions = [
-      "addUser",
-      "changeRole",
-      "deactivateUser",
-      "reactivateUser",
-      "deleteUser",
-      "approveRegistration",
-      "rejectRegistration",
-      "deleteRegistrationRequest",
-      "decideOffersUserRegistration",
+    const adminBlockedActions = [
+      "createPurchase",
+      "createOrder",
+      "createOperationSchedule",
+      "createSchedule",
+      "updateOperationSchedule",
+      "updateSchedule",
+      "assignScheduleWorker",
+      "assignWorkerPo",
     ];
-    if (!allowedAdminActions.includes(name)) {
-      return { error: "Admin access is read-only. Mutations are not permitted." };
+    if (adminBlockedActions.includes(name)) {
+      return { error: "Admin cannot create PO/SO orders or manage operational schedules. This is managed by Staff." };
     }
   }
   const body = record(payload);

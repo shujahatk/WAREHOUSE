@@ -389,10 +389,10 @@ test("7. Permission matrix for files (Worker, Manager, Owner, Customer)", () => 
   assert.equal(can(customerMeridian, "file:view", { companyId: "comp-meridian" }), false);
   assert.equal(can(customerMeridian, "file:view", { companyId: "comp-atlas" }), false);
 
-  // 5. Owner file permissions: views all operational documents/images, cannot upload or delete
+  // 5. Owner file permissions: views all operational documents/images, can upload and delete
   assert.equal(can(owner, "file:view", {}), true);
-  assert.equal(can(owner, "file:upload", {}), false);
-  assert.equal(can(owner, "file:delete", {}), false);
+  assert.equal(can(owner, "file:upload", {}), true);
+  assert.equal(can(owner, "file:delete", {}), true);
 });
 
 test("8. Time-limited signed URLs correctly verify and reject expired/tampered tokens", () => {

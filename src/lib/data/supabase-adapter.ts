@@ -1374,14 +1374,26 @@ export class SupabaseAdapter {
       return { state: emptyWorkspace(), actor: null, error: "This account is not permitted to perform actions." };
     }
 
-    // Strict Admin Read-Only Enforcement: Admin cannot execute any mutation commands
+    // Admin cannot add PO/SO or manage operational schedules (managed exclusively by Staff)
     if (profile.role === "owner") {
-      const v = await this.view(sessionId);
-      return {
-        state: v.state,
-        actor: v.actor,
-        error: "Admin access is read-only. Mutations are not permitted.",
-      };
+      const adminBlockedActions = [
+        "createPurchase",
+        "createOrder",
+        "createOperationSchedule",
+        "createSchedule",
+        "updateOperationSchedule",
+        "updateSchedule",
+        "assignScheduleWorker",
+        "assignWorkerPo",
+      ];
+      if (adminBlockedActions.includes(name)) {
+        const v = await this.view(sessionId);
+        return {
+          state: v.state,
+          actor: v.actor,
+          error: "Admin cannot create PO/SO orders or manage operational schedules. This is managed by Staff.",
+        };
+      }
     }
 
     const token = this.resolveToken(sessionId) ?? sessionId;
@@ -4034,9 +4046,6 @@ export class SupabaseAdapter {
 
   private authorize(actor: UserProfile, action: Action, resource?: Resource): void {
     if (!can(actor, action, resource)) {
-      if (actor.role === "owner") {
-        throw new Error("Admin access is read-only. Mutations are not permitted.");
-      }
       throw new Error("You do not have permission to perform this action.");
     }
   }

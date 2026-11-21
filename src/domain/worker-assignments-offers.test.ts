@@ -378,16 +378,8 @@ test("4. Admin Selling Offer Approval & Automatic Sold Section Transition", asyn
     assert.equal(modSign.ok, true);
     if (!modSign.ok) return;
 
-    // 1. Admin attempt to approve selling offer is BLOCKED (strictly read-only)
-    const adminApprove = await store.run(ownerSign.value.sessionId, "decideSellingOffer", {
-      offerId: submittedOffer.id,
-      decision: "approve",
-      notes: "Pricing and credit terms verified with client.",
-    });
-    assert.equal(adminApprove.error, "Admin access is read-only. Mutations are not permitted.");
-
-    // Moderator reviews and approves the selling offer
-    const modApprove = await store.run(modSign.value.sessionId, "decideSellingOffer", {
+    // 1. Admin or Moderator reviews and approves the selling offer
+    const modApprove = await store.run(ownerSign.value.sessionId, "decideSellingOffer", {
       offerId: submittedOffer.id,
       decision: "approve",
       notes: "Pricing and credit terms verified with client.",

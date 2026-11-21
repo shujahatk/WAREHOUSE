@@ -253,7 +253,7 @@ export function TaskBoard() {
   const pageSubtitle = isWorker
     ? `${identity.warehouse ?? "Assigned warehouse"} · Execute assigned loading & unloading orders, upload photos and evidence, and submit task completions`
     : isOwner
-      ? "Admin view · Review attachments and audit history across warehouses (read-only mode)"
+      ? "Admin view · Review, approve, and handle requests across warehouses"
       : "Staff view · Manage PO/SO orders, assign worker tasks across warehouses, and process operational completions";
 
   return (
@@ -789,8 +789,8 @@ export function TaskBoard() {
                           </>
                         ) : null}
 
-                        {/* Staff Actions (Stage 2) */}
-                        {isManager ? (
+                        {/* Admin / Staff Actions (Stage 2) */}
+                        {isManager || isOwner ? (
                           <>
                             {["submitted", "under_review"].includes(req.status) ? (
                               <>
@@ -832,13 +832,6 @@ export function TaskBoard() {
                               </span>
                             ) : null}
                           </>
-                        ) : null}
-
-                        {/* Admin Read-Only Notice */}
-                        {isOwner ? (
-                          <span className="text-[11px] text-neutral-500 italic">
-                            Admin view (Read-only)
-                          </span>
                         ) : null}
                       </div>
                     </div>

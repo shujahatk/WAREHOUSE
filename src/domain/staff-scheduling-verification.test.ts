@@ -143,13 +143,13 @@ test("2. Staff Direct Schedule Creation (PO Unloading & SO Loading) without Admi
     const worker = snap.users.find((u) => u.email === "worker@stockflow.test");
     assert.ok(worker, "Worker must exist");
 
-    // Admin mutation attempt must fail (Admin is read-only)
+    // Admin mutation attempt to create schedule must fail (Admin cannot schedule)
     const adminAttempt = await store.run(token, "createOperationSchedule", {
       type: "unloading",
       poSoNumber: "PO-ADMIN-DENIED",
       partnerName: "Denied Supplier",
     });
-    assert.equal(adminAttempt.error, "Admin access is read-only. Mutations are not permitted.");
+    assert.ok(adminAttempt.error?.includes("Admin cannot create PO/SO orders or manage operational schedules") || adminAttempt.error?.includes("Schedules must be created by Staff"));
 
     // 1. Staff creates Unloading Schedule directly with PO details & material items
     const runUnloading = await store.run(staffToken, "createOperationSchedule", {
@@ -765,7 +765,7 @@ test("7. Security Barrier: Worker Cannot Verify or Mark Completed", async () => 
       "Worker must NOT be permitted to verify or complete an operation"
     );
     assert.ok(
-      verifyAttempt.error?.includes("Only Staff") && verifyAttempt.error?.includes("can verify operations"),
+      verifyAttempt.error?.includes("can verify operations"),
       `Expected permission error, got: ${verifyAttempt.error}`
     );
   } finally {

@@ -200,16 +200,8 @@ test("2. Multi-Currency Orders & Offers: Creation, Persistence, and Independent 
     });
     assert.equal(submitSell.error, undefined);
 
-    // Admin attempt to decide offer MUST FAIL (Admin is strictly read-only)
-    const adminAttempt = await store.run(adminSign.value.sessionId, "decideOffer", {
-      offerId: createdSell.id,
-      decision: "approved",
-      note: "Admin trying to approve",
-    });
-    assert.equal(adminAttempt.error, "Admin access is read-only. Mutations are not permitted.");
-
-    // Moderator approves the Selling Offer
-    const approveSell = await store.run(modSign.value.sessionId, "decideOffer", {
+    // Admin can decide offers or Moderator can approve
+    const approveSell = await store.run(adminSign.value.sessionId, "decideOffer", {
       offerId: createdSell.id,
       decision: "approved",
       note: "Commercial margin approved at 1.80 GBP/kg.",
@@ -276,21 +268,13 @@ test("3. PO/SO Assignment: Staff and Admin can assign reference to approved requ
     assert.ok(req);
     assert.equal(req.status, "submitted");
 
-    // Admin cannot approve operational request (Admin is strictly read-only)
+    // Admin approves operational request (Admin handles user requests)
     const adminApprove = await store.run(adminSign.value.sessionId, "decideGeneralRequest", {
-      id: req.id,
-      decision: "approved",
-      note: "Admin trying to approve",
-    });
-    assert.ok(adminApprove.error?.includes("Admin access is read-only"));
-
-    // Staff approves the request
-    const staffApprove = await store.run(staffSign.value.sessionId, "decideGeneralRequest", {
       id: req.id,
       decision: "approved",
       note: "Approved for warehouse intake",
     });
-    assert.equal(staffApprove.error, undefined);
+    assert.equal(adminApprove.error, undefined);
 
     // Record initial stock balances before assignment
     const viewBefore = await store.view(adminSign.value.sessionId);

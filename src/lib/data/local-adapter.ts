@@ -221,9 +221,6 @@ export class LocalAdapter {
 
     const authorize = (actor: UserRecord, action: Action, resource?: Resource): void => {
       if (!can(actor, action, resource)) {
-        if (actor.role === "owner") {
-          throw new Error("Admin access is read-only. Mutations are not permitted.");
-        }
         throw new Error("You do not have permission to perform this action.");
       }
     };

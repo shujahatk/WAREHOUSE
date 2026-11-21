@@ -344,11 +344,11 @@ export function RequestWorkflowPanel({
 
           {/* Role Actions */}
           <div className="border-t border-neutral-200 pt-3">
-            {/* Staff Actions */}
-            {isManager && activeRequest.status === "submitted" ? (
+            {/* Admin / Staff Actions */}
+            {(isOwner || isManager) && activeRequest.status === "submitted" ? (
               <div className="space-y-3">
                 <p className="text-xs font-medium text-neutral-800">
-                  Staff approval: Review the lines above before approving.
+                  {isOwner ? "Admin approval: Review the lines above before approving." : "Staff approval: Review the lines above before approving."}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -383,12 +383,6 @@ export function RequestWorkflowPanel({
                   </button>
                 </div>
               </div>
-            ) : null}
-
-            {isOwner && activeRequest.status === "submitted" ? (
-              <p className="text-xs font-medium text-neutral-600">
-                Admin view is read-only. Staff can review and approve this request.
-              </p>
             ) : null}
 
             {/* Worker Completion Actions */}
@@ -433,12 +427,6 @@ export function RequestWorkflowPanel({
                   </button>
                 </div>
               </div>
-            ) : null}
-
-            {isManager && activeRequest.status === "submitted" ? (
-              <p className="text-xs text-neutral-500">
-                Awaiting Admin approval.
-              </p>
             ) : null}
 
             {/* Worker Actions */}
