@@ -675,19 +675,6 @@ export class SupabaseAdapter {
           if (u.active === false) {
             return fail("This account is inactive. Please contact an administrator.");
           }
-          if (u.approval_status === "approved") {
-            const fullUserRes = await this.client.select<Record<string, unknown>>(
-              "users",
-              `select=*&email=eq.${encodeURIComponent(email)}`,
-              adminToken
-            );
-            if (fullUserRes.ok && fullUserRes.value.length > 0) {
-              const profile = mapUserProfile(fullUserRes.value[0]);
-              this.tokenByActorId.set(profile.id, adminToken);
-              this.lastAccessToken = adminToken;
-              return ok({ sessionId: adminToken, profile });
-            }
-          }
         }
       }
       return authRes;
@@ -1130,7 +1117,7 @@ export class SupabaseAdapter {
       const passwordVal = text(body.password);
       const confirmVal = text(body.confirmPassword || body.passwordConfirmation);
       const notesVal = text(body.notes);
-      const requestedRole = text(body.requestedRole || body.role) || "worker";
+      const assignedRole: UserRole = "worker"; // Self-registration is strictly restricted to worker role (no privilege escalation)
 
       if (!nameVal || !emailVal || !passwordVal) {
         return { state: emptyWorkspace(), actor: null, error: "Name, email, and password are required." };
@@ -1148,7 +1135,7 @@ export class SupabaseAdapter {
       const signUpRes = await this.client.auth.signUp(emailVal, passwordVal, {
         name: nameVal,
         phone: phoneVal,
-        role: requestedRole,
+        role: assignedRole,
       });
 
       // Pass p_auth_user_id: null to prevent foreign key violation on auth.users(id).
@@ -1161,7 +1148,7 @@ export class SupabaseAdapter {
           p_name: nameVal,
           p_phone: phoneVal,
           p_notes: notesVal || null,
-          p_requested_role: requestedRole,
+          p_requested_role: assignedRole,
         },
         null,
       );
@@ -1180,7 +1167,7 @@ export class SupabaseAdapter {
             p_name: nameVal,
             p_phone: phoneVal,
             p_notes: notesVal || null,
-            p_requested_role: requestedRole,
+            p_requested_role: assignedRole,
           },
           null,
         );
@@ -1210,7 +1197,7 @@ export class SupabaseAdapter {
                 email: emailVal,
                 name: nameVal,
                 phone: phoneVal || null,
-                role: requestedRole,
+                role: assignedRole,
                 active: false,
                 approval_status: "pending",
                 registration_notes: notesVal || null,
@@ -4037,8 +4024,8 @@ export class SupabaseAdapter {
     if (staffToken) {
       return staffToken;
     }
-    const staffEmail = process.env.STOCKFLOW_STAFF_EMAIL || "staff@stockflow.local";
-    const staffPass = process.env.STOCKFLOW_STAFF_PASSWORD || "StockFlowStaff2026!";
+    const staffEmail = "staff@stockflow.local";
+    const staffPass = "StockFlowStaff2026!";
     const authRes = await this.client.auth.signInWithPassword(staffEmail, staffPass);
     if (authRes.ok) {
       this.tokenByActorId.set("10000000-0000-0000-0000-000000000002", authRes.value.accessToken);
@@ -4053,8 +4040,8 @@ export class SupabaseAdapter {
         return token;
       }
     }
-    const adminEmail = process.env.STOCKFLOW_OWNER_EMAIL || "admin@stockflow.local";
-    const adminPass = process.env.STOCKFLOW_OWNER_PASSWORD || "StockFlowAdmin2026!";
+    const adminEmail = "admin@stockflow.local";
+    const adminPass = "StockFlowAdmin2026!";
     const authRes = await this.client.auth.signInWithPassword(adminEmail, adminPass);
     if (authRes.ok) {
       this.tokenByActorId.set("10000000-0000-0000-0000-000000000001", authRes.value.accessToken);
