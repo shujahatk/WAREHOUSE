@@ -1187,9 +1187,16 @@ export class SupabaseAdapter {
             notice: "An account with this email is already registered. If you already have an account, please sign in.",
           };
         }
-        if (signUpRes.ok || signUpRes.error?.includes("rate limit")) {
+        if (signUpRes.ok || signUpRes.error?.includes("rate limit") || rawErr.includes("users_worker_warehouse_check") || rawErr.includes("check constraint")) {
           const adminToken = await this.getAdminToken();
           if (adminToken) {
+            let defaultWarehouseId: string | null = null;
+            if (assignedRole === "worker") {
+              const whRes = await this.client.select<Record<string, unknown>>("warehouses", "select=id&order=name.asc&limit=1", adminToken);
+              if (whRes.ok && whRes.value.length > 0) {
+                defaultWarehouseId = String(whRes.value[0].id);
+              }
+            }
             await this.client.insert(
               "users",
               {
@@ -1198,6 +1205,7 @@ export class SupabaseAdapter {
                 name: nameVal,
                 phone: phoneVal || null,
                 role: assignedRole,
+                warehouse_id: defaultWarehouseId,
                 active: false,
                 approval_status: "pending",
                 registration_notes: notesVal || null,
@@ -2995,7 +3003,8 @@ export class SupabaseAdapter {
           break;
         }
         case "submitOperationSchedule":
-        case "submitSchedule": {
+        case "submitSchedule":
+        case "submitScheduleForVerification": {
           const payload = body.draft ? { ...body, ...record(body.draft) } : body;
           const scheduleId = text(payload.id || payload.scheduleId);
           const nowIso = this.now();
