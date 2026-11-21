@@ -29,7 +29,7 @@ async function runTests() {
   console.log('   OFFERS USER REGISTRATION & AUTH FLOW TEST        ');
   console.log('====================================================\n');
 
-  const testEmail = `test_offers_${Date.now()}@tradingpartner.com`;
+  const testEmail = 'test_offers_1795269435066@tradingpartner.com';
   const testPassword = 'SecurePassword2026!';
   const testName = 'Alex Trader';
   const testCompany = 'Global Trade Logistics';

@@ -36,19 +36,19 @@ export function OffersNav({
     },
     ...(!isOffersUser
       ? [
-          {
-            href: "/offers/selling",
-            label: "Selling Offers",
-            count: sellingCount,
-            description: "Customer sales & margin desk",
-          },
-          {
-            href: "/offers/sold",
-            label: "Sold",
-            count: soldCount,
-            description: "Approved & finalized transactions",
-          },
-        ]
+        {
+          href: "/offers/selling",
+          label: "Selling Offers",
+          count: sellingCount,
+          description: "Customer sales & margin desk",
+        },
+        {
+          href: "/offers/sold",
+          label: "Sold",
+          count: soldCount,
+          description: "Approved & finalized transactions",
+        },
+      ]
       : []),
   ];
 

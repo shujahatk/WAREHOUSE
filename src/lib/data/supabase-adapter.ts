@@ -1135,24 +1135,6 @@ export class SupabaseAdapter {
         );
       }
 
-      // Self-healing attempt 2: Fall back to rpc_register_offers_user if rpc_register_user is not in cache or hit worker check
-      if (!rpcRes.ok) {
-        const fallbackRpc = await this.client.rpc<Record<string, unknown>>(
-          "rpc_register_offers_user",
-          {
-            p_auth_user_id: null,
-            p_email: emailVal,
-            p_name: nameVal,
-            p_company: phoneVal ? `Phone: ${phoneVal}` : null,
-            p_notes: notesVal || null,
-          },
-          null,
-        );
-        if (fallbackRpc.ok) {
-          rpcRes = fallbackRpc;
-        }
-      }
-
       if (!rpcRes.ok) {
         const rawErr = rpcRes.error || "";
         if (
@@ -1209,45 +1191,35 @@ export class SupabaseAdapter {
         role: "offers_user",
       });
 
+      const formattedNotes = notesVal
+        ? companyVal
+          ? `${notesVal} (Company: ${companyVal})`
+          : notesVal
+        : companyVal
+          ? `Company: ${companyVal}`
+          : null;
+
       // Pass p_auth_user_id: null to prevent foreign key violation on auth.users(id).
       // The auth_user_id is securely linked upon password authentication via rpc_get_auth_account_status.
+      // rpc_register_user strictly sets approval_status = 'pending' and active = false.
       let rpcRes = await this.client.rpc<Record<string, unknown>>(
-        "rpc_register_offers_user",
+        "rpc_register_user",
         {
           p_auth_user_id: null,
           p_email: emailVal,
           p_name: nameVal,
-          p_company: companyVal || null,
-          p_notes: notesVal || null,
+          p_phone: companyVal ? `Company: ${companyVal}` : null,
+          p_notes: formattedNotes,
+          p_requested_role: "offers_user",
         },
         null,
       );
 
-      // Self-healing attempt 1: If foreign key violation on auth_user_id, retry immediately with null
+      // Self-healing attempt: If foreign key violation on auth_user_id, retry immediately with null
       if (!rpcRes.ok && (
         rpcRes.error?.includes("users_auth_user_id_fkey") ||
         rpcRes.error?.includes("foreign key") ||
         rpcRes.error?.includes("23503")
-      )) {
-        rpcRes = await this.client.rpc<Record<string, unknown>>(
-          "rpc_register_offers_user",
-          {
-            p_auth_user_id: null,
-            p_email: emailVal,
-            p_name: nameVal,
-            p_company: companyVal || null,
-            p_notes: notesVal || null,
-          },
-          null,
-        );
-      }
-
-      // Self-healing attempt 2: If rpc_register_offers_user not in schema cache, try rpc_register_user
-      if (!rpcRes.ok && (
-        rpcRes.error?.includes("rpc_register_offers_user") ||
-        rpcRes.error?.includes("schema cache") ||
-        rpcRes.error?.includes("PGRST202") ||
-        rpcRes.error?.includes("not found")
       )) {
         rpcRes = await this.client.rpc<Record<string, unknown>>(
           "rpc_register_user",
@@ -1255,8 +1227,8 @@ export class SupabaseAdapter {
             p_auth_user_id: null,
             p_email: emailVal,
             p_name: nameVal,
-            p_phone: companyVal ? `Company: ${companyVal}` : "N/A",
-            p_notes: notesVal || null,
+            p_phone: companyVal ? `Company: ${companyVal}` : null,
+            p_notes: formattedNotes,
             p_requested_role: "offers_user",
           },
           null,
@@ -1303,9 +1275,7 @@ export class SupabaseAdapter {
       return {
         state: emptyWorkspace(),
         actor: null,
-        notice: signUpRes.ok && signUpRes.value.isExistingUser
-          ? "Account verified. Your Offers User profile is ready. You can now sign in."
-          : "Registration submitted. Pending admin approval.",
+        notice: "Registration submitted. Pending admin approval.",
       };
     }
 

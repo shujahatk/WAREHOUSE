@@ -142,8 +142,8 @@ export async function createUploadTargetAction(
   const sid = await sessionId();
   const adapter = getAdapter();
   const current = sid ? await adapter.current(sid) : null;
-  if (!current) {
-    return { ok: false as const, error: "Sign in again to continue." };
+  if (!current || current.approvalStatus !== "approved" || !current.active) {
+    return { ok: false as const, error: "Your account is awaiting admin approval or is inactive." };
   }
   return adapter.services().files.createUploadTarget({
     ...metadata,
@@ -155,8 +155,8 @@ export async function confirmUploadAction(fileId: string, bytesBase64?: string) 
   const sid = await sessionId();
   const adapter = getAdapter();
   const current = sid ? await adapter.current(sid) : null;
-  if (!current) {
-    return { ok: false as const, error: "Sign in again to continue." };
+  if (!current || current.approvalStatus !== "approved" || !current.active) {
+    return { ok: false as const, error: "Your account is awaiting admin approval or is inactive." };
   }
   return adapter.services().files.confirmUpload({
     fileId,
