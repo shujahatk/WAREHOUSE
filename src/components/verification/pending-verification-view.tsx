@@ -789,31 +789,38 @@ export function PendingVerificationView() {
               </button>
 
               {selectedSchedule.status !== "completed" && !actionModal ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setActionModal("request_info")}
-                    className="rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
-                  >
-                    💬 Request Info
-                  </button>
+                identity.role === "manager" ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActionModal("request_info")}
+                      className="rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
+                    >
+                      💬 Request Info
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setActionModal("return")}
-                    className="rounded-lg border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100 transition-colors"
-                  >
-                    ↩ Return for Correction
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setActionModal("return")}
+                      className="rounded-lg border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100 transition-colors"
+                    >
+                      ↩ Return for Correction
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setActionModal("approve")}
-                    className="rounded-lg bg-emerald-700 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-800 transition-colors flex items-center gap-1.5"
-                  >
-                    <span>✓</span> Approve and Complete
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setActionModal("approve")}
+                      className="rounded-lg bg-emerald-700 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-800 transition-colors flex items-center gap-1.5"
+                    >
+                      <span>✓</span> Approve and Complete
+                    </button>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-600">
+                    <span>🔒</span>
+                    <span>Admin View Only (Verification is handled by Staff)</span>
+                  </div>
+                )
               ) : null}
             </div>
           </div>

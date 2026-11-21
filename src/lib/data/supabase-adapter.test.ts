@@ -566,7 +566,7 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
         valueEur: 5000,
         actorId: ADMIN_ID,
       }),
-    /You do not have permission to perform this action/,
+    /Admin access is read-only|You do not have permission to perform this action/,
   );
 
   await assert.rejects(
@@ -579,7 +579,7 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
         valueEur: 9000,
         actorId: ADMIN_ID,
       }),
-    /You do not have permission to perform this action/,
+    /Admin access is read-only|You do not have permission to perform this action/,
   );
 
   await assert.rejects(
@@ -588,12 +588,16 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
         requestId: "50000000-0000-4000-a000-000000000001",
         actorId: ADMIN_ID,
       }),
-    /You do not have permission to perform this action/,
+    /Admin access is read-only|You do not have permission to perform this action/,
   );
 
-  // 2. Staff CANNOT approve POs, but CAN edit POs (including approved POs); Workers CANNOT edit POs
+  // 2. Admin CANNOT approve POs (strictly read-only), Workers CANNOT approve POs; Staff CAN approve & edit POs
   await assert.rejects(
-    () => services.purchaseOrders.approve({ number: "PO-100", actorId: STAFF_ID }),
+    () => services.purchaseOrders.approve({ number: "PO-100", actorId: ADMIN_ID }),
+    /Admin access is read-only|You do not have permission to perform this action/,
+  );
+  await assert.rejects(
+    () => services.purchaseOrders.approve({ number: "PO-100", actorId: WORKER_BORNEM_ID }),
     /You do not have permission to perform this action/,
   );
 
@@ -620,10 +624,19 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
     /You do not have permission to perform this action/,
   );
 
-  // 3. Admin CAN approve POs via rpc_admin_decide_order and approve requests via rpc_decide_request
+  // 3. Admin CANNOT approve POs or requests (Admin is strictly read-only); Staff CAN approve
+  await assert.rejects(
+    () => services.purchaseOrders.approve({ number: "PO-100", actorId: ADMIN_ID }),
+    /Admin access is read-only|You do not have permission to perform this action/,
+  );
+  await assert.rejects(
+    () => services.requests.approve({ requestId: "50000000-0000-4000-a000-000000000001", actorId: ADMIN_ID }),
+    /Admin access is read-only|You do not have permission to perform this action/,
+  );
+
   const poApproved = await services.purchaseOrders.approve({
     number: "PO-100",
-    actorId: ADMIN_ID,
+    actorId: STAFF_ID,
   });
   assert.equal(poApproved.ok, true);
   if (poApproved.ok) {
@@ -632,7 +645,7 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
 
   const reqApproved = await services.requests.approve({
     requestId: "50000000-0000-4000-a000-000000000001",
-    actorId: ADMIN_ID,
+    actorId: STAFF_ID,
   });
   assert.equal(reqApproved.ok, true);
   if (reqApproved.ok) {
@@ -641,7 +654,7 @@ test("SupabaseAdapter enforces 3-role permissions and invokes narrow RPCs with u
 
   const decideReqCall = calls.find((c) => c.url.includes("/rest/v1/rpc/rpc_decide_request"));
   assert.ok(decideReqCall);
-  assert.equal(decideReqCall.authHeader, "Bearer jwt-admin");
+  assert.equal(decideReqCall.authHeader, "Bearer jwt-staff");
 
   // 4. Turnhout Worker CANNOT complete Bornem request (cross-warehouse denial)
   await assert.rejects(

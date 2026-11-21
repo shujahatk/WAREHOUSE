@@ -237,7 +237,7 @@ export function ScheduleDetailsDrawer({ schedule, isOpen, onClose, onEdit }: Pro
               <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
                 Worker Assignment & Progress
               </h3>
-              {isOffice && schedule.status !== "completed" && !isReassigning ? (
+              {identity.role === "manager" && schedule.status !== "completed" && !isReassigning ? (
                 <button
                   type="button"
                   onClick={() => setIsReassigning(true)}
@@ -459,7 +459,7 @@ export function ScheduleDetailsDrawer({ schedule, isOpen, onClose, onEdit }: Pro
               <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
                 Photos &amp; Operational Documents ({schedule.attachments.length})
               </h3>
-              {schedule.status !== "completed" ? (
+              {identity.role === "manager" && schedule.status !== "completed" ? (
                 <label className="rounded-lg bg-neutral-100 hover:bg-neutral-200 px-2.5 py-1 text-xs font-semibold text-neutral-700 cursor-pointer transition-colors">
                   {isUploading ? "Uploading..." : "+ Upload File"}
                   <input
@@ -487,7 +487,7 @@ export function ScheduleDetailsDrawer({ schedule, isOpen, onClose, onEdit }: Pro
                         <span className="rounded bg-neutral-200/70 px-1.5 py-0.2 text-[10px] font-semibold uppercase tracking-wider text-neutral-700 truncate">
                           {ATTACHMENT_KIND_LABELS[att.kind] || att.kind}
                         </span>
-                        {schedule.status !== "completed" ? (
+                        {identity.role === "manager" && schedule.status !== "completed" ? (
                           <button
                             type="button"
                             onClick={() => handleDeleteAttachment(att.id)}
@@ -541,7 +541,7 @@ export function ScheduleDetailsDrawer({ schedule, isOpen, onClose, onEdit }: Pro
               </Link>
             ) : null}
 
-            {isOffice && onEdit && schedule.status !== "completed" ? (
+            {identity.role === "manager" && onEdit && schedule.status !== "completed" ? (
               <button
                 type="button"
                 onClick={() => {

@@ -92,7 +92,19 @@ test("sign-in, request numbers, and stock entry stay behind the interfaces", asy
     assert.equal(signed.ok, true);
     if (!signed.ok) return;
 
-    // Owner adds a Bremen Worker account; Worker handles warehouse unloading & completion
+    // Owner adds Staff and Worker accounts
+    const addedStaff = await store.run(signed.value.sessionId, "addUser", {
+      name: "Sam Staff",
+      email: "staff@example.com",
+      role: "manager",
+      warehouse: null,
+      password: "staff-pass-1",
+    });
+    assert.equal(addedStaff.error, undefined);
+    const staffSigned = await store.signIn("staff@example.com", "staff-pass-1");
+    assert.equal(staffSigned.ok, true);
+    if (!staffSigned.ok) return;
+
     const addedWorker = await store.run(signed.value.sessionId, "addUser", {
       name: "Bremen Worker",
       email: "worker@example.com",
@@ -151,11 +163,17 @@ test("sign-in, request numbers, and stock entry stay behind the interfaces", asy
     assert.equal(request?.status, "submitted");
     assert.equal(persisted.stockMovements.length, 0);
 
-    // Owner approves the request, but cannot complete the operation
-    const approved = await store.services().requests.approve({ requestId: request!.id, actorId: owner.id });
+    // Owner cannot approve the request (strictly read-only)
+    await assert.rejects(
+      () => store.services().requests.approve({ requestId: request!.id, actorId: owner.id }),
+      /Admin access is read-only/,
+    );
+
+    // Staff approves the request, but cannot complete the operation
+    const approved = await store.services().requests.approve({ requestId: request!.id, actorId: staffSigned.value.profile.id });
     assert.equal(approved.ok, true);
     await assert.rejects(
-      () => store.services().requests.complete({ requestId: request!.id, actorId: owner.id }),
+      () => store.services().requests.complete({ requestId: request!.id, actorId: staffSigned.value.profile.id }),
       /You do not have permission/,
     );
 

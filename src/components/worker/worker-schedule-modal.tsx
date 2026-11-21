@@ -449,10 +449,10 @@ function WorkerScheduleModalContent({
         <div className="border-b border-neutral-200 bg-white px-3 py-2 sm:px-6">
           <div className="grid grid-cols-4 gap-1 sm:gap-2">
             {[
-              { id: "overview" as const, label: "1. Logistics", count: vehicleRegistrationNumber ? "✓" : "" },
-              { id: "materials" as const, label: "2. Materials & Tare", count: `${items.length}` },
-              { id: "photos" as const, label: "3. Photos & Evidence", count: `${schedule.attachments?.length || 0}` },
-              { id: "summary" as const, label: "4. Summary", count: isCompleted ? "✓" : "" },
+              { id: "overview" as const, label: "1. Logistics", short: "1. Info", count: vehicleRegistrationNumber ? "✓" : "" },
+              { id: "materials" as const, label: "2. Materials & Tare", short: "2. Items", count: `${items.length}` },
+              { id: "photos" as const, label: "3. Photos & Evidence", short: "3. Photos", count: `${schedule.attachments?.length || 0}` },
+              { id: "summary" as const, label: "4. Summary", short: "4. Done", count: isCompleted ? "✓" : "" },
             ].map((step) => {
               const isCurrent = activeStep === step.id;
               return (
@@ -466,7 +466,8 @@ function WorkerScheduleModalContent({
                       : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200/80"
                   }`}
                 >
-                  <span className="truncate">{step.label}</span>
+                  <span className="sm:hidden truncate">{step.short}</span>
+                  <span className="hidden sm:inline truncate">{step.label}</span>
                   {step.count ? (
                     <span
                       className={`hidden sm:inline-flex rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
@@ -1197,7 +1198,37 @@ function WorkerScheduleModalContent({
                   <div className="bg-neutral-50 px-3.5 py-2 border-b border-neutral-200 text-xs font-bold uppercase tracking-wider text-neutral-700">
                     Material-Wise Breakdown
                   </div>
-                  <table className="w-full text-left text-xs">
+                  {/* Mobile Stacked Cards (No horizontal scrolling) */}
+                  <div className="divide-y divide-neutral-100 sm:hidden">
+                    {materialWiseSummary.map((m) => (
+                      <div key={m.materialName} className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-neutral-900">{m.materialName}</span>
+                          <span className="rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-700">
+                            {m.totalPackageCount} pkgs
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                          <div className="rounded-lg bg-neutral-50 p-1.5 text-center">
+                            <span className="text-[10px] text-neutral-400 block">Gross</span>
+                            <span className="font-semibold text-neutral-800">{formatKg(m.totalGrossWeightKg)}</span>
+                          </div>
+                          <div className="rounded-lg bg-neutral-50 p-1.5 text-center">
+                            <span className="text-[10px] text-neutral-400 block">Tare</span>
+                            <span className="font-semibold text-neutral-800">{formatKg(m.totalTareWeightKg)}</span>
+                          </div>
+                          <div className="rounded-lg bg-emerald-50 p-1.5 text-center">
+                            <span className="text-[10px] text-emerald-600 block">Net</span>
+                            <span className="font-bold text-emerald-900">{formatKg(m.totalNetWeightKg)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Tablet and Desktop Table */}
+                  <div className="hidden sm:block overflow-x-auto w-full">
+                    <table className="w-full text-left text-xs">
                     <thead className="border-b border-neutral-100 text-neutral-500 bg-neutral-50/50">
                       <tr>
                         <th className="px-3.5 py-2">Material Name</th>
@@ -1220,7 +1251,8 @@ function WorkerScheduleModalContent({
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
                 </div>
               )}
 

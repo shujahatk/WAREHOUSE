@@ -18,12 +18,12 @@ export function WorkerLayout({ children }: { children: ReactNode }) {
 
   return (
     <WorkspaceSearch.Provider value={query}>
-      <div className="min-h-screen bg-[#F8FAFC] text-neutral-900 flex flex-col font-sans antialiased overflow-x-hidden">
+      <div className="min-h-screen bg-[#F8FAFC] text-neutral-900 flex flex-col font-sans antialiased overflow-x-hidden w-full max-w-full">
         {/* Fixed Top Header for Workers */}
         <WorkerHeader />
 
-        {/* Main Operational Mobile Viewport */}
-        <main className="flex-1 w-full max-w-lg mx-auto px-3.5 pt-3 pb-36 sm:px-4 sm:pt-4">
+        {/* Main Operational Viewport (Responsive across mobile, tablet, laptop, desktop) */}
+        <main className="flex-1 w-full max-w-5xl mx-auto px-3.5 pt-3 pb-36 sm:px-6 sm:pt-6 md:pb-24 overflow-x-hidden">
           {allowed ? (
             children
           ) : (

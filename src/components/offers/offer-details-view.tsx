@@ -317,8 +317,8 @@ export function OfferDetailsView({
             </button>
           ) : null}
 
-          {/* Admin Approve / Reject trigger */}
-          {isAdmin ? (
+          {/* Moderator Approve / Reject trigger */}
+          {isModerator ? (
             <button
               type="button"
               onClick={() => {
@@ -331,8 +331,8 @@ export function OfferDetailsView({
             </button>
           ) : null}
 
-          {/* Commercial Acceptance -> Move to Sold (Admin or Moderator when approved) */}
-          {(isAdmin || isModerator) && offer.approvalStatus === "approved" && !isSold ? (
+          {/* Commercial Acceptance -> Move to Sold (Moderator when approved) */}
+          {isModerator && offer.approvalStatus === "approved" && !isSold ? (
             <button
               type="button"
               disabled={acceptingSubmitting}
@@ -471,14 +471,14 @@ export function OfferDetailsView({
         </div>
       </div>
 
-      {/* Admin Decision Inline Panel */}
-      {showDecisionInput && isAdmin ? (
+      {/* Moderator Decision Inline Panel */}
+      {showDecisionInput && isModerator ? (
         <form
           onSubmit={handleAdminDecision}
           className="rounded-xl border border-amber-300 bg-amber-50/70 p-5 shadow-sm"
         >
           <div className="flex items-center justify-between border-b border-amber-200 pb-2">
-            <h3 className="text-sm font-semibold text-neutral-900">Admin Offer Decision &amp; Pricing Clearance</h3>
+            <h3 className="text-sm font-semibold text-neutral-900">Moderator Offer Decision &amp; Pricing Clearance</h3>
             <button
               type="button"
               onClick={() => setShowDecisionInput(false)}

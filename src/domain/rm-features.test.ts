@@ -252,13 +252,12 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     assert.ok(req);
     assert.equal(req.status, "submitted");
 
-    // 2. Staff cannot directly approve or reject operational requests (only Owner/Admin can approve/reject)
-    const staffApprove = await store.run(staffAuth.value.sessionId, "decideGeneralRequest", {
+    // 2. Admin cannot approve or reject operational requests (Admin is strictly read-only)
+    const adminApproveBlocked = await store.run(adminAuth.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "approved",
     });
-    assert.ok(staffApprove.error);
-    assert.match(staffApprove.error ?? "", /Only Admin can approve or decline/i);
+    assert.match(adminApproveBlocked.error ?? "", /Admin access is read-only/i);
 
     // 3. Staff can place under_review or send_back
     const staffReview = await store.run(staffAuth.value.sessionId, "decideGeneralRequest", {
@@ -271,13 +270,13 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     const snap2 = await store.snapshot();
     assert.equal(snap2.workerGeneralRequests[0].status, "under_review");
 
-    // 4. Admin approves request with decision note
-    const adminApprove = await store.run(adminAuth.value.sessionId, "decideGeneralRequest", {
+    // 4. Staff approves request with decision note
+    const staffApprove = await store.run(staffAuth.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "approved",
       responseNote: "Dock 4 approved for 14:00",
     });
-    assert.equal(adminApprove.error, undefined);
+    assert.equal(staffApprove.error, undefined);
 
     const snap3 = await store.snapshot();
     assert.equal(snap3.workerGeneralRequests[0].status, "approved");
@@ -362,8 +361,8 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     const loadReq = snap5.workerGeneralRequests.find((r) => r.id !== req.id);
     assert.ok(loadReq);
 
-    // Admin approves loading request
-    await store.run(adminAuth.value.sessionId, "decideGeneralRequest", {
+    // Staff approves loading request
+    await store.run(staffAuth.value.sessionId, "decideGeneralRequest", {
       requestId: loadReq.id,
       decision: "approved",
       responseNote: "Loading approved for collection",
@@ -420,7 +419,7 @@ test("4. Full Worker -> Staff -> Admin -> Worker/Staff lifecycle & role permissi
     const excessReq = snap7.workerGeneralRequests.find((r) => r.id !== req.id && r.id !== loadReq.id);
     assert.ok(excessReq);
 
-    await store.run(adminAuth.value.sessionId, "decideGeneralRequest", {
+    await store.run(staffAuth.value.sessionId, "decideGeneralRequest", {
       requestId: excessReq.id,
       decision: "approved",
     });

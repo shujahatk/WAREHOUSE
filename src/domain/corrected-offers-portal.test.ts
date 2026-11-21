@@ -276,22 +276,30 @@ test("Corrected External Offers Portal — End-to-End Submission, Locking, Priva
     });
     assert.notEqual(bobDeleteRes.error, undefined, "Bob must NOT be able to delete submitted offer");
 
-    // 12. Admin Appraisal Workflow:
-    // Rejection without reason fails
-    const adminEmptyReject = await store.run(ownerSign.value.sessionId, "decideSellingOffer", {
+    // 12. Offer Decision Workflow:
+    // Admin is strictly read-only and cannot decide offers
+    const adminAttempt = await store.run(ownerSign.value.sessionId, "decideSellingOffer", {
+      offerId: bobOffer.id,
+      decision: "approved",
+      note: "Admin attempt",
+    });
+    assert.equal(adminAttempt.error, "Admin access is read-only. Mutations are not permitted.");
+
+    // Moderator rejection without reason fails
+    const modEmptyReject = await store.run(modSign.value.sessionId, "decideSellingOffer", {
       offerId: bobOffer.id,
       decision: "rejected",
       note: "",
     });
-    assert.notEqual(adminEmptyReject.error, undefined, "Admin rejection must require a reason");
+    assert.notEqual(modEmptyReject.error, undefined, "Moderator rejection must require a reason");
 
-    // Admin approves with note
-    const adminApprove = await store.run(ownerSign.value.sessionId, "decideSellingOffer", {
+    // Moderator approves with note
+    const modApprove = await store.run(modSign.value.sessionId, "decideSellingOffer", {
       offerId: bobOffer.id,
       decision: "approved",
       note: "Commercial pricing clearance granted by procurement manager.",
     });
-    assert.equal(adminApprove.error, undefined);
+    assert.equal(modApprove.error, undefined);
 
     // 13. Verify updated status and in-app notification for Bob
     const bobFinalView = await store.view(bobSign.value.sessionId);
@@ -321,8 +329,8 @@ test("Corrected External Offers Portal — End-to-End Submission, Locking, Priva
     const charlieViewAfterSubmit = await store.view(charlieSign.value.sessionId);
     const charlieOffer = charlieViewAfterSubmit.state.offers.find((o) => o.kind === "selling")!;
 
-    // Admin rejects with mandatory reason
-    const adminReject = await store.run(ownerSign.value.sessionId, "decideSellingOffer", {
+    // Moderator rejects with mandatory reason
+    const adminReject = await store.run(modSign.value.sessionId, "decideSellingOffer", {
       offerId: charlieOffer.id,
       decision: "rejected",
       note: "Off-grade material does not meet European circularity technical specs.",

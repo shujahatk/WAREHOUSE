@@ -223,49 +223,49 @@ test("Lifecycle: Moderator submission -> Admin approve/reject with mandatory dec
     assert.equal(subOfferA.statusKey, "under_review");
     assert.equal(subOfferA.approvalStatus, "pending");
 
-    // 2. Moderator CANNOT approve or reject offers
-    const modApprove = await store.run(modSign.value.sessionId, "decideOffer", {
+    // 2. Admin CANNOT approve or reject offers (Admin is strictly read-only)
+    const adminApprove = await store.run(ownerSign.value.sessionId, "decideOffer", {
       offerId: offerA.id,
       decision: "approved",
-      note: "Self-approval attempt",
+      note: "Admin approval attempt",
     });
-    assert.notEqual(modApprove.error, undefined);
+    assert.equal(adminApprove.error, "Admin access is read-only. Mutations are not permitted.");
 
-    // 3. Admin MUST provide decision notes (empty note rejected)
-    const adminEmptyNote = await store.run(ownerSign.value.sessionId, "decideOffer", {
+    // 3. Moderator MUST provide decision notes (empty note rejected)
+    const modEmptyNote = await store.run(modSign.value.sessionId, "decideOffer", {
       offerId: offerA.id,
       decision: "approved",
       note: "   ",
     });
-    assert.notEqual(adminEmptyNote.error, undefined);
+    assert.notEqual(modEmptyNote.error, undefined);
 
-    // 4. Admin approves Offer A
-    const adminApprove = await store.run(ownerSign.value.sessionId, "decideOffer", {
+    // 4. Moderator approves Offer A
+    const modApprove = await store.run(modSign.value.sessionId, "decideOffer", {
       offerId: offerA.id,
       decision: "approved",
       note: "Approved: Price is competitive with current market index.",
     });
-    assert.equal(adminApprove.error, undefined);
+    assert.equal(modApprove.error, undefined);
 
-    // 5. Admin rejects Offer B
-    const adminReject = await store.run(ownerSign.value.sessionId, "decideOffer", {
+    // 5. Moderator rejects Offer B
+    const modReject = await store.run(modSign.value.sessionId, "decideOffer", {
       offerId: offerB.id,
       decision: "rejected",
       note: "Rejected: Customer margin is below 8% target.",
     });
-    assert.equal(adminReject.error, undefined);
+    assert.equal(modReject.error, undefined);
 
     const adminView = await store.view(ownerSign.value.sessionId);
     const approvedA = adminView.state.offers.find((o) => o.id === offerA.id)!;
     assert.equal(approvedA.approvalStatus, "approved");
     assert.equal(approvedA.adminDecisionNote, "Approved: Price is competitive with current market index.");
-    assert.equal(approvedA.decidedByName, "Ada Owner");
+    assert.equal(approvedA.decidedByName, "Morgan Moderator");
 
     const rejectedB = adminView.state.offers.find((o) => o.id === offerB.id)!;
     assert.equal(rejectedB.statusKey, "lost");
     assert.equal(rejectedB.approvalStatus, "rejected");
     assert.equal(rejectedB.adminDecisionNote, "Rejected: Customer margin is below 8% target.");
-    assert.equal(rejectedB.decidedByName, "Ada Owner");
+    assert.equal(rejectedB.decidedByName, "Morgan Moderator");
 
     // 6. Moderator progresses approved Offer A to negotiating, then won
     const negRes = await store.run(modSign.value.sessionId, "updateOfferStatus", {
@@ -524,26 +524,34 @@ test("Offer Comments, Attachments, and Favourites", async () => {
     assert.equal(offerWithAtt.attachments.length, 1);
     assert.equal(offerWithAtt.attachments[0].kind, "image");
 
-    // 2. Comments: Moderator posts a comment, Admin responds
+    // 2. Comments: Moderator posts a comment, Admin cannot post comments (read-only)
     const modComment = await store.run(modSign.value.sessionId, "addOfferComment", {
       offerId: offer.id,
       comment: "Sample passed internal melt flow index testing.",
     });
     assert.equal(modComment.error, undefined);
 
+    // Admin attempt to comment is BLOCKED (Admin is strictly read-only)
     const adminComment = await store.run(ownerSign.value.sessionId, "addOfferComment", {
       offerId: offer.id,
       comment: "Understood. Please obtain COA before final contract.",
     });
-    assert.equal(adminComment.error, undefined);
+    assert.equal(adminComment.error, "Admin access is read-only. Mutations are not permitted.");
+
+    // Moderator posts second comment
+    const modComment2 = await store.run(modSign.value.sessionId, "addOfferComment", {
+      offerId: offer.id,
+      comment: "Understood. COA requested from supplier lab.",
+    });
+    assert.equal(modComment2.error, undefined);
 
     modView = await store.view(modSign.value.sessionId);
     const offerWithComments = modView.state.offers[0];
     assert.equal(offerWithComments.comments.length, 2);
     assert.equal(offerWithComments.comments[0].authorName, "Morgan Moderator");
     assert.equal(offerWithComments.comments[0].authorRole, "moderator");
-    assert.equal(offerWithComments.comments[1].authorName, "Ada Owner");
-    assert.equal(offerWithComments.comments[1].authorRole, "owner");
+    assert.equal(offerWithComments.comments[1].authorName, "Morgan Moderator");
+    assert.equal(offerWithComments.comments[1].authorRole, "moderator");
 
     // 3. Toggle favourite
     assert.equal(offerWithComments.isFavourite, false);

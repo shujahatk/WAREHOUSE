@@ -81,19 +81,19 @@ test("Admin (owner) views all operational data/documents/images and approves/rej
   assert.equal(can(owner, "audit:view"), true);
   assert.equal(can(owner, "report:view"), true);
 
-  // Allowed: approving/rejecting requests, orders, and Annex VII, plus system administration
-  assert.equal(can(owner, "order:approve"), true);
-  assert.equal(can(owner, "order:reject"), true);
-  assert.equal(can(owner, "request:approve"), true);
-  assert.equal(can(owner, "request:decline"), true);
-  assert.equal(can(owner, "request:sendBack"), true);
-  assert.equal(can(owner, "annex7:review"), true);
-  assert.equal(can(owner, "annex7:approve"), true);
+  // Strictly Denied for Admin (owner): mutations, approvals, rejections, user/material management (Admin is read-only)
+  assert.equal(can(owner, "order:approve"), false);
+  assert.equal(can(owner, "order:reject"), false);
+  assert.equal(can(owner, "request:approve"), false);
+  assert.equal(can(owner, "request:decline"), false);
+  assert.equal(can(owner, "request:sendBack"), false);
+  assert.equal(can(owner, "annex7:review"), false);
+  assert.equal(can(owner, "annex7:approve"), false);
   assert.equal(can(owner, "user:manage"), true);
-  assert.equal(can(owner, "warehouse:manage"), true);
-  assert.equal(can(owner, "material:manage"), true);
-  assert.equal(can(owner, "packaging:manage"), true);
-  assert.equal(can(owner, "threshold:set"), true);
+  assert.equal(can(owner, "warehouse:manage"), false);
+  assert.equal(can(owner, "material:manage"), false);
+  assert.equal(can(owner, "packaging:manage"), false);
+  assert.equal(can(owner, "threshold:set"), false);
 
   // Denied: creating, editing, deleting, or directly modifying operational records, completing operations, stock adjustments, or transfers
   assert.equal(can(owner, "order:create"), false);
@@ -120,11 +120,11 @@ test("Admin (owner) views all operational data/documents/images and approves/rej
   assert.equal(can(owner, "stock:transfer"), false);
   assert.equal(can(owner, "transfer:create"), false);
 
-  // Offers: Admin can view, approve, reject, comment; CANNOT create, edit, delete, submit, negotiate, status, or attach
+  // Offers: Admin is read-only (view only); CANNOT approve, reject, comment, create, edit, delete, submit, negotiate, status, or attach
   assert.equal(can(owner, "offer:view"), true);
-  assert.equal(can(owner, "offer:approve"), true);
-  assert.equal(can(owner, "offer:reject"), true);
-  assert.equal(can(owner, "offer:comment"), true);
+  assert.equal(can(owner, "offer:approve"), false);
+  assert.equal(can(owner, "offer:reject"), false);
+  assert.equal(can(owner, "offer:comment"), false);
   assert.equal(can(owner, "offer:create"), false);
   assert.equal(can(owner, "offer:edit"), false);
   assert.equal(can(owner, "offer:delete"), false);
@@ -155,11 +155,11 @@ test("Staff (manager) can create/edit PO/SO even after start, manage suppliers/c
   // Strictly prohibited for Staff (including Administration: users, reports, audit, settings)
   assert.equal(can(manager, "report:view"), false);
   assert.equal(can(manager, "audit:view"), false);
-  assert.equal(can(manager, "order:approve"), false);
-  assert.equal(can(manager, "order:reject"), false);
+  assert.equal(can(manager, "order:approve"), true);
+  assert.equal(can(manager, "order:reject"), true);
+  assert.equal(can(manager, "request:approve"), true);
+  assert.equal(can(manager, "request:decline"), true);
   assert.equal(can(manager, "request:delete"), false);
-  assert.equal(can(manager, "request:approve"), false);
-  assert.equal(can(manager, "request:decline"), false);
   assert.equal(can(manager, "request:complete", { status: "approved" }), false);
   assert.equal(can(manager, "worker:assign"), false);
   assert.equal(can(manager, "stock:move"), false);
@@ -241,8 +241,8 @@ test("Worker permissions: scoped to assigned warehouse, can complete approved op
   assert.equal(can(workerBremen, "offer:attach"), false);
 });
 
-test("Sales & Purchasing Offer Moderator permissions: full offer CRUD, review submission, status update, attachments, comments, but CANNOT approve/reject offers or access warehouse operations", () => {
-  // Allowed for Moderator: full offer lifecycle except approve/reject
+test("Sales & Purchasing Offer Moderator permissions: full offer CRUD, review submission, status update, attachments, comments, and offer approval/rejection", () => {
+  // Allowed for Moderator: full offer lifecycle including approve/reject
   assert.equal(can(moderator, "offer:view"), true);
   assert.equal(can(moderator, "offer:create"), true);
   assert.equal(can(moderator, "offer:edit"), true);
@@ -252,10 +252,8 @@ test("Sales & Purchasing Offer Moderator permissions: full offer CRUD, review su
   assert.equal(can(moderator, "offer:status"), true);
   assert.equal(can(moderator, "offer:comment"), true);
   assert.equal(can(moderator, "offer:attach"), true);
-
-  // Prohibited for Moderator: Admin approval/rejection authority
-  assert.equal(can(moderator, "offer:approve"), false);
-  assert.equal(can(moderator, "offer:reject"), false);
+  assert.equal(can(moderator, "offer:approve"), true);
+  assert.equal(can(moderator, "offer:reject"), true);
 
   // Prohibited for Moderator: operational warehouse actions
   assert.equal(can(moderator, "order:create"), false);

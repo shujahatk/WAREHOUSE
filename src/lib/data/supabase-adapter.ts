@@ -1374,6 +1374,16 @@ export class SupabaseAdapter {
       return { state: emptyWorkspace(), actor: null, error: "This account is not permitted to perform actions." };
     }
 
+    // Strict Admin Read-Only Enforcement: Admin cannot execute any mutation commands
+    if (profile.role === "owner") {
+      const v = await this.view(sessionId);
+      return {
+        state: v.state,
+        actor: v.actor,
+        error: "Admin access is read-only. Mutations are not permitted.",
+      };
+    }
+
     const token = this.resolveToken(sessionId) ?? sessionId;
     const body = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
     const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -2145,8 +2155,8 @@ export class SupabaseAdapter {
           break;
         }
         case "assignPoSoToGeneralRequest": {
-          if (profile.role !== "manager" && profile.role !== "owner") {
-            error = "Only Staff or Admin can assign PO/SO numbers to approved requests.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can assign PO/SO numbers to approved requests.";
             break;
           }
           const reqId = text(body.requestId || body.id);
@@ -2419,8 +2429,8 @@ export class SupabaseAdapter {
         }
         case "createOperationSchedule":
         case "createSchedule": {
-          if (profile.role !== "owner" && profile.role !== "manager") {
-            error = "Only Staff or Admin can create schedules.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can create schedules.";
             break;
           }
           const schedType: "unloading" | "loading" = text(body.type) === "loading" ? "loading" : "unloading";
@@ -2754,8 +2764,8 @@ export class SupabaseAdapter {
         }
         case "updateOperationSchedule":
         case "updateSchedule": {
-          if (profile.role !== "owner" && profile.role !== "manager") {
-            error = "Only Staff or Admin can modify schedules.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can modify schedules.";
             break;
           }
           const schedId = text(body.id || body.scheduleId);
@@ -2843,8 +2853,8 @@ export class SupabaseAdapter {
           break;
         }
         case "assignScheduleWorker": {
-          if (profile.role !== "owner" && profile.role !== "manager") {
-            error = "Only Staff or Admin can reassign schedule workers.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can reassign schedule workers.";
             break;
           }
           const schedId = text(body.id || body.scheduleId);
@@ -3121,8 +3131,8 @@ export class SupabaseAdapter {
         }
         case "verifyOperationSchedule":
         case "verifySchedule": {
-          if (profile.role !== "owner" && profile.role !== "manager") {
-            error = "Only Staff or Admin can verify operations.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can verify operations.";
             break;
           }
           const payload = body.details ? { ...body, ...record(body.details) } : body;
@@ -3331,8 +3341,8 @@ export class SupabaseAdapter {
           break;
         }
         case "deleteOperationSchedule": {
-          if (profile.role !== "owner" && profile.role !== "manager") {
-            error = "Only Staff or Admin can delete schedules.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can delete schedules.";
             break;
           }
           const scheduleId = text(body.id || body.scheduleId);
@@ -3613,8 +3623,8 @@ export class SupabaseAdapter {
           break;
         }
         case "approveRegistration": {
-          if (profile.role !== "owner") {
-            error = "Only Admin can approve account registrations.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can approve account registrations.";
             break;
           }
           const targetUserId = text(body.userId || body.id);
@@ -3675,8 +3685,8 @@ export class SupabaseAdapter {
           break;
         }
         case "rejectRegistration": {
-          if (profile.role !== "owner") {
-            error = "Only Admin can reject account registrations.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can reject account registrations.";
             break;
           }
           const targetUserId = text(body.userId || body.id);
@@ -3720,8 +3730,8 @@ export class SupabaseAdapter {
           break;
         }
         case "deleteRegistrationRequest": {
-          if (profile.role !== "owner") {
-            error = "Only Admin can delete registration requests.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can delete registration requests.";
             break;
           }
           const targetUserId = text(body.userId || body.id);
@@ -3753,8 +3763,8 @@ export class SupabaseAdapter {
           break;
         }
         case "deactivateUser": {
-          if (profile.role !== "owner") {
-            error = "Only Admin can deactivate accounts.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can deactivate accounts.";
             break;
           }
           let targetUserId = text(body.userId || body.id);
@@ -3782,8 +3792,8 @@ export class SupabaseAdapter {
           break;
         }
         case "reactivateUser": {
-          if (profile.role !== "owner") {
-            error = "Only Admin can reactivate accounts.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can reactivate accounts.";
             break;
           }
           let targetUserId = text(body.userId || body.id);
@@ -3811,8 +3821,8 @@ export class SupabaseAdapter {
           break;
         }
         case "deleteUser": {
-          if (profile.role !== "owner") {
-            error = "Only Admin can delete user accounts.";
+          if (profile.role !== "manager") {
+            error = "Only Staff can delete user accounts.";
             break;
           }
           let targetUserId = text(body.userId || body.id);
@@ -4024,6 +4034,9 @@ export class SupabaseAdapter {
 
   private authorize(actor: UserProfile, action: Action, resource?: Resource): void {
     if (!can(actor, action, resource)) {
+      if (actor.role === "owner") {
+        throw new Error("Admin access is read-only. Mutations are not permitted.");
+      }
       throw new Error("You do not have permission to perform this action.");
     }
   }

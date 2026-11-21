@@ -41,9 +41,14 @@ export function WorkerShipmentsView({ direction }: { direction: "inbound" | "out
   const containers = visibleContainers(state, actor);
   const outboundList = visibleOutbound(state, actor);
 
-  // Operation schedules for this direction
+  // Operation schedules for this direction (strictly scoped to assigned worker)
   const targetScheduleType = isInbound ? "unloading" : "loading";
-  const schedules = (state.schedules || []).filter((s) => s.type === targetScheduleType);
+  const schedules = (state.schedules || []).filter((s) => {
+    if (s.type !== targetScheduleType) return false;
+    const matchId = Boolean(s.assignedWorkerId && identity.id && s.assignedWorkerId === identity.id);
+    const matchName = Boolean(s.assignedWorkerName && identity.name && s.assignedWorkerName.toLowerCase() === identity.name.toLowerCase());
+    return matchId || matchName;
+  });
 
   // Demurrage live timer
   const now = useLiveNow(

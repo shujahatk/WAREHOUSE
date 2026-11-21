@@ -272,6 +272,11 @@ export default function UsersPage() {
           subtitle="Manage enterprise accounts, roles, permissions, and signup approval requests."
         />
         <div className="flex items-center gap-2">
+          {actor?.role === "owner" ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
+              <Icon name="users" className="h-3.5 w-3.5" /> Read-Only Admin
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={() => void refresh()}
@@ -280,17 +285,19 @@ export default function UsersPage() {
             <Icon name="refresh" className="h-3.5 w-3.5" />
             Refresh
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActionError(null);
-              setAddUserModalOpen(true);
-            }}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-neutral-950 px-3 text-xs font-semibold text-white shadow-2xs hover:bg-neutral-800 transition"
-          >
-            <Icon name="plus" className="h-3.5 w-3.5" />
-            Add User
-          </button>
+          {actor?.role !== "owner" ? (
+            <button
+              type="button"
+              onClick={() => {
+                setActionError(null);
+                setAddUserModalOpen(true);
+              }}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-neutral-950 px-3 text-xs font-semibold text-white shadow-2xs hover:bg-neutral-800 transition"
+            >
+              <Icon name="plus" className="h-3.5 w-3.5" />
+              Add User
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -528,7 +535,7 @@ export default function UsersPage() {
                         >
                           View Details
                         </button>
-                        {applicant.approvalStatus === "pending" || applicant.approvalStatus === "rejected" ? (
+                        {actor?.role !== "owner" && (applicant.approvalStatus === "pending" || applicant.approvalStatus === "rejected") ? (
                           <button
                             type="button"
                             onClick={() => {
@@ -543,7 +550,7 @@ export default function UsersPage() {
                             Approve &amp; Assign Role
                           </button>
                         ) : null}
-                        {applicant.approvalStatus === "pending" ? (
+                        {actor?.role !== "owner" && applicant.approvalStatus === "pending" ? (
                           <button
                             type="button"
                             onClick={() => {
@@ -556,18 +563,20 @@ export default function UsersPage() {
                             Reject
                           </button>
                         ) : null}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteModalUser(applicant);
-                            setIsDeletePendingRequest(applicant.approvalStatus === "pending");
-                            setActionError(null);
-                          }}
-                          className="inline-flex h-8 items-center justify-center rounded-lg border border-neutral-200 bg-white px-2 text-xs font-medium text-neutral-500 hover:text-red-700 hover:bg-neutral-50"
-                          title="Delete Request"
-                        >
-                          <Icon name="trash" className="h-3.5 w-3.5" />
-                        </button>
+                        {actor?.role !== "owner" ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteModalUser(applicant);
+                              setIsDeletePendingRequest(applicant.approvalStatus === "pending");
+                              setActionError(null);
+                            }}
+                            className="inline-flex h-8 items-center justify-center rounded-lg border border-neutral-200 bg-white px-2 text-xs font-medium text-neutral-500 hover:text-red-700 hover:bg-neutral-50"
+                            title="Delete Request"
+                          >
+                            <Icon name="trash" className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   </Surface>
@@ -744,6 +753,7 @@ export default function UsersPage() {
 
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* View Details */}
                             <button
                               type="button"
                               onClick={() => {
@@ -756,57 +766,61 @@ export default function UsersPage() {
                               <Icon name="reports" className="h-4 w-4" />
                             </button>
 
-                            {/* Edit Role Button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRoleEditUser(user);
-                                setAssignedRole(user.role);
-                                setAssignedWarehouse(user.warehouse || "Bornem");
-                                setActionError(null);
-                              }}
-                              className="rounded-lg px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-100"
-                            >
-                              Edit Role
-                            </button>
+                            {actor?.role !== "owner" ? (
+                              <>
+                                {/* Edit Role Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRoleEditUser(user);
+                                    setAssignedRole(user.role);
+                                    setAssignedWarehouse(user.warehouse || "Bornem");
+                                    setActionError(null);
+                                  }}
+                                  className="rounded-lg px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-100"
+                                >
+                                  Edit Role
+                                </button>
 
-                            {/* Activate / Deactivate Toggle */}
-                            {!isPending && !isRejected ? (
-                              isActive ? (
+                                {/* Activate / Deactivate Toggle */}
+                                {!isPending && !isRejected ? (
+                                  isActive ? (
+                                    <button
+                                      type="button"
+                                      disabled={isSelf}
+                                      onClick={() => void deactivateUser(user.id || user.email)}
+                                      className="rounded-lg px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-30"
+                                      title={isSelf ? "Cannot deactivate yourself" : "Deactivate account"}
+                                    >
+                                      Deactivate
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => void reactivateUser(user.id || user.email)}
+                                      className="rounded-lg px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                    >
+                                      Reactivate
+                                    </button>
+                                  )
+                                ) : null}
+
+                                {/* Delete User */}
                                 <button
                                   type="button"
                                   disabled={isSelf}
-                                  onClick={() => void deactivateUser(user.id || user.email)}
-                                  className="rounded-lg px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-30"
-                                  title={isSelf ? "Cannot deactivate yourself" : "Deactivate account"}
+                                  onClick={() => {
+                                    setDeleteModalUser(user);
+                                    setIsDeletePendingRequest(isPending);
+                                    setActionError(null);
+                                  }}
+                                  className="rounded-lg p-1.5 text-neutral-400 hover:text-rose-700 hover:bg-rose-50 disabled:opacity-30"
+                                  title={isSelf ? "Cannot delete yourself" : "Delete account"}
                                 >
-                                  Deactivate
+                                  <Icon name="trash" className="h-4 w-4" />
                                 </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => void reactivateUser(user.id || user.email)}
-                                  className="rounded-lg px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                                >
-                                  Reactivate
-                                </button>
-                              )
+                              </>
                             ) : null}
-
-                            {/* Delete User */}
-                            <button
-                              type="button"
-                              disabled={isSelf}
-                              onClick={() => {
-                                setDeleteModalUser(user);
-                                setIsDeletePendingRequest(isPending);
-                                setActionError(null);
-                              }}
-                              className="rounded-lg p-1.5 text-neutral-400 hover:text-rose-700 hover:bg-rose-50 disabled:opacity-30"
-                              title={isSelf ? "Cannot delete yourself" : "Delete account"}
-                            >
-                              <Icon name="trash" className="h-4 w-4" />
-                            </button>
                           </div>
                         </td>
                       </tr>

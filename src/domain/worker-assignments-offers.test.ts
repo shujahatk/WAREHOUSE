@@ -366,20 +366,40 @@ test("4. Admin Selling Offer Approval & Automatic Sold Section Transition", asyn
     assert.ok(submittedOffer);
     assert.equal(submittedOffer.approvalStatus, "pending");
 
-    // 1. Admin reviews and approves the selling offer
+    // Add Moderator
+    await store.run(ownerSign.value.sessionId, "addUser", {
+      name: "Mona Moderator",
+      email: "mod@stockflow.test",
+      role: "moderator",
+      warehouse: null,
+      password: "pass-mod",
+    });
+    const modSign = await store.signIn("mod@stockflow.test", "pass-mod");
+    assert.equal(modSign.ok, true);
+    if (!modSign.ok) return;
+
+    // 1. Admin attempt to approve selling offer is BLOCKED (strictly read-only)
     const adminApprove = await store.run(ownerSign.value.sessionId, "decideSellingOffer", {
       offerId: submittedOffer.id,
       decision: "approve",
       notes: "Pricing and credit terms verified with client.",
     });
-    assert.equal(adminApprove.error, undefined);
+    assert.equal(adminApprove.error, "Admin access is read-only. Mutations are not permitted.");
+
+    // Moderator reviews and approves the selling offer
+    const modApprove = await store.run(modSign.value.sessionId, "decideSellingOffer", {
+      offerId: submittedOffer.id,
+      decision: "approve",
+      notes: "Pricing and credit terms verified with client.",
+    });
+    assert.equal(modApprove.error, undefined);
 
     const afterApproval = (await store.view(ownerSign.value.sessionId)).state.offers.find((o) => o.id === submittedOffer.id);
     assert.equal(afterApproval?.approvalStatus, "approved");
     assert.equal(afterApproval?.statusKey, "received");
 
-    // 2. Commercial Acceptance moves it to SOLD
-    const acceptRes = await store.run(ownerSign.value.sessionId, "acceptSellingOffer", {
+    // 2. Commercial Acceptance moves it to SOLD (by Moderator)
+    const acceptRes = await store.run(modSign.value.sessionId, "acceptSellingOffer", {
       offerId: submittedOffer.id,
       notes: "Deal finalized and commercially accepted by client.",
     });

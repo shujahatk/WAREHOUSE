@@ -185,143 +185,265 @@ export function ScheduleListView({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-neutral-600">
-              <thead className="bg-neutral-50/75 border-b border-neutral-200 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                <tr>
-                  <th scope="col" className="px-4 py-3">Schedule / Order</th>
-                  <th scope="col" className="px-4 py-3">Partner</th>
-                  <th scope="col" className="px-4 py-3">Warehouse / Date</th>
-                  <th scope="col" className="px-4 py-3">Assigned Worker</th>
-                  <th scope="col" className="px-4 py-3">Materials / Net KG</th>
-                  <th scope="col" className="px-4 py-3">Status</th>
-                  <th scope="col" className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-200 bg-white">
-                {filtered.map((sched) => {
-                  const badge = statusBadges[sched.status] || {
-                    label: sched.status,
-                    bg: "bg-neutral-100",
-                    text: "text-neutral-700",
-                    border: "border-neutral-200",
-                  };
-                  const dateStr = sched.scheduledDate ? new Date(sched.scheduledDate).toLocaleDateString() : "—";
-                  const isUnloading = sched.type === "unloading";
+          <>
+            {/* Mobile / Tablet Responsive Stacked Cards (Zero Horizontal Scrolling) */}
+            <div className="divide-y divide-neutral-200 block lg:hidden">
+              {filtered.map((sched) => {
+                const badge = statusBadges[sched.status] || {
+                  label: sched.status,
+                  bg: "bg-neutral-100",
+                  text: "text-neutral-700",
+                  border: "border-neutral-200",
+                };
+                const dateStr = sched.scheduledDate ? new Date(sched.scheduledDate).toLocaleDateString() : "—";
+                const isUnloading = sched.type === "unloading";
 
-                  return (
-                    <tr
-                      key={sched.id}
-                      className="hover:bg-neutral-50/70 transition-colors cursor-pointer"
-                      onClick={() => onSelectSchedule(sched)}
-                    >
-                      {/* Schedule / Order */}
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                              isUnloading ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
-                            }`}
-                          >
-                            {isUnloading ? "Unload" : "Load"}
-                          </span>
-                          <span className="font-semibold text-neutral-900">{sched.poSoNumber}</span>
-                        </div>
-                        <div className="mt-0.5 text-xs text-neutral-500">{sched.scheduleNumber}</div>
-                      </td>
+                return (
+                  <div
+                    key={sched.id}
+                    onClick={() => onSelectSchedule(sched)}
+                    className="p-4 hover:bg-neutral-50/70 transition-colors cursor-pointer space-y-2.5"
+                  >
+                    {/* Header Row: Badge, Order & Status */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            isUnloading ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {isUnloading ? "Unload" : "Load"}
+                        </span>
+                        <span className="font-bold text-neutral-900 text-sm">{sched.poSoNumber}</span>
+                        <span className="text-xs text-neutral-500 font-mono">({sched.scheduleNumber})</span>
+                      </div>
 
-                      {/* Partner */}
-                      <td className="px-4 py-3.5">
-                        <div className="font-medium text-neutral-900">{sched.partnerName}</div>
-                        <div className="text-xs text-neutral-500">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text} ${badge.border}`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            sched.status === "completed"
+                              ? "bg-emerald-500"
+                              : sched.status === "in_progress"
+                              ? "bg-amber-500 animate-pulse"
+                              : sched.status === "submitted"
+                              ? "bg-purple-500 animate-pulse"
+                              : sched.status === "returned_for_correction"
+                              ? "bg-rose-500"
+                              : "bg-blue-500"
+                          }`}
+                        />
+                        {badge.label}
+                      </span>
+                    </div>
+
+                    {/* Middle Details Grid */}
+                    <div className="grid grid-cols-2 gap-2 text-xs text-neutral-600 bg-neutral-50/70 rounded-lg p-2.5 border border-neutral-100">
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Partner / Route</span>
+                        <span className="font-semibold text-neutral-900 block truncate">{sched.partnerName}</span>
+                        <span className="text-[11px] text-neutral-500 block truncate">
                           {sched.origin && sched.destination
                             ? `${sched.origin} → ${sched.destination}`
                             : sched.origin || sched.destination || "—"}
-                        </div>
-                      </td>
+                        </span>
+                      </div>
 
-                      {/* Warehouse / Date */}
-                      <td className="px-4 py-3.5">
-                        <div className="font-medium text-neutral-900">{sched.warehouseName}</div>
-                        <div className="text-xs text-neutral-500 flex items-center gap-1">
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Warehouse / Date</span>
+                        <span className="font-semibold text-neutral-900 block">{sched.warehouseName}</span>
+                        <span className="text-[11px] text-neutral-500 flex items-center gap-1">
                           <span>📅 {dateStr}</span>
                           {sched.annex7Required ? (
-                            <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">
+                            <span className="rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-800">
                               Annex VII
                             </span>
                           ) : null}
-                        </div>
-                      </td>
-
-                      {/* Worker */}
-                      <td className="px-4 py-3.5">
-                        <div className="font-medium text-neutral-900">{sched.assignedWorkerName || "Unassigned"}</div>
-                        <div className="text-xs text-neutral-500">
-                          {sched.actualStartTime
-                            ? `Started ${new Date(sched.actualStartTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                            : "Not started"}
-                        </div>
-                      </td>
-
-                      {/* Materials / Net KG */}
-                      <td className="px-4 py-3.5">
-                        <div className="font-semibold text-neutral-900 tabular-nums">
-                          {sched.totalNetWeightKg > 0 ? formatKg(sched.totalNetWeightKg) : "—"}
-                        </div>
-                        <div className="text-xs text-neutral-500">
-                          {sched.items.length} material{sched.items.length !== 1 ? "s" : ""} · {sched.totalPackageCount} pkgs
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text} ${badge.border}`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              sched.status === "completed"
-                                ? "bg-emerald-500"
-                                : sched.status === "in_progress"
-                                ? "bg-amber-500 animate-pulse"
-                                : sched.status === "submitted"
-                                ? "bg-purple-500 animate-pulse"
-                                : sched.status === "returned_for_correction"
-                                ? "bg-rose-500"
-                                : "bg-blue-500"
-                            }`}
-                          />
-                          {badge.label}
                         </span>
-                      </td>
+                      </div>
 
-                      {/* Actions */}
-                      <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => onSelectSchedule(sched)}
-                            className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 shadow-2xs transition-colors"
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Worker</span>
+                        <span className="font-medium text-neutral-900 block truncate">
+                          {sched.assignedWorkerName || "Unassigned"}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Net Weight / Items</span>
+                        <span className="font-bold text-neutral-900 tabular-nums">
+                          {sched.totalNetWeightKg > 0 ? formatKg(sched.totalNetWeightKg) : "—"}
+                        </span>
+                        <span className="text-[11px] text-neutral-500 block">
+                          {sched.items.length} item{sched.items.length !== 1 ? "s" : ""} · {sched.totalPackageCount} pkgs
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions Row */}
+                    <div className="flex items-center justify-end gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => onSelectSchedule(sched)}
+                        className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-50 shadow-2xs transition-colors"
+                      >
+                        View Details
+                      </button>
+                      {onEditSchedule && sched.status !== "completed" ? (
+                        <button
+                          type="button"
+                          onClick={() => onEditSchedule(sched)}
+                          className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-50 shadow-2xs transition-colors"
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View (lg screens and wider) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left text-sm text-neutral-600">
+                <thead className="bg-neutral-50/75 border-b border-neutral-200 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                  <tr>
+                    <th scope="col" className="px-4 py-3">Schedule / Order</th>
+                    <th scope="col" className="px-4 py-3">Partner</th>
+                    <th scope="col" className="px-4 py-3">Warehouse / Date</th>
+                    <th scope="col" className="px-4 py-3">Assigned Worker</th>
+                    <th scope="col" className="px-4 py-3">Materials / Net KG</th>
+                    <th scope="col" className="px-4 py-3">Status</th>
+                    <th scope="col" className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-200 bg-white">
+                  {filtered.map((sched) => {
+                    const badge = statusBadges[sched.status] || {
+                      label: sched.status,
+                      bg: "bg-neutral-100",
+                      text: "text-neutral-700",
+                      border: "border-neutral-200",
+                    };
+                    const dateStr = sched.scheduledDate ? new Date(sched.scheduledDate).toLocaleDateString() : "—";
+                    const isUnloading = sched.type === "unloading";
+
+                    return (
+                      <tr
+                        key={sched.id}
+                        className="hover:bg-neutral-50/70 transition-colors cursor-pointer"
+                        onClick={() => onSelectSchedule(sched)}
+                      >
+                        {/* Schedule / Order */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                isUnloading ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+                              }`}
+                            >
+                              {isUnloading ? "Unload" : "Load"}
+                            </span>
+                            <span className="font-semibold text-neutral-900">{sched.poSoNumber}</span>
+                          </div>
+                          <div className="mt-0.5 text-xs text-neutral-500">{sched.scheduleNumber}</div>
+                        </td>
+
+                        {/* Partner */}
+                        <td className="px-4 py-3.5">
+                          <div className="font-medium text-neutral-900">{sched.partnerName}</div>
+                          <div className="text-xs text-neutral-500">
+                            {sched.origin && sched.destination
+                              ? `${sched.origin} → ${sched.destination}`
+                              : sched.origin || sched.destination || "—"}
+                          </div>
+                        </td>
+
+                        {/* Warehouse / Date */}
+                        <td className="px-4 py-3.5">
+                          <div className="font-medium text-neutral-900">{sched.warehouseName}</div>
+                          <div className="text-xs text-neutral-500 flex items-center gap-1">
+                            <span>📅 {dateStr}</span>
+                            {sched.annex7Required ? (
+                              <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">
+                                Annex VII
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        {/* Worker */}
+                        <td className="px-4 py-3.5">
+                          <div className="font-medium text-neutral-900">{sched.assignedWorkerName || "Unassigned"}</div>
+                          <div className="text-xs text-neutral-500">
+                            {sched.actualStartTime
+                              ? `Started ${new Date(sched.actualStartTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                              : "Not started"}
+                          </div>
+                        </td>
+
+                        {/* Materials / Net KG */}
+                        <td className="px-4 py-3.5">
+                          <div className="font-semibold text-neutral-900 tabular-nums">
+                            {sched.totalNetWeightKg > 0 ? formatKg(sched.totalNetWeightKg) : "—"}
+                          </div>
+                          <div className="text-xs text-neutral-500">
+                            {sched.items.length} material{sched.items.length !== 1 ? "s" : ""} · {sched.totalPackageCount} pkgs
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text} ${badge.border}`}
                           >
-                            View
-                          </button>
-                          {onEditSchedule && sched.status !== "completed" ? (
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                sched.status === "completed"
+                                  ? "bg-emerald-500"
+                                  : sched.status === "in_progress"
+                                  ? "bg-amber-500 animate-pulse"
+                                  : sched.status === "submitted"
+                                  ? "bg-purple-500 animate-pulse"
+                                  : sched.status === "returned_for_correction"
+                                  ? "bg-rose-500"
+                                  : "bg-blue-500"
+                              }`}
+                            />
+                            {badge.label}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
-                              onClick={() => onEditSchedule(sched)}
+                              onClick={() => onSelectSchedule(sched)}
                               className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 shadow-2xs transition-colors"
                             >
-                              Edit
+                              View
                             </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                            {onEditSchedule && sched.status !== "completed" ? (
+                              <button
+                                type="button"
+                                onClick={() => onEditSchedule(sched)}
+                                className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 shadow-2xs transition-colors"
+                              >
+                                Edit
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

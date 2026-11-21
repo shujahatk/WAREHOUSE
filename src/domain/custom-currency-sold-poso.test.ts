@@ -194,14 +194,22 @@ test("2. Multi-Currency Orders & Offers: Creation, Persistence, and Independent 
     assert.equal(createdSell.currency, "GBP");
     assert.equal(createdSell.totalValue, 45000);
 
-    // Moderator submits Selling Offer for Admin review
+    // Moderator submits Selling Offer for review
     const submitSell = await store.run(modSign.value.sessionId, "submitOfferForReview", {
       offerId: createdSell.id,
     });
     assert.equal(submitSell.error, undefined);
 
-    // Admin approves the Selling Offer
-    const approveSell = await store.run(adminSign.value.sessionId, "decideOffer", {
+    // Admin attempt to decide offer MUST FAIL (Admin is strictly read-only)
+    const adminAttempt = await store.run(adminSign.value.sessionId, "decideOffer", {
+      offerId: createdSell.id,
+      decision: "approved",
+      note: "Admin trying to approve",
+    });
+    assert.equal(adminAttempt.error, "Admin access is read-only. Mutations are not permitted.");
+
+    // Moderator approves the Selling Offer
+    const approveSell = await store.run(modSign.value.sessionId, "decideOffer", {
       offerId: createdSell.id,
       decision: "approved",
       note: "Commercial margin approved at 1.80 GBP/kg.",
@@ -268,21 +276,21 @@ test("3. PO/SO Assignment: Staff and Admin can assign reference to approved requ
     assert.ok(req);
     assert.equal(req.status, "submitted");
 
-    // Staff cannot approve operational request (Admin exclusive)
-    const staffApprove = await store.run(staffSign.value.sessionId, "decideGeneralRequest", {
+    // Admin cannot approve operational request (Admin is strictly read-only)
+    const adminApprove = await store.run(adminSign.value.sessionId, "decideGeneralRequest", {
       id: req.id,
       decision: "approved",
-      note: "Staff trying to approve",
+      note: "Admin trying to approve",
     });
-    assert.notEqual(staffApprove.error, undefined);
+    assert.ok(adminApprove.error?.includes("Admin access is read-only"));
 
-    // Admin approves the request
-    const adminApprove = await store.run(adminSign.value.sessionId, "decideGeneralRequest", {
+    // Staff approves the request
+    const staffApprove = await store.run(staffSign.value.sessionId, "decideGeneralRequest", {
       id: req.id,
       decision: "approved",
       note: "Approved for warehouse intake",
     });
-    assert.equal(adminApprove.error, undefined);
+    assert.equal(staffApprove.error, undefined);
 
     // Record initial stock balances before assignment
     const viewBefore = await store.view(adminSign.value.sessionId);

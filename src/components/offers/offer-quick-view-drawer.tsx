@@ -363,7 +363,7 @@ export function OfferQuickViewDrawer({
               </span>
             ) : null}
 
-            {isAdmin && offer.statusKey === "under_review" && onDecide ? (
+            {isModerator && offer.statusKey === "under_review" && onDecide ? (
               <button
                 type="button"
                 onClick={() => {

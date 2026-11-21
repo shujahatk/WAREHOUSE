@@ -151,20 +151,6 @@ export function OffersNav({
               ) : null}
             </>
           ) : null}
-
-          {/* Admin CTA */}
-          {isAdmin && onOpenCreateSelling ? (
-            <button
-              type="button"
-              onClick={onOpenCreateSelling}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-neutral-950 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 transition"
-            >
-              <svg className="h-3.5 w-3.5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-              </svg>
-              Submit Selling Offer
-            </button>
-          ) : null}
         </div>
       </div>
 

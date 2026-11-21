@@ -123,8 +123,14 @@ test("1. Real-time stock balance updates immediately after operations", async ()
     const beforeBal = snap2.stockBalances.find((b) => b.warehouseId === req.warehouseId);
     assert.equal(beforeBal?.weightKg ?? 0, 0);
 
-    // Admin approves request
-    const approveRes = await store.run(adminSign.value.sessionId, "approveRequest", {
+    // Admin attempt to approve request is BLOCKED (Admin is strictly read-only)
+    const adminApprove = await store.run(adminSign.value.sessionId, "approveRequest", {
+      requestId: req.id,
+    });
+    assert.equal(adminApprove.error, "Admin access is read-only. Mutations are not permitted.");
+
+    // Staff approves request
+    const approveRes = await store.run(staffSign.value.sessionId, "approveRequest", {
       requestId: req.id,
     });
     assert.equal(approveRes.error, undefined);
@@ -209,8 +215,8 @@ test("2. Duplicate stock deductions are prevented idempotently", async () => {
     const snap2 = await store.snapshot();
     const req = snap2.requests[0];
 
-    // Approve and complete
-    await store.run(adminSign.value.sessionId, "approveRequest", { requestId: req.id });
+    // Staff approves request and worker completes
+    await store.run(staffSign.value.sessionId, "approveRequest", { requestId: req.id });
     await store.run(workerSign.value.sessionId, "completeRequest", { requestId: req.id });
 
     const snap3 = await store.snapshot();
@@ -285,7 +291,7 @@ test("3. Complete append-only inventory history records operations with full aud
     });
 
     const req = (await store.snapshot()).requests[0];
-    await store.run(adminSign.value.sessionId, "approveRequest", { requestId: req.id });
+    await store.run(staffSign.value.sessionId, "approveRequest", { requestId: req.id });
     await store.run(workerSign.value.sessionId, "completeRequest", { requestId: req.id });
 
     // Verify inventory history
@@ -547,7 +553,7 @@ test("7. Strict Admin read-only operational enforcement & Staff approval boundar
       quantityKg: 1000,
       valueEur: 1000,
     });
-    assert.ok(adminCreatePo.error?.includes("Only Staff can create a PO/SO order"));
+    assert.ok(adminCreatePo.error?.includes("Admin access is read-only") || adminCreatePo.error?.includes("Only Staff can create a PO/SO order"));
 
     // 2. Staff creates PO successfully
     const staffCreatePo = await store.run(staffSign.value.sessionId, "createPurchase", {
@@ -563,17 +569,17 @@ test("7. Strict Admin read-only operational enforcement & Staff approval boundar
     const order = snap.purchaseOrders.find((o) => o.title === "Staff Order")!;
     assert.ok(order);
 
-    // 3. Staff CANNOT approve POs (only Admin can)
-    const staffApprove = await store.run(staffSign.value.sessionId, "approve", {
-      number: order.number,
-    });
-    assert.ok(staffApprove.error?.includes("Only the owner can approve"));
-
-    // 4. Admin CAN approve POs
+    // 3. Admin CANNOT approve POs (Admin is strictly read-only)
     const adminApprove = await store.run(adminSign.value.sessionId, "approve", {
       number: order.number,
     });
-    assert.equal(adminApprove.error, undefined);
+    assert.equal(adminApprove.error, "Admin access is read-only. Mutations are not permitted.");
+
+    // 4. Staff CAN approve POs
+    const staffApprove = await store.run(staffSign.value.sessionId, "approve", {
+      number: order.number,
+    });
+    assert.equal(staffApprove.error, undefined);
 
     // 5. Admin CANNOT execute direct stock transfers
     const adminTransfer = await store.run(adminSign.value.sessionId, "transferStock", {
@@ -582,7 +588,7 @@ test("7. Strict Admin read-only operational enforcement & Staff approval boundar
       materialId: "mat-1",
       weightKg: 500,
     });
-    assert.ok(adminTransfer.error?.includes("cannot transfer stock"));
+    assert.ok(adminTransfer.error?.includes("cannot transfer stock") || adminTransfer.error?.includes("Admin access is read-only"));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

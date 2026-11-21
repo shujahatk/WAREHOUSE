@@ -115,11 +115,9 @@ export function can(
   if (!isActiveRole(user.role) && user.role !== "offers_user") return false;
 
   // 1. Admin (owner):
-  // - Views all operational data, documents, images, reports, and audit logs across all warehouses
-  // - Approves, rejects (declines), or sends back requests (and approves/rejects orders & Annex VII)
-  // - Manages users, warehouses, materials, packaging, and low-stock thresholds
-  // - CANNOT create, edit, delete, or directly modify operational records (PO/SO, shipments, requests, files)
-  // - CANNOT complete warehouse operations, adjust stock, or execute transfers
+  // - STRICT READ-ONLY ACCESS throughout the portal.
+  // - Views all operational data, documents, images, reports, stock information, operations, and audit logs across all warehouses.
+  // - CANNOT create records, add or edit information, delete records, assign workers, update operational statuses, approve or reject requests/transactions, or modify stock, packaging, materials, offers, or warehouse operations.
   if (user.role === "owner") {
     switch (action) {
       case "order:view":
@@ -130,61 +128,9 @@ export function can(
       case "audit:view":
       case "report:view":
       case "chat:view":
-      case "request:approve":
-      case "request:decline":
-      case "request:sendBack":
-      case "order:approve":
-      case "order:reject":
-      case "annex7:review":
-      case "annex7:approve":
-      case "user:manage":
-      case "warehouse:manage":
-      case "material:manage":
-      case "packaging:manage":
-      case "threshold:set":
-      case "order:assign":
-      case "user:approve":
-      case "offer:accept":
       case "offer:view":
-      case "offer:approve":
-      case "offer:reject":
-      case "offer:comment":
+      case "user:manage":
         return true;
-      case "offer:create":
-      case "offer:edit":
-      case "offer:delete":
-      case "offer:submit":
-      case "offer:negotiate":
-      case "offer:status":
-      case "offer:attach":
-        return false;
-      case "order:create":
-      case "order:submit":
-      case "order:edit":
-      case "order:delete":
-      case "request:create":
-      case "request:complete":
-      case "request:delete":
-      case "worker:assign":
-      case "shipment:create":
-      case "shipment:edit":
-      case "shipment:advance":
-      case "shipment:override":
-      case "seller:confirm":
-      case "customs:edit":
-      case "customs:confirm":
-      case "cmr:save":
-      case "carrier:save":
-      case "transfer:create":
-      case "stock:adjust":
-      case "stock:transfer":
-      case "stock:move":
-      case "annex7:upload":
-      case "file:upload":
-      case "file:delete":
-      case "supplier:manage":
-      case "customer:manage":
-      case "chat:send":
       default:
         return false;
     }
@@ -201,11 +147,14 @@ export function can(
   if (user.role === "manager") {
     switch (action) {
       case "order:create":
+      case "order:create":
       case "order:delete":
-        return true;
       case "order:edit":
-        return true;
+      case "order:approve":
+      case "order:reject":
       case "order:view":
+      case "request:approve":
+      case "request:decline":
       case "supplier:manage":
       case "customer:manage":
       case "shipment:create":
@@ -220,6 +169,7 @@ export function can(
       case "carrier:save":
       case "annex7:upload":
       case "annex7:review":
+      case "annex7:approve":
       case "file:upload":
       case "file:view":
       case "chat:send":
@@ -231,11 +181,7 @@ export function can(
         return resource?.status !== "completed" && resource?.status !== "deleted";
       // Explicitly denied for Staff:
       case "report:view":
-      case "order:reject":
-      case "order:approve":
       case "request:delete":
-      case "request:approve":
-      case "request:decline":
       case "request:complete":
       case "request:create":
       case "stock:move":
@@ -354,9 +300,9 @@ export function can(
       case "offer:comment":
       case "offer:attach":
       case "offer:accept":
-        return true;
       case "offer:approve":
       case "offer:reject":
+        return true;
       default:
         return false;
     }

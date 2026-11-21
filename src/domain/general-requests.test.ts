@@ -165,7 +165,7 @@ test("Worker privacy: Workers can ONLY see and track their own requests", async 
   }
 });
 
-test("Staff lifecycle: can review (under_review), request info (sent_back), and process approved work (completed), but CANNOT approve or reject", async () => {
+test("Staff lifecycle: can review (under_review), request info (sent_back), approve, and process approved work (completed)", async () => {
   const { dir, store } = createTestAdapter();
   try {
     const ownerSign = await store.signIn("owner@example.com", "owner-pass-1");
@@ -228,29 +228,22 @@ test("Staff lifecycle: can review (under_review), request info (sent_back), and 
     assert.equal(sentBackReq?.status, "sent_back");
     assert.equal(sentBackReq?.responseNote, "Please specify pallet size: Euro or Standard?");
 
-    // Charlie attempts to approve -> MUST BE BLOCKED
-    const blockApprove = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
-      requestId: req.id,
-      decision: "approved",
-    });
-    assert.ok(blockApprove.error?.includes("Only Admin"));
-
-    // Charlie attempts to decline/reject -> MUST BE BLOCKED
-    const blockDecline = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
-      requestId: req.id,
-      decision: "declined",
-      reason: "No budget",
-    });
-    assert.ok(blockDecline.error?.includes("Only Admin"));
-
-    // Admin approves the request
+    // Admin attempts to approve -> MUST BE BLOCKED (Admin is strictly read-only)
     const adminApprove = await store.run(ownerSign.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "approved",
       responseNote: "Approved for standard Euro pallets.",
     });
-    assert.equal(adminApprove.error, undefined);
-    assert.equal(adminApprove.state.generalRequests.find((r) => r.id === req.id)?.status, "approved");
+    assert.ok(adminApprove.error?.includes("Admin access is read-only"));
+
+    // Charlie (Staff) approves the request -> SUCCEEDS
+    const staffApprove = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
+      requestId: req.id,
+      decision: "approved",
+      responseNote: "Approved for standard Euro pallets.",
+    });
+    assert.equal(staffApprove.error, undefined);
+    assert.equal(staffApprove.state.generalRequests.find((r) => r.id === req.id)?.status, "approved");
 
     // Charlie (Staff) processes approved work into completed
     const completeRes = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
@@ -264,13 +257,20 @@ test("Staff lifecycle: can review (under_review), request info (sent_back), and 
   }
 });
 
-test("Admin lifecycle & operational read-only enforcement: Admin can approve and reject with reason, but cannot edit operational content", async () => {
+test("Staff lifecycle & Admin operational read-only enforcement: Staff can decline with reason, but Admin is read-only", async () => {
   const { dir, store } = createTestAdapter();
   try {
     const ownerSign = await store.signIn("owner@example.com", "owner-pass-1");
     assert.equal(ownerSign.ok, true);
     if (!ownerSign.ok) return;
 
+    await store.run(ownerSign.value.sessionId, "addUser", {
+      name: "Charlie Manager",
+      email: "charlie@example.com",
+      role: "manager",
+      warehouse: null,
+      password: "pass-charlie",
+    });
     await store.run(ownerSign.value.sessionId, "addUser", {
       name: "Bob Worker",
       email: "bob@example.com",
@@ -279,9 +279,10 @@ test("Admin lifecycle & operational read-only enforcement: Admin can approve and
       password: "pass-bob",
     });
 
+    const charlieSign = await store.signIn("charlie@example.com", "pass-charlie");
     const bobSign = await store.signIn("bob@example.com", "pass-bob");
-    assert.equal(bobSign.ok, true);
-    if (!bobSign.ok) return;
+    assert.equal(charlieSign.ok && bobSign.ok, true);
+    if (!charlieSign.ok || !bobSign.ok) return;
 
     // Bob creates request
     const createRes = await store.run(bobSign.value.sessionId, "createGeneralRequest", {
@@ -296,18 +297,26 @@ test("Admin lifecycle & operational read-only enforcement: Admin can approve and
       category: "other",
       description: "Admin attempting to create worker request",
     });
-    assert.ok(adminSubmit.error?.includes("Worker"));
+    assert.ok(adminSubmit.error?.includes("Admin access is read-only") || adminSubmit.error?.includes("Worker"));
 
-    // Admin rejects without reason -> must fail
-    const rejectNoReason = await store.run(ownerSign.value.sessionId, "decideGeneralRequest", {
+    // Admin attempts to decline -> BLOCKED (Admin is strictly read-only)
+    const adminDecline = await store.run(ownerSign.value.sessionId, "decideGeneralRequest", {
+      requestId: req.id,
+      decision: "declined",
+      reason: "Maintenance vendor already scheduled.",
+    });
+    assert.ok(adminDecline.error?.includes("Admin access is read-only"));
+
+    // Staff rejects without reason -> must fail
+    const rejectNoReason = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "declined",
       reason: "",
     });
     assert.ok(rejectNoReason.error?.includes("decline reason is required"));
 
-    // Admin rejects with reason -> succeeds
-    const rejectRes = await store.run(ownerSign.value.sessionId, "decideGeneralRequest", {
+    // Staff rejects with reason -> succeeds
+    const rejectRes = await store.run(charlieSign.value.sessionId, "decideGeneralRequest", {
       requestId: req.id,
       decision: "declined",
       reason: "Maintenance vendor already scheduled for tomorrow at 08:00.",

@@ -569,99 +569,105 @@ export function PurchaseDetail({ number }: { number: string }) {
             )}
           </div>
 
-          <form
-            className="mt-3 grid gap-3 sm:grid-cols-3"
-            onSubmit={(e) => {
-              void (async () => {
-                e.preventDefault();
-                if (!selectedWorkerId) return;
-                setAssignSubmitting(true);
-                const err = await assignWorkerPo({
-                  poNumber: order.number,
-                  workerId: selectedWorkerId,
-                  scheduledDate,
-                  notes: assignNotes.trim() || undefined,
-                });
-                setAssignSubmitting(false);
-                if (!err) {
-                  setAssignSuccess(true);
-                  setTimeout(() => setAssignSuccess(false), 3000);
-                }
-              })();
-            }}
-          >
-            <label className="text-xs font-medium text-neutral-700">
-              Assign to Worker
-              <select
-                value={selectedWorkerId}
-                onChange={(e) => setSelectedWorkerId(e.target.value)}
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
-              >
-                <option value="">Select a worker...</option>
-                {workers.map((w) => (
-                  <option key={w.id || w.email} value={w.id || w.email}>
-                    {w.name} ({w.warehouse || "Warehouse"})
-                  </option>
-                ))}
-              </select>
-            </label>
+          {identity.role === "manager" ? (
+            <form
+              className="mt-3 grid gap-3 sm:grid-cols-3"
+              onSubmit={(e) => {
+                void (async () => {
+                  e.preventDefault();
+                  if (!selectedWorkerId) return;
+                  setAssignSubmitting(true);
+                  const err = await assignWorkerPo({
+                    poNumber: order.number,
+                    workerId: selectedWorkerId,
+                    scheduledDate,
+                    notes: assignNotes.trim() || undefined,
+                  });
+                  setAssignSubmitting(false);
+                  if (!err) {
+                    setAssignSuccess(true);
+                    setTimeout(() => setAssignSuccess(false), 3000);
+                  }
+                })();
+              }}
+            >
+              <label className="text-xs font-medium text-neutral-700">
+                Assign to Worker
+                <select
+                  value={selectedWorkerId}
+                  onChange={(e) => setSelectedWorkerId(e.target.value)}
+                  className="mt-1 h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
+                >
+                  <option value="">Select a worker...</option>
+                  {workers.map((w) => (
+                    <option key={w.id || w.email} value={w.id || w.email}>
+                      {w.name} ({w.warehouse || "Warehouse"})
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <label className="text-xs font-medium text-neutral-700">
-              Scheduled Date
-              <div className="mt-1 flex items-center gap-1.5">
+              <label className="text-xs font-medium text-neutral-700">
+                Scheduled Date
+                <div className="mt-1 flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
+                    className="h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
+                  />
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScheduledDate(todayStr)}
+                    className={`text-[11px] font-medium underline ${
+                      scheduledDate === todayStr ? "text-indigo-600 font-bold" : "text-neutral-500"
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScheduledDate(tomorrowStr)}
+                    className={`text-[11px] font-medium underline ${
+                      scheduledDate === tomorrowStr ? "text-indigo-600 font-bold" : "text-neutral-500"
+                    }`}
+                  >
+                    Tomorrow
+                  </button>
+                </div>
+              </label>
+
+              <label className="text-xs font-medium text-neutral-700">
+                Task Notes / Instructions
                 <input
-                  type="date"
-                  value={scheduledDate}
-                  onChange={(e) => setScheduledDate(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
+                  type="text"
+                  value={assignNotes}
+                  onChange={(e) => setAssignNotes(e.target.value)}
+                  placeholder="e.g. Inspect pallet packaging..."
+                  className="mt-1 h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
                 />
-              </div>
-              <div className="mt-1 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setScheduledDate(todayStr)}
-                  className={`text-[11px] font-medium underline ${
-                    scheduledDate === todayStr ? "text-indigo-600 font-bold" : "text-neutral-500"
-                  }`}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScheduledDate(tomorrowStr)}
-                  className={`text-[11px] font-medium underline ${
-                    scheduledDate === tomorrowStr ? "text-indigo-600 font-bold" : "text-neutral-500"
-                  }`}
-                >
-                  Tomorrow
-                </button>
-              </div>
-            </label>
+              </label>
 
-            <label className="text-xs font-medium text-neutral-700">
-              Task Notes / Instructions
-              <input
-                type="text"
-                value={assignNotes}
-                onChange={(e) => setAssignNotes(e.target.value)}
-                placeholder="e.g. Inspect pallet packaging..."
-                className="mt-1 h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
-              />
-            </label>
-
-            <div className="flex items-center gap-2 sm:col-span-3">
-              <button
-                type="submit"
-                disabled={assignSubmitting || !selectedWorkerId}
-                className="inline-flex h-9 items-center justify-center rounded-lg bg-neutral-950 px-4 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
-              >
-                {assignSubmitting ? "Assigning…" : order.assignedWorkerName ? "Update Assignment" : "Assign to Worker"}
-              </button>
-              {assignSuccess ? (
-                <span className="text-xs font-semibold text-emerald-700">✓ Assignment saved & worker notified</span>
-              ) : null}
+              <div className="flex items-center gap-2 sm:col-span-3">
+                <button
+                  type="submit"
+                  disabled={assignSubmitting || !selectedWorkerId}
+                  className="inline-flex h-9 items-center justify-center rounded-lg bg-neutral-950 px-4 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  {assignSubmitting ? "Assigning…" : order.assignedWorkerName ? "Update Assignment" : "Assign to Worker"}
+                </button>
+                {assignSuccess ? (
+                  <span className="text-xs font-semibold text-emerald-700">✓ Assignment saved & worker notified</span>
+                ) : null}
+              </div>
+            </form>
+          ) : (
+            <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-100/70 p-3 text-xs text-neutral-600">
+              Admin view only. Worker task scheduling and assignments are managed by Staff.
             </div>
-          </form>
+          )}
 
           {order.completionNotes ? (
             <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900">

@@ -921,7 +921,7 @@ export function OffersTable({
                             </Link>
                           ) : null}
 
-                          {isAdmin && offer.statusKey === "under_review" && onDecide ? (
+                          {isModerator && offer.statusKey === "under_review" && onDecide ? (
                             <button
                               type="button"
                               onClick={() => onDecide(offer)}

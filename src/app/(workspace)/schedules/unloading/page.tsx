@@ -78,8 +78,8 @@ export default function UnloadingSchedulePage() {
             </button>
           </div>
 
-          {/* Create Button (Staff & Admin) */}
-          {isOffice ? (
+          {/* Create Button (Staff Only) */}
+          {identity.role === "manager" ? (
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(true)}
@@ -124,7 +124,7 @@ export default function UnloadingSchedulePage() {
           schedules={unloadingSchedules}
           typeFilter="unloading"
           onSelectSchedule={(sched) => setSelectedSchedule(sched)}
-          onEditSchedule={(sched) => setEditingSchedule(sched)}
+          onEditSchedule={identity.role === "manager" ? ((sched) => setEditingSchedule(sched)) : undefined}
         />
       ) : (
         <ScheduleCalendarView
@@ -159,7 +159,7 @@ export default function UnloadingSchedulePage() {
           schedule={selectedSchedule}
           isOpen={Boolean(selectedSchedule)}
           onClose={() => setSelectedSchedule(null)}
-          onEdit={(sched) => setEditingSchedule(sched)}
+          onEdit={identity.role === "manager" ? ((sched) => setEditingSchedule(sched)) : undefined}
         />
       )}
     </div>

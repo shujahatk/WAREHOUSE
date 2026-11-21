@@ -128,6 +128,17 @@ test("demurrage uses unloading timestamps and annex 7 stays on the linked shipme
   if (!ownerAuth.ok) return;
 
   await store.run(ownerAuth.value.sessionId, "addUser", {
+    name: "Sam Staff",
+    email: "staff@example.com",
+    role: "manager",
+    warehouse: null,
+    password: "staff-pass-1",
+  });
+  const staffAuth = await store.signIn("staff@example.com", "staff-pass-1");
+  assert.equal(staffAuth.ok, true);
+  if (!staffAuth.ok) return;
+
+  await store.run(ownerAuth.value.sessionId, "addUser", {
     name: "Will Worker",
     email: "worker@example.com",
     role: "worker",
@@ -223,14 +234,20 @@ test("demurrage uses unloading timestamps and annex 7 stays on the linked shipme
   assert.equal(annexRecord.shipmentId, shipment1.id);
   assert.equal(annexRecord.status, "uploaded");
 
-  // Review Annex 7
-  const reviewResult = await store.run(ownerAuth.value.sessionId, "reviewAnnex", {
+  // Review Annex 7 by Staff
+  const reviewResult = await store.run(staffAuth.value.sessionId, "reviewAnnex", {
     id: annexRecord.id,
   });
   assert.equal(reviewResult.error, undefined);
 
-  // Owner Approve Annex 7
-  const approveResult = await store.run(ownerAuth.value.sessionId, "approveAnnex", {
+  // Admin cannot approve Annex 7 (Admin is strictly read-only)
+  const adminApproveBlocked = await store.run(ownerAuth.value.sessionId, "approveAnnex", {
+    id: annexRecord.id,
+  });
+  assert.equal(adminApproveBlocked.error, "Admin access is read-only. Mutations are not permitted.");
+
+  // Staff Approves Annex 7
+  const approveResult = await store.run(staffAuth.value.sessionId, "approveAnnex", {
     id: annexRecord.id,
   });
   assert.equal(approveResult.error, undefined);
@@ -247,6 +264,17 @@ test("demurrage boundary conditions at 119, 120, and 121 minutes (120-minute fre
   const ownerAuth = await store.signIn("owner@example.com", "owner-pass-1");
   assert.equal(ownerAuth.ok, true);
   if (!ownerAuth.ok) return;
+
+  await store.run(ownerAuth.value.sessionId, "addUser", {
+    name: "Sam Staff",
+    email: "staff@example.com",
+    role: "manager",
+    warehouse: null,
+    password: "staff-pass-1",
+  });
+  const staffAuth = await store.signIn("staff@example.com", "staff-pass-1");
+  assert.equal(staffAuth.ok, true);
+  if (!staffAuth.ok) return;
 
   await store.run(ownerAuth.value.sessionId, "addUser", {
     name: "Will Worker",

@@ -115,7 +115,7 @@ test("2. Staff Direct Schedule Creation (PO Unloading & SO Loading) without Admi
     if (!adminSign.ok) return;
     const token = adminSign.value.sessionId;
 
-    // Create active warehouse worker
+    // Create active warehouse worker and staff
     await store.run(token, "addUser", {
       name: "John Warehouse",
       email: "worker@stockflow.test",
@@ -123,6 +123,17 @@ test("2. Staff Direct Schedule Creation (PO Unloading & SO Loading) without Admi
       warehouse: "Bornem",
       password: "worker-pass-1",
     });
+    await store.run(token, "addUser", {
+      name: "Elena Staff",
+      email: "staff@stockflow.test",
+      role: "manager",
+      password: "staff-pass-1",
+    });
+
+    const staffSign = await store.signIn("staff@stockflow.test", "staff-pass-1");
+    assert.equal(staffSign.ok, true);
+    if (!staffSign.ok) return;
+    const staffToken = staffSign.value.sessionId;
 
     const snap = await store.snapshot();
     const warehouseId = snap.warehouses[0]?.id || "wh-bornem";
@@ -132,8 +143,16 @@ test("2. Staff Direct Schedule Creation (PO Unloading & SO Loading) without Admi
     const worker = snap.users.find((u) => u.email === "worker@stockflow.test");
     assert.ok(worker, "Worker must exist");
 
+    // Admin mutation attempt must fail (Admin is read-only)
+    const adminAttempt = await store.run(token, "createOperationSchedule", {
+      type: "unloading",
+      poSoNumber: "PO-ADMIN-DENIED",
+      partnerName: "Denied Supplier",
+    });
+    assert.equal(adminAttempt.error, "Admin access is read-only. Mutations are not permitted.");
+
     // 1. Staff creates Unloading Schedule directly with PO details & material items
-    const runUnloading = await store.run(token, "createOperationSchedule", {
+    const runUnloading = await store.run(staffToken, "createOperationSchedule", {
       type: "unloading",
       poSoNumber: "PO-2026-0042",
       partnerName: "Global Resin Supplies",
@@ -173,7 +192,7 @@ test("2. Staff Direct Schedule Creation (PO Unloading & SO Loading) without Admi
     assert.equal(unloadingSchedule.totalNetWeightKg, 20000);
 
     // 2. Staff creates Loading Schedule directly with SO details & material items
-    const runLoading = await store.run(token, "createOperationSchedule", {
+    const runLoading = await store.run(staffToken, "createOperationSchedule", {
       type: "loading",
       poSoNumber: "SO-2026-0088",
       partnerName: "Apex Polymers Ltd",
@@ -230,6 +249,17 @@ test("3. Complete Worker Lifecycle: Start -> Save Draft -> Submit for Verificati
       warehouse: "Bornem",
       password: "worker-pass-1",
     });
+    await store.run(token, "addUser", {
+      name: "Elena Staff",
+      email: "staff@stockflow.test",
+      role: "manager",
+      password: "staff-pass-1",
+    });
+
+    const staffSign = await store.signIn("staff@stockflow.test", "staff-pass-1");
+    assert.equal(staffSign.ok, true);
+    if (!staffSign.ok) return;
+    const staffToken = staffSign.value.sessionId;
 
     const snap = await store.snapshot();
     const warehouseId = snap.warehouses[0]?.id || "wh-bornem";
@@ -237,8 +267,8 @@ test("3. Complete Worker Lifecycle: Start -> Save Draft -> Submit for Verificati
     const worker = snap.users.find((u) => u.email === "worker@stockflow.test");
     assert.ok(worker);
 
-    // 1. Create schedule
-    const createRes = await store.run(token, "createOperationSchedule", {
+    // 1. Staff creates schedule
+    const createRes = await store.run(staffToken, "createOperationSchedule", {
       type: "unloading",
       poSoNumber: "PO-2026-0099",
       partnerName: "Global Resin Supplies",
@@ -337,6 +367,22 @@ test("4. Staff Verification: Return for Correction -> Resubmit Workflow", async 
       warehouse: "Bornem",
       password: "worker-pass-1",
     });
+    await store.run(token, "addUser", {
+      name: "Elena Staff",
+      email: "staff@stockflow.test",
+      role: "manager",
+      password: "staff-pass-1",
+    });
+
+    const staffSign = await store.signIn("staff@stockflow.test", "staff-pass-1");
+    assert.equal(staffSign.ok, true);
+    if (!staffSign.ok) return;
+    const staffToken = staffSign.value.sessionId;
+
+    const workerSign = await store.signIn("worker@stockflow.test", "worker-pass-1");
+    assert.equal(workerSign.ok, true);
+    if (!workerSign.ok) return;
+    const workerToken = workerSign.value.sessionId;
 
     const snap = await store.snapshot();
     const warehouseId = snap.warehouses[0]?.id || "wh-bornem";
@@ -344,7 +390,7 @@ test("4. Staff Verification: Return for Correction -> Resubmit Workflow", async 
     const worker = snap.users.find((u) => u.email === "worker@stockflow.test");
     assert.ok(worker);
 
-    const createRes = await store.run(token, "createOperationSchedule", {
+    const createRes = await store.run(staffToken, "createOperationSchedule", {
       type: "unloading",
       poSoNumber: "PO-2026-CORR",
       partnerName: "Supplier Test",
@@ -369,12 +415,12 @@ test("4. Staff Verification: Return for Correction -> Resubmit Workflow", async 
     assert.ok(sched);
     const schedId = sched.id;
 
-    // Start & submit
-    await store.run(token, "startOperationSchedule", { scheduleId: schedId });
-    await store.run(token, "submitOperationSchedule", { scheduleId: schedId });
+    // Start & submit by worker
+    await store.run(workerToken, "startOperationSchedule", { scheduleId: schedId });
+    await store.run(workerToken, "submitOperationSchedule", { scheduleId: schedId });
 
     // Staff returns for correction with mandatory reason
-    const returnRes = await store.run(token, "verifyOperationSchedule", {
+    const returnRes = await store.run(staffToken, "verifyOperationSchedule", {
       scheduleId: schedId,
       action: "return",
       reason: "Please re-weigh pallet #3; tare weight seems incorrect.",
@@ -385,7 +431,7 @@ test("4. Staff Verification: Return for Correction -> Resubmit Workflow", async 
     assert.equal(s?.returnReason, "Please re-weigh pallet #3; tare weight seems incorrect.");
 
     // Worker corrects and resubmits
-    const resubmitRes = await store.run(token, "submitOperationSchedule", {
+    const resubmitRes = await store.run(workerToken, "submitOperationSchedule", {
       scheduleId: schedId,
       items: [
         {
@@ -423,6 +469,22 @@ test("5. Staff Verification: Approve & Complete with Idempotent Stock Movement P
       warehouse: "Bornem",
       password: "worker-pass-1",
     });
+    await store.run(token, "addUser", {
+      name: "Elena Staff",
+      email: "staff@stockflow.test",
+      role: "manager",
+      password: "staff-pass-1",
+    });
+
+    const staffSign = await store.signIn("staff@stockflow.test", "staff-pass-1");
+    assert.equal(staffSign.ok, true);
+    if (!staffSign.ok) return;
+    const staffToken = staffSign.value.sessionId;
+
+    const workerSign = await store.signIn("worker@stockflow.test", "worker-pass-1");
+    assert.equal(workerSign.ok, true);
+    if (!workerSign.ok) return;
+    const workerToken = workerSign.value.sessionId;
 
     const snap = await store.snapshot();
     const warehouseId = snap.warehouses[0]?.id || "wh-bornem";
@@ -430,7 +492,7 @@ test("5. Staff Verification: Approve & Complete with Idempotent Stock Movement P
     const worker = snap.users.find((u) => u.email === "worker@stockflow.test");
     assert.ok(worker);
 
-    const createRes = await store.run(token, "createOperationSchedule", {
+    const createRes = await store.run(staffToken, "createOperationSchedule", {
       type: "unloading",
       poSoNumber: "PO-2026-COMPLETE",
       partnerName: "Supplier Real",
@@ -455,16 +517,16 @@ test("5. Staff Verification: Approve & Complete with Idempotent Stock Movement P
     assert.ok(sched);
     const schedId = sched.id;
 
-    // Start & submit
-    await store.run(token, "startOperationSchedule", { scheduleId: schedId });
-    await store.run(token, "submitOperationSchedule", { scheduleId: schedId });
+    // Start & submit by worker
+    await store.run(workerToken, "startOperationSchedule", { scheduleId: schedId });
+    await store.run(workerToken, "submitOperationSchedule", { scheduleId: schedId });
 
     // Initial stock balance
     const preMovements = (await store.snapshot()).stockMovements.filter((m) => m.scheduleId === schedId);
     assert.equal(preMovements.length, 0, "No movements before approval");
 
     // Staff approves and completes operation
-    const approveRes = await store.run(token, "verifyOperationSchedule", {
+    const approveRes = await store.run(staffToken, "verifyOperationSchedule", {
       scheduleId: schedId,
       action: "approve",
       note: "Verified against scale slip.",
@@ -482,7 +544,7 @@ test("5. Staff Verification: Approve & Complete with Idempotent Stock Movement P
     assert.equal(postMovements[0].weightKg, 10000);
 
     // Idempotency check: approving a completed schedule does NOT create duplicate movements
-    const approveAgainRes = await store.run(token, "verifyOperationSchedule", {
+    const approveAgainRes = await store.run(staffToken, "verifyOperationSchedule", {
       scheduleId: schedId,
       action: "approve",
     });
@@ -514,6 +576,22 @@ test("6. Loading Schedule (Outbound SO) Verification & Stock Balance Deduction",
       warehouse: "Bornem",
       password: "worker-pass-1",
     });
+    await store.run(token, "addUser", {
+      name: "Elena Staff",
+      email: "staff@stockflow.test",
+      role: "manager",
+      password: "staff-pass-1",
+    });
+
+    const staffSign = await store.signIn("staff@stockflow.test", "staff-pass-1");
+    assert.equal(staffSign.ok, true);
+    if (!staffSign.ok) return;
+    const staffToken = staffSign.value.sessionId;
+
+    const workerSign = await store.signIn("worker@stockflow.test", "worker-pass-1");
+    assert.equal(workerSign.ok, true);
+    if (!workerSign.ok) return;
+    const workerToken = workerSign.value.sessionId;
 
     const snap = await store.snapshot();
     const warehouseId = snap.warehouses[0]?.id || "wh-bornem";
@@ -522,7 +600,7 @@ test("6. Loading Schedule (Outbound SO) Verification & Stock Balance Deduction",
     assert.ok(worker);
 
     // Initial stock receipt so there is stock to dispatch
-    const createUnload = await store.run(token, "createOperationSchedule", {
+    const createUnload = await store.run(staffToken, "createOperationSchedule", {
       type: "unloading",
       poSoNumber: "PO-STOCK-INIT",
       partnerName: "Supplier Real",
@@ -545,9 +623,9 @@ test("6. Loading Schedule (Outbound SO) Verification & Stock Balance Deduction",
     });
     const unloadId = createUnload.state.schedules.find((s) => s.poSoNumber === "PO-STOCK-INIT")?.id;
     assert.ok(unloadId);
-    await store.run(token, "startOperationSchedule", { scheduleId: unloadId });
-    await store.run(token, "submitOperationSchedule", { scheduleId: unloadId });
-    await store.run(token, "verifyOperationSchedule", { scheduleId: unloadId, action: "approve" });
+    await store.run(workerToken, "startOperationSchedule", { scheduleId: unloadId });
+    await store.run(workerToken, "submitOperationSchedule", { scheduleId: unloadId });
+    await store.run(staffToken, "verifyOperationSchedule", { scheduleId: unloadId, action: "approve" });
 
     // Balance should now have 20000 kg
     const balanceBefore = (await store.snapshot()).stockBalances.find(
@@ -556,7 +634,7 @@ test("6. Loading Schedule (Outbound SO) Verification & Stock Balance Deduction",
     assert.equal(balanceBefore?.weightKg, 20000, "Initial stock balance 20,000 kg");
 
     // Now create Loading Schedule for outbound dispatch
-    const createLoad = await store.run(token, "createOperationSchedule", {
+    const createLoad = await store.run(staffToken, "createOperationSchedule", {
       type: "loading",
       poSoNumber: "SO-DISPATCH-01",
       partnerName: "Buyer Real",
@@ -581,11 +659,11 @@ test("6. Loading Schedule (Outbound SO) Verification & Stock Balance Deduction",
     assert.ok(loadId);
 
     // Worker starts and submits loading operation
-    await store.run(token, "startOperationSchedule", { scheduleId: loadId });
-    await store.run(token, "submitOperationSchedule", { scheduleId: loadId });
+    await store.run(workerToken, "startOperationSchedule", { scheduleId: loadId });
+    await store.run(workerToken, "submitOperationSchedule", { scheduleId: loadId });
 
     // Staff approves and completes loading schedule
-    const approveLoad = await store.run(token, "verifyOperationSchedule", {
+    const approveLoad = await store.run(staffToken, "verifyOperationSchedule", {
       scheduleId: loadId,
       action: "approve",
       note: "Loaded and dispatched successfully.",
@@ -627,6 +705,17 @@ test("7. Security Barrier: Worker Cannot Verify or Mark Completed", async () => 
       warehouse: "Bornem",
       password: "worker-pass-1",
     });
+    await store.run(adminToken, "addUser", {
+      name: "Elena Staff",
+      email: "staff@stockflow.test",
+      role: "manager",
+      password: "staff-pass-1",
+    });
+
+    const staffSign = await store.signIn("staff@stockflow.test", "staff-pass-1");
+    assert.equal(staffSign.ok, true);
+    if (!staffSign.ok) return;
+    const staffToken = staffSign.value.sessionId;
 
     const snap = await store.snapshot();
     const warehouseId = snap.warehouses[0]?.id || "wh-bornem";
@@ -634,7 +723,7 @@ test("7. Security Barrier: Worker Cannot Verify or Mark Completed", async () => 
     const worker = snap.users.find((u) => u.email === "worker@stockflow.test");
     assert.ok(worker);
 
-    const createRes = await store.run(adminToken, "createOperationSchedule", {
+    const createRes = await store.run(staffToken, "createOperationSchedule", {
       type: "unloading",
       poSoNumber: "PO-SEC-01",
       partnerName: "Supplier Test",
@@ -676,7 +765,7 @@ test("7. Security Barrier: Worker Cannot Verify or Mark Completed", async () => 
       "Worker must NOT be permitted to verify or complete an operation"
     );
     assert.ok(
-      verifyAttempt.error?.includes("Only Staff or Admin can verify operations"),
+      verifyAttempt.error?.includes("Only Staff") && verifyAttempt.error?.includes("can verify operations"),
       `Expected permission error, got: ${verifyAttempt.error}`
     );
   } finally {

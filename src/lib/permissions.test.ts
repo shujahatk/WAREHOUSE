@@ -81,7 +81,7 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
   assert.equal(canAccess("owner", "/offers"), true);
   assert.equal(canAccess("owner", "/offers/purchasing"), true);
   assert.equal(canAccess("owner", "/offers/selling"), true);
-  assert.equal(canAccess("owner", "/tasks"), true);
+  assert.equal(canAccess("owner", "/tasks"), false); // Tasks/Requests removed from Admin
   assert.equal(canAccess("owner", "/purchases"), true);
   assert.equal(canAccess("owner", "/purchases/PO213344"), true);
   assert.equal(canAccess("owner", "/containers/CNTR-4587"), true);
@@ -183,19 +183,20 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
 });
 
 test("action permissions strictly enforce Admin, Staff, and Worker boundaries", () => {
-  // Admin (owner): views all data/documents/images, approves/rejects requests/orders/Annex VII, manages system settings/users
-  assert.equal(canPerform("owner", "approve-order"), true);
-  assert.equal(canPerform("owner", "reject-order"), true);
-  assert.equal(canPerform("owner", "approve-request"), true);
-  assert.equal(canPerform("owner", "reject-request"), true);
-  assert.equal(canPerform("owner", "review-annex"), true);
-  assert.equal(canPerform("owner", "approve-annex"), true);
+  // Admin (owner): views all data/documents/images, strictly read-only throughout the portal
+  assert.equal(canPerform("owner", "approve-order"), false);
+  assert.equal(canPerform("owner", "reject-order"), false);
+  assert.equal(canPerform("owner", "approve-request"), false);
+  assert.equal(canPerform("owner", "reject-request"), false);
+  assert.equal(canPerform("owner", "review-annex"), false);
+  assert.equal(canPerform("owner", "approve-annex"), false);
   assert.equal(canPerform("owner", "manage-users"), true);
-  assert.equal(canPerform("owner", "manage-warehouses"), true);
-  assert.equal(canPerform("owner", "manage-materials"), true);
-  assert.equal(canPerform("owner", "manage-packaging"), true);
-  assert.equal(canPerform("owner", "set-threshold"), true);
+  assert.equal(canPerform("owner", "manage-warehouses"), false);
+  assert.equal(canPerform("owner", "manage-materials"), false);
+  assert.equal(canPerform("owner", "manage-packaging"), false);
+  assert.equal(canPerform("owner", "set-threshold"), false);
   assert.equal(canPerform("owner", "view-audit"), true);
+  assert.equal(canPerform("owner", "export-data"), true);
   // Admin CANNOT edit, delete, or directly modify operational records, complete operations, adjust stock, or execute transfers
   assert.equal(canPerform("owner", "create-order"), false);
   assert.equal(canPerform("owner", "edit-order"), false);
@@ -227,12 +228,12 @@ test("action permissions strictly enforce Admin, Staff, and Worker boundaries", 
   assert.equal(canPerform("manager", "add-document"), true);
   assert.equal(canPerform("manager", "add-annex"), true);
   assert.equal(canPerform("manager", "save-cmr"), true);
-  // Staff CANNOT delete/cancel worker requests, approve requests/orders, or adjust/transfer stock
-  assert.equal(canPerform("manager", "approve-order"), false);
-  assert.equal(canPerform("manager", "reject-order"), false);
+  // Staff CAN approve/reject orders and requests, but CANNOT delete/cancel worker requests, complete requests, or adjust/transfer stock
+  assert.equal(canPerform("manager", "approve-order"), true);
+  assert.equal(canPerform("manager", "reject-order"), true);
   assert.equal(canPerform("manager", "delete-request"), false);
-  assert.equal(canPerform("manager", "approve-request"), false);
-  assert.equal(canPerform("manager", "reject-request"), false);
+  assert.equal(canPerform("manager", "approve-request"), true);
+  assert.equal(canPerform("manager", "reject-request"), true);
   assert.equal(canPerform("manager", "complete-request"), false);
   assert.equal(canPerform("manager", "assign-worker"), false);
   assert.equal(canPerform("manager", "create-transfer"), false);
@@ -271,19 +272,19 @@ test("action permissions strictly enforce Admin, Staff, and Worker boundaries", 
   assert.equal(canPerform("moderator", "status-offer"), true);
   assert.equal(canPerform("moderator", "comment-offer"), true);
   assert.equal(canPerform("moderator", "attach-offer"), true);
-  // Moderator CANNOT approve or reject offers (Admin only) or perform warehouse operations
-  assert.equal(canPerform("moderator", "approve-offer"), false);
-  assert.equal(canPerform("moderator", "reject-offer"), false);
+  // Moderator can approve and reject offers; CANNOT perform warehouse operations
+  assert.equal(canPerform("moderator", "approve-offer"), true);
+  assert.equal(canPerform("moderator", "reject-offer"), true);
   assert.equal(canPerform("moderator", "create-order"), false);
   assert.equal(canPerform("moderator", "unload"), false);
   assert.equal(canPerform("moderator", "dispatch"), false);
   assert.equal(canPerform("moderator", "manage-users"), false);
 
-  // Admin offer permissions: view, approve, reject, comment only; CANNOT create, edit, delete, negotiate, status, or attach
+  // Admin offer permissions: strictly read-only (view only); CANNOT approve, reject, comment, create, edit, delete, negotiate, status, or attach
   assert.equal(canPerform("owner", "view-offer"), true);
-  assert.equal(canPerform("owner", "approve-offer"), true);
-  assert.equal(canPerform("owner", "reject-offer"), true);
-  assert.equal(canPerform("owner", "comment-offer"), true);
+  assert.equal(canPerform("owner", "approve-offer"), false);
+  assert.equal(canPerform("owner", "reject-offer"), false);
+  assert.equal(canPerform("owner", "comment-offer"), false);
   assert.equal(canPerform("owner", "create-offer"), false);
   assert.equal(canPerform("owner", "edit-offer"), false);
   assert.equal(canPerform("owner", "delete-offer"), false);
