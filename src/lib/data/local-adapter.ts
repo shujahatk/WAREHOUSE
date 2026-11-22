@@ -103,11 +103,14 @@ export class LocalAdapter {
     if (!actor) {
       return { state: emptyWorkspace(), actor: null };
     }
-    const state = projectStore(store, now);
+    const state = projectStore(store, now, actor);
     if ((actor as Actor).role === "worker") {
       state.generalRequests = state.generalRequests.filter(
         (r) => (currentUserId ? r.createdBy === currentUserId : r.createdByName === (actor as Actor).name),
       );
+    }
+    if ((actor as Actor).role !== "owner") {
+      state.accounts = state.accounts.filter((u) => u.approvalStatus !== "pending");
     }
     state.offers = visibleOffers(state, actor);
     return { state, actor };

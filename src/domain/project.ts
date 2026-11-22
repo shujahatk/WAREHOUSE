@@ -5,6 +5,7 @@ import {
   EMPTY_CUSTOMS,
   PENDING_CUSTOMS_CONFIRMATION,
   PENDING_SELLER,
+  type Actor,
   type AnnexStatus,
   type CustomsConfirmation,
   type DemoConversation,
@@ -51,7 +52,7 @@ const annexStatus: Record<string, AnnexStatus> = {
   approved: "Approved",
 };
 
-export function projectStore(store: StoreData, now: string): WorkspaceState {
+export function projectStore(store: StoreData, now: string, actor?: Actor | null): WorkspaceState {
   const sign = (key: string) => (store.fileSecret ? signedFileUrl(store.fileSecret, key, now).url : null);
   const warehouseName = new Map(store.warehouses.map((item) => [item.id, item.name]));
   const companyById = new Map(store.companies.map((item) => [item.id, item]));
@@ -904,6 +905,13 @@ export function projectStore(store: StoreData, now: string): WorkspaceState {
     activity,
     accounts: store.users
       .filter((user) => !user.email.toLowerCase().includes("deleted"))
+      .filter((user) => {
+        // Admin is the ONLY role allowed to view pending new login/registration requests
+        if (user.approvalStatus === "pending") {
+          return !actor || actor.role === "owner";
+        }
+        return true;
+      })
       .map((user) => ({
         id: user.id,
         email: user.email,

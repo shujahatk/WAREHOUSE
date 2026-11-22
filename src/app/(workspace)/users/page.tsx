@@ -264,6 +264,17 @@ export default function UsersPage() {
   const pendingCount = pendingRequests.length;
   const inactiveCount = allUsers.filter((u) => u.status === "Inactive" || u.approvalStatus === "rejected").length;
 
+  if (actor && actor.role !== "owner") {
+    return (
+      <section className="mx-auto mt-8 max-w-lg rounded-xl border border-neutral-200 bg-white p-6 text-center shadow-xs">
+        <h1 className="text-xl font-semibold text-neutral-950">Access Denied</h1>
+        <p className="mt-2 text-sm leading-6 text-neutral-600">
+          Only administrators have permission to view and manage user accounts and login/registration requests.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-4">

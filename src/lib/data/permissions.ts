@@ -241,6 +241,7 @@ export function can(
       case "stock:transfer":
       case "transfer:create":
       case "user:manage":
+      case "user:approve":
       case "warehouse:manage":
       case "material:manage":
       case "packaging:manage":
@@ -320,6 +321,7 @@ export function can(
       case "stock:transfer":
       case "transfer:create":
       case "user:manage":
+      case "user:approve":
       case "warehouse:manage":
       case "material:manage":
       case "packaging:manage":

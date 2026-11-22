@@ -156,11 +156,15 @@ export type AppAction =
   | "start-schedule"
   | "submit-schedule"
   | "import-data"
-  | "export-data";
+  | "export-data"
+  | "approve-registration"
+  | "reject-registration";
 
 export type DemoAction = AppAction;
 
 const ACTION_ROLES: Record<AppAction, Role[]> = {
+  "approve-registration": ["owner"],
+  "reject-registration": ["owner"],
   "create-schedule": ["manager"],
   "edit-schedule": ["manager"],
   "verify-schedule": ["owner", "manager"],

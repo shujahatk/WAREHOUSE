@@ -371,4 +371,111 @@ describe("User Signup & Admin Approval System", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("10. Strict Login Request Permissions: Admin-only access, Staff cannot view or approve/reject login requests", async () => {
+    const { dir, store } = createTestAdapter();
+    try {
+      // 1. New user submits registration request
+      const signupRes = await store.run(null, "signUpUser", {
+        name: "Gina Applicant",
+        email: "gina@example.com",
+        phone: "+32470112233",
+        password: "GinaPassword123!",
+        confirmPassword: "GinaPassword123!",
+        notes: "Warehouse applicant",
+      });
+      assert.equal(signupRes.error, undefined);
+
+      // Sign in as Admin (owner)
+      const adminSign = await store.signIn("owner@example.com", "owner-pass-1");
+      assert.equal(adminSign.ok, true);
+
+      // Admin creates Staff user
+      const addStaffRes = await store.run(adminSign.value.sessionId, "addUser", {
+        name: "Sam Staff",
+        email: "staff@example.com",
+        role: "manager",
+        password: "StaffPassword123!",
+      });
+      assert.equal(addStaffRes.error, undefined);
+      const staffSign = await store.signIn("staff@example.com", "StaffPassword123!");
+      assert.equal(staffSign.ok, true);
+
+      // Admin creates Worker user
+      const addWorkerRes = await store.run(adminSign.value.sessionId, "addUser", {
+        name: "Wally Worker",
+        email: "worker@example.com",
+        role: "worker",
+        warehouse: "Bornem",
+        password: "WorkerPassword123!",
+      });
+      assert.equal(addWorkerRes.error, undefined);
+      const workerSign = await store.signIn("worker@example.com", "WorkerPassword123!");
+      assert.equal(workerSign.ok, true);
+
+      // 2. Admin sees pending registration request in accounts
+      const adminView = await store.view(adminSign.value.sessionId);
+      const pendingInAdmin = adminView.state.accounts.find((u) => u.email === "gina@example.com");
+      assert.ok(pendingInAdmin, "Admin must be able to view pending registration request");
+      assert.equal(pendingInAdmin.approvalStatus, "pending");
+
+      // 3. Staff MUST NOT see pending registration requests in state.accounts
+      const staffView = await store.view(staffSign.value.sessionId);
+      const pendingInStaff = staffView.state.accounts.find((u) => u.email === "gina@example.com");
+      assert.equal(pendingInStaff, undefined, "Staff must NOT see pending registration requests");
+
+      // 4. Worker MUST NOT see pending registration requests in state.accounts
+      const workerView = await store.view(workerSign.value.sessionId);
+      const pendingInWorker = workerView.state.accounts.find((u) => u.email === "gina@example.com");
+      assert.equal(pendingInWorker, undefined, "Worker must NOT see pending registration requests");
+
+      // 5. Direct API calls by Staff must NOT approve or reject login requests
+      const staffApprove = await store.run(staffSign.value.sessionId, "approveRegistration", {
+        userId: pendingInAdmin.id,
+        role: "worker",
+        warehouse: "Bornem",
+      });
+      assert.equal(staffApprove.error, "Only Admin can approve account registrations.");
+
+      const staffReject = await store.run(staffSign.value.sessionId, "rejectRegistration", {
+        userId: pendingInAdmin.id,
+        reason: "Staff attempting rejection",
+      });
+      assert.equal(staffReject.error, "Only Admin can reject account registrations.");
+
+      const staffDeleteReq = await store.run(staffSign.value.sessionId, "deleteRegistrationRequest", {
+        userId: pendingInAdmin.id,
+      });
+      assert.equal(staffDeleteReq.error, "Only Admin can delete registration requests.");
+
+      const staffDecideOffers = await store.run(staffSign.value.sessionId, "decideOffersUserRegistration", {
+        userId: pendingInAdmin.id,
+        decision: "approved",
+      });
+      assert.equal(staffDecideOffers.error, "Only Admin can approve or reject account registrations.");
+
+      // 6. Direct API calls by Worker must NOT approve or reject
+      const workerApprove = await store.run(workerSign.value.sessionId, "approveRegistration", {
+        userId: pendingInAdmin.id,
+        role: "worker",
+      });
+      assert.equal(workerApprove.error, "Only Admin can approve account registrations.");
+
+      // 7. Admin approval succeeds
+      const adminApprove = await store.run(adminSign.value.sessionId, "approveRegistration", {
+        userId: pendingInAdmin.id,
+        role: "worker",
+        warehouse: "Bornem",
+        notes: "Approved by Admin",
+      });
+      assert.equal(adminApprove.error, undefined);
+
+      // 8. Now approved, Gina can log in
+      const ginaLogin = await store.signIn("gina@example.com", "GinaPassword123!");
+      assert.equal(ginaLogin.ok, true);
+      assert.equal(ginaLogin.value.profile.approvalStatus, "approved");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

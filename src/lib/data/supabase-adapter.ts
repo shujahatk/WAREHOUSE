@@ -1067,7 +1067,11 @@ export class SupabaseAdapter {
         ? (store.companies.find((c) => c.id === profile.companyId)?.name ?? null)
         : null,
     };
-    return { state: projectStore(store, this.now()), actor };
+    const state = projectStore(store, this.now(), actor);
+    if (actor.role !== "owner") {
+      state.accounts = state.accounts.filter((u) => u.approvalStatus !== "pending");
+    }
+    return { state, actor };
   }
 
   async openFile(key: string, _exp: string, _sig: string, _nowMs: number, sessionId?: string | null) {
@@ -3635,8 +3639,8 @@ export class SupabaseAdapter {
           break;
         }
         case "approveRegistration": {
-          if (profile.role !== "manager") {
-            error = "Only Staff can approve account registrations.";
+          if (profile.role !== "owner") {
+            error = "Only Admin can approve account registrations.";
             break;
           }
           const targetUserId = text(body.userId || body.id);
@@ -3697,8 +3701,8 @@ export class SupabaseAdapter {
           break;
         }
         case "rejectRegistration": {
-          if (profile.role !== "manager") {
-            error = "Only Staff can reject account registrations.";
+          if (profile.role !== "owner") {
+            error = "Only Admin can reject account registrations.";
             break;
           }
           const targetUserId = text(body.userId || body.id);
@@ -3742,8 +3746,8 @@ export class SupabaseAdapter {
           break;
         }
         case "deleteRegistrationRequest": {
-          if (profile.role !== "manager") {
-            error = "Only Staff can delete registration requests.";
+          if (profile.role !== "owner") {
+            error = "Only Admin can delete registration requests.";
             break;
           }
           const targetUserId = text(body.userId || body.id);
@@ -3775,8 +3779,8 @@ export class SupabaseAdapter {
           break;
         }
         case "deactivateUser": {
-          if (profile.role !== "manager") {
-            error = "Only Staff can deactivate accounts.";
+          if (profile.role !== "owner") {
+            error = "Only Admin can deactivate accounts.";
             break;
           }
           let targetUserId = text(body.userId || body.id);
@@ -3804,8 +3808,8 @@ export class SupabaseAdapter {
           break;
         }
         case "reactivateUser": {
-          if (profile.role !== "manager") {
-            error = "Only Staff can reactivate accounts.";
+          if (profile.role !== "owner") {
+            error = "Only Admin can reactivate accounts.";
             break;
           }
           let targetUserId = text(body.userId || body.id);
@@ -3833,8 +3837,8 @@ export class SupabaseAdapter {
           break;
         }
         case "deleteUser": {
-          if (profile.role !== "manager") {
-            error = "Only Staff can delete user accounts.";
+          if (profile.role !== "owner") {
+            error = "Only Admin can delete user accounts.";
             break;
           }
           let targetUserId = text(body.userId || body.id);
@@ -3883,6 +3887,10 @@ export class SupabaseAdapter {
         }
         case "decideOffersUserRegistration":
         case "decideUserRegistration": {
+          if (profile.role !== "owner") {
+            error = "Only Admin can approve or reject account registrations.";
+            break;
+          }
           const rpcRes = await this.client.rpc<Record<string, unknown>>(
             "rpc_decide_offers_user_registration",
             {

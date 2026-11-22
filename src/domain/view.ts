@@ -1356,6 +1356,15 @@ export function openTasks(state: DemoState, actor: Actor): DemoTask[] {
     return actor.role === "owner";
   });
   const tasks: DemoTask[] = [];
+  const pendingUserSignups = (state.accounts ?? []).filter((u) => u.approvalStatus === "pending");
+  if (actor.role === "owner" && pendingUserSignups.length > 0) {
+    tasks.push({
+      href: "/users",
+      title: "Review new login/registration requests",
+      detail: pendingUserSignups.map((u) => `${u.name} (${u.email})`).join(", "),
+      count: pendingUserSignups.length,
+    });
+  }
   if (actor.role === "owner" && pending.length > 0) {
     tasks.push({ href: "/purchases", title: "Approve pending PO/SO orders", detail: pending.map((order) => order.number).join(", "), count: pending.length });
   }
