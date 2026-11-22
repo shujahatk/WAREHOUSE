@@ -985,7 +985,7 @@ export class SupabaseAdapter {
           message: `Worker operation request ${req.number} at ${wh?.name || "warehouse"} is awaiting review.`,
           targetType: "request",
           targetId: req.id,
-          link: "/tasks",
+          link: "/dashboard",
           warehouseId: req.warehouseId,
           read: false,
           readAt: null,
@@ -1005,7 +1005,7 @@ export class SupabaseAdapter {
           message: `Operational request ${wreq.number} (${wreq.category}) at ${wh?.name || "warehouse"} is ${wreq.status.replace("_", " ")}.`,
           targetType: "worker_general_request",
           targetId: wreq.id,
-          link: "/tasks",
+          link: "/dashboard",
           warehouseId: wreq.warehouseId,
           read: false,
           readAt: null,
@@ -1972,7 +1972,7 @@ export class SupabaseAdapter {
                 p_message: `Your operational request ${res.value.number} has been submitted for review.`,
                 p_target_type: "worker_general_request",
                 p_target_id: res.value.id,
-                p_link: "/tasks",
+                p_link: "/dashboard",
                 p_warehouse_id: res.value.warehouseId || profile.warehouseId || null,
               }, token);
             } catch { }
@@ -2162,7 +2162,7 @@ export class SupabaseAdapter {
                   p_message: `Your request ${res.value.number} was marked "${res.value.status.replace("_", " ")}" by ${profile.name}.${res.value.responseNote ? ` Note: ${res.value.responseNote}` : ""}`,
                   p_target_type: "worker_general_request",
                   p_target_id: res.value.id,
-                  p_link: "/tasks",
+                  p_link: "/dashboard",
                   p_warehouse_id: res.value.warehouseId || null,
                 }, token);
               }
@@ -2294,7 +2294,7 @@ export class SupabaseAdapter {
                   p_message: `Staff has assigned ${rawPoSo} to your request ${currentReq.number}. Ready for execution.`,
                   p_target_type: "worker_general_request",
                   p_target_id: currentReq.id,
-                  p_link: "/tasks",
+                  p_link: "/dashboard",
                   p_warehouse_id: currentReq.warehouseId || null,
                 }, token);
               }

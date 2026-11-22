@@ -27,7 +27,7 @@ const ROUTE_RULES: { prefix: string; roles: Role[] }[] = [
   { prefix: "/materials", roles: ADMIN_ONLY },
   { prefix: "/schedules", roles: ["owner", "manager", "worker"] },
   { prefix: "/verification", roles: ["owner", "manager"] },
-  { prefix: "/tasks", roles: ["owner", "worker"] },
+  { prefix: "/tasks", roles: [] },
   { prefix: "/dashboard", roles: ["owner", "manager", "worker", "moderator"] },
   { prefix: "/containers", roles: ["owner", "worker"] },
   { prefix: "/outbound", roles: ["owner", "worker"] },

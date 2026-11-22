@@ -38,7 +38,7 @@ describe("StockFlow – Worker Mobile Module Comprehensive Verification", () => 
     assert.equal(canAccess("worker", "/containers"), true);
     assert.equal(canAccess("worker", "/outbound"), true);
     assert.equal(canAccess("worker", "/inventory"), true);
-    assert.equal(canAccess("worker", "/tasks"), true);
+    assert.equal(canAccess("worker", "/tasks"), false);
     assert.equal(canAccess("worker", "/stock-movements"), true);
 
     // Workers MUST NOT access Admin, Staff, or Offers portals

@@ -851,7 +851,7 @@ export function createStaffOperationalRequest(
       `New Operational Request: ${number} (${poSoNumber})`,
       `${actor.name} submitted a ${operationType} request for ${poSoNumber} (${quantity} ${unit} ${material}) scheduled for ${scheduledDate}.`,
       now,
-      { targetType: "general_request", targetId: reqId, link: "/tasks" }
+      { targetType: "general_request", targetId: reqId, link: "/dashboard" }
     );
   }
 
@@ -1085,7 +1085,7 @@ export function decideGeneralRequest(
           `New Task Assigned: ${poNum || request.number}`,
           `You have an approved operational task scheduled for ${operationalDetails.scheduledDate || "today"} (${operationalDetails.materialType}).`,
           now,
-          { targetType: "purchase_order", targetId: poNum || request.number, link: "/tasks" }
+          { targetType: "purchase_order", targetId: poNum || request.number, link: "/schedules/unloading" }
         );
       }
     }
@@ -1096,7 +1096,7 @@ export function decideGeneralRequest(
       `Operational Request Approved: ${request.number}`,
       `Admin approved operational request ${request.number}. Task is now active.`,
       now,
-      { targetType: "general_request", targetId: request.id, link: "/tasks" }
+      { targetType: "general_request", targetId: request.id, link: "/dashboard" }
     );
   } else if (decision === "declined") {
     notify(
@@ -1106,7 +1106,7 @@ export function decideGeneralRequest(
       `Operational Request Declined: ${request.number}`,
       `Admin declined operational request ${request.number}. Reason: ${cleanNote || "Not specified."}`,
       now,
-      { targetType: "general_request", targetId: request.id, link: "/tasks" }
+      { targetType: "general_request", targetId: request.id, link: "/dashboard" }
     );
   }
 
@@ -1888,7 +1888,7 @@ export function assignWorkerPo(
     `New Task Assigned: ${po.number}`,
     `You have been assigned order ${po.number} scheduled for ${scheduledDate}.`,
     now,
-    { targetType: "purchase_order", targetId: po.number, link: "/tasks" }
+    { targetType: "purchase_order", targetId: po.number, link: "/schedules/unloading" }
   );
 
   audit(store, actor.id, "po-assigned", "purchase_order", po.number, `Assigned ${po.number} to worker ${worker.name} for ${scheduledDate}`, now);

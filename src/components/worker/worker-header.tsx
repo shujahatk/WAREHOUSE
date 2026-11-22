@@ -172,14 +172,6 @@ export function WorkerHeader({
                     Inventory &amp; Stock
                   </Link>
                   <Link
-                    href="/tasks"
-                    onClick={() => setDrawerOpen(false)}
-                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
-                  >
-                    <Icon name="documents" />
-                    My Requests
-                  </Link>
-                  <Link
                     href="/stock-movements"
                     onClick={() => setDrawerOpen(false)}
                     className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"

@@ -1368,35 +1368,6 @@ export function openTasks(state: DemoState, actor: Actor): DemoTask[] {
   if (actor.role === "owner" && pending.length > 0) {
     tasks.push({ href: "/purchases", title: "Approve pending PO/SO orders", detail: pending.map((order) => order.number).join(", "), count: pending.length });
   }
-  const pendingRequests = (state.requests ?? []).filter((req) => req.status === "submitted");
-  if (actor.role === "owner" && pendingRequests.length > 0) {
-    tasks.push({
-      href: "/tasks",
-      title: "Approve worker loading/unloading requests",
-      detail: pendingRequests.map((req) => `${req.number} (${req.warehouse})`).join(", "),
-      count: pendingRequests.length,
-    });
-  }
-  const approvedRequests = (state.requests ?? []).filter(
-    (req) => req.status === "approved" && (!actor.warehouse || req.warehouse === actor.warehouse),
-  );
-  if (actor.role === "worker" && approvedRequests.length > 0) {
-    tasks.push({
-      href: "/tasks",
-      title: "Complete approved requests into stock",
-      detail: approvedRequests.map((req) => `${req.number} (${req.warehouse})`).join(", "),
-      count: approvedRequests.length,
-    });
-  }
-  const sentBackRequests = (state.requests ?? []).filter((req) => req.status === "sent_back" && (!actor.warehouse || req.warehouse === actor.warehouse));
-  if (actor.role === "worker" && sentBackRequests.length > 0) {
-    tasks.push({
-      href: "/tasks",
-      title: "Requests sent back for revision",
-      detail: sentBackRequests.map((req) => `${req.number}: ${req.sentBackNote ?? "Needs revision"}`).join(", "),
-      count: sentBackRequests.length,
-    });
-  }
   if (receiving.length > 0) {
     tasks.push({ href: "/containers", title: "Incoming / unloading containers", detail: receiving.map((row) => row.number).join(", "), count: receiving.length });
   }

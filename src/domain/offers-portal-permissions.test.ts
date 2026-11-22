@@ -532,7 +532,7 @@ describe("Offers User Portal Permissions & Registration Approval (12 Core Scenar
     assert.equal(canAccess("moderator", "/users"), false);
 
     // Worker permissions
-    assert.equal(canAccess("worker", "/tasks"), true);
+    assert.equal(canAccess("worker", "/tasks"), false);
     assert.equal(canAccess("worker", "/dashboard"), true);
     assert.equal(canAccess("worker", "/offers"), false);
     assert.equal(canAccess("worker", "/users"), false);

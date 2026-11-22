@@ -1,8 +1,5 @@
-import type { Metadata } from "next";
-import { TaskBoard } from "@/components/ref/task-board";
-
-export const metadata: Metadata = { title: "My Tasks" };
+import { redirect } from "next/navigation";
 
 export default function TasksPage() {
-  return <TaskBoard />;
+  redirect("/dashboard");
 }

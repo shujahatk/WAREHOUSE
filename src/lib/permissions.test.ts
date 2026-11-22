@@ -66,6 +66,7 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
   assert.equal(allNavHrefs.includes("/sales"), false);
   assert.equal(allNavHrefs.includes("/warehouses"), false); // Standalone Warehouses removed from all roles
   assert.equal(allNavHrefs.includes("/offers"), false); // Standalone Offers Dashboard removed from all roles
+  assert.equal(allNavHrefs.includes("/tasks"), false); // Requests module removed from all roles
 
   // Verify removed modules cannot be accessed by direct URL for ANY role
   for (const role of ["owner", "manager", "worker", "moderator", "customer", "management", "data-entry"] as const) {
@@ -74,6 +75,7 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
     assert.equal(canAccess(role, "/chat/PO213344"), false);
     assert.equal(canAccess(role, "/sales"), false);
     assert.equal(canAccess(role, "/warehouses"), false);
+    assert.equal(canAccess(role, "/tasks"), false);
   }
 
   // Admin (owner) has full route access across all active modules & Administration, including Offers
@@ -81,7 +83,7 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
   assert.equal(canAccess("owner", "/offers"), true);
   assert.equal(canAccess("owner", "/offers/purchasing"), true);
   assert.equal(canAccess("owner", "/offers/selling"), true);
-  assert.equal(canAccess("owner", "/tasks"), true); // Admin handles and approves user requests
+  assert.equal(canAccess("owner", "/tasks"), false); // Requests module removed
   assert.equal(canAccess("owner", "/purchases"), true);
   assert.equal(canAccess("owner", "/purchases/PO213344"), true);
   assert.equal(canAccess("owner", "/containers/CNTR-4587"), true);
@@ -132,7 +134,7 @@ test("navigation sections and direct URL rules for Admin, Staff, Worker, and Mod
   assert.equal(canAccess("worker", "/offers"), false);
   assert.equal(canAccess("worker", "/offers/purchasing"), false);
   assert.equal(canAccess("worker", "/offers/selling"), false);
-  assert.equal(canAccess("worker", "/tasks"), true);
+  assert.equal(canAccess("worker", "/tasks"), false);
   assert.equal(canAccess("worker", "/containers/CNTR-4587"), true);
   assert.equal(canAccess("worker", "/outbound/OUT-1184"), true);
   assert.equal(canAccess("worker", "/inventory"), true);
